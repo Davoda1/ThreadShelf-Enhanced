@@ -112,7 +112,9 @@ class SourceReleaseTests(unittest.TestCase):
         self.assertEqual(len(reports), 2)
         for report in reports:
             path = Path(report['file'])
-            self.assertEqual(path.parent, output)
+            # Windows TEMP may use a DOS short name while the packager reports
+            # the resolved long name; compare directory identity, not spelling.
+            self.assertTrue(path.parent.samefile(output))
             self.assertEqual(report['bytes'], path.stat().st_size)
             self.assertEqual(report['sha256'], hashlib.sha256(path.read_bytes()).hexdigest())
         return output, reports
