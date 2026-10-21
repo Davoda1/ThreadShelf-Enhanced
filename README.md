@@ -1,7 +1,7 @@
 # ThreadShelf Enhanced
 
 [![CI](https://github.com/Davoda1/ThreadShelf-Enhanced/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Davoda1/ThreadShelf-Enhanced/actions/workflows/ci.yml)
-[![Version 1.0.0](https://img.shields.io/badge/version-1.0.0-blue)](https://github.com/Davoda1/ThreadShelf-Enhanced/releases)
+[![Version 1.1.0](https://img.shields.io/badge/version-1.1.0-blue)](https://github.com/Davoda1/ThreadShelf-Enhanced/releases)
 [![MIT license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Node 24+](https://img.shields.io/badge/Node.js-24%2B-43853d)](#installation)
 [![Source distribution](https://img.shields.io/badge/distribution-source_ZIP_%2F_TAR.GZ-6f42c1)](https://github.com/Davoda1/ThreadShelf-Enhanced/releases)
@@ -20,6 +20,12 @@ Import, search, read and continue AI conversations on your own machine. ThreadSh
 - Project-local Node/npm setup and a Linux launcher for repeated starts and folder indexing.
 
 Search embeddings and storage run locally. First setup and model use require network downloads. OpenRouter generation is an optional external service: using it sends selected conversation content to OpenRouter and its provider. See [security and privacy](SECURITY.md).
+
+## Security maintenance in 1.1.0
+
+Version **1.1.0** updates affected application and development dependencies, audits the offline rendering bundles separately, and makes dependency security checks part of the release gate. It preserves the existing API, stored conversation identities, embedding model and database format. Existing exports do not need to be reimported for this update. The original **1.0.0** tag and release remain available as historical source.
+
+See the [changelog](CHANGELOG.md) for the changes and [validation record](docs/ENHANCED_VALIDATION.md) for test results and platform scope.
 
 ## Installation
 
@@ -122,4 +128,4 @@ Enhanced adds metadata columns while preserving existing normalized turns and id
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, focused tests and pull request guidance, and [validation](docs/ENHANCED_VALIDATION.md) for the current release gate. Report reproducible bugs with synthetic examples in [GitHub Issues](https://github.com/Davoda1/ThreadShelf-Enhanced/issues). For vulnerabilities, follow [SECURITY.md](SECURITY.md).
 
-Enhanced **1.0.0** starts from upstream commit `3430dd04f50218fdea916b104709d24a651017fc` (v1.3.0). It is a distinct fork maintained by **davoda1**. Original copyright and MIT licensing are retained; see [LICENSE](LICENSE) and [third-party notices](THIRD_PARTY_NOTICES.md).
+Enhanced originated with **1.0.0**, based on upstream commit `3430dd04f50218fdea916b104709d24a651017fc` (v1.3.0). It is a distinct fork maintained by **davoda1**. Original copyright and MIT licensing are retained; see [LICENSE](LICENSE) and [third-party notices](THIRD_PARTY_NOTICES.md).

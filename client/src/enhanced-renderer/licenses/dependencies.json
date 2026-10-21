@@ -1,0 +1,347 @@
+{
+  "schemaVersion": 1,
+  "assets": [
+    {
+      "path": "client/public/renderer/mathjax-tex-svg.js",
+      "sha256": "0383da4c22a61555f3d99877f939f00012d2583381177302987ab04760cdadf3"
+    },
+    {
+      "path": "client/public/renderer/mermaid.min.js",
+      "sha256": "6aa187d4ca64f76e17a918c596a986bc823174fa0a9284e0cb4d9141871be514"
+    }
+  ],
+  "packages": [
+    {
+      "name": "@braintree/sanitize-url",
+      "version": "7.1.2"
+    },
+    {
+      "name": "@chevrotain/cst-dts-gen",
+      "version": "11.1.2"
+    },
+    {
+      "name": "@chevrotain/gast",
+      "version": "11.1.2"
+    },
+    {
+      "name": "@chevrotain/regexp-to-ast",
+      "version": "11.1.2"
+    },
+    {
+      "name": "@chevrotain/utils",
+      "version": "11.1.2"
+    },
+    {
+      "name": "@iconify/utils",
+      "version": "3.0.2"
+    },
+    {
+      "name": "@mermaid-js/parser",
+      "version": "1.2.1"
+    },
+    {
+      "name": "@upsetjs/venn.js",
+      "version": "2.0.0"
+    },
+    {
+      "name": "chevrotain",
+      "version": "11.1.2"
+    },
+    {
+      "name": "chevrotain-allstar",
+      "version": "0.3.1"
+    },
+    {
+      "name": "cose-base",
+      "version": "1.0.3"
+    },
+    {
+      "name": "cose-base",
+      "version": "2.2.0"
+    },
+    {
+      "name": "cytoscape",
+      "version": "3.34.0"
+    },
+    {
+      "name": "cytoscape-cose-bilkent",
+      "version": "4.1.0"
+    },
+    {
+      "name": "cytoscape-fcose",
+      "version": "2.2.0"
+    },
+    {
+      "name": "d3",
+      "version": "7.9.0"
+    },
+    {
+      "name": "d3-array",
+      "version": "2.12.1"
+    },
+    {
+      "name": "d3-array",
+      "version": "3.2.4"
+    },
+    {
+      "name": "d3-axis",
+      "version": "3.0.0"
+    },
+    {
+      "name": "d3-brush",
+      "version": "3.0.0"
+    },
+    {
+      "name": "d3-chord",
+      "version": "3.0.1"
+    },
+    {
+      "name": "d3-color",
+      "version": "3.1.0"
+    },
+    {
+      "name": "d3-contour",
+      "version": "4.0.2"
+    },
+    {
+      "name": "d3-delaunay",
+      "version": "6.0.4"
+    },
+    {
+      "name": "d3-dispatch",
+      "version": "3.0.1"
+    },
+    {
+      "name": "d3-drag",
+      "version": "3.0.0"
+    },
+    {
+      "name": "d3-dsv",
+      "version": "3.0.1"
+    },
+    {
+      "name": "d3-ease",
+      "version": "3.0.1"
+    },
+    {
+      "name": "d3-fetch",
+      "version": "3.0.1"
+    },
+    {
+      "name": "d3-force",
+      "version": "3.0.0"
+    },
+    {
+      "name": "d3-format",
+      "version": "3.1.2"
+    },
+    {
+      "name": "d3-geo",
+      "version": "3.1.1"
+    },
+    {
+      "name": "d3-hierarchy",
+      "version": "3.1.2"
+    },
+    {
+      "name": "d3-interpolate",
+      "version": "3.0.1"
+    },
+    {
+      "name": "d3-path",
+      "version": "1.0.9"
+    },
+    {
+      "name": "d3-path",
+      "version": "3.1.0"
+    },
+    {
+      "name": "d3-polygon",
+      "version": "3.0.1"
+    },
+    {
+      "name": "d3-quadtree",
+      "version": "3.0.1"
+    },
+    {
+      "name": "d3-random",
+      "version": "3.0.1"
+    },
+    {
+      "name": "d3-sankey",
+      "version": "0.12.3"
+    },
+    {
+      "name": "d3-scale",
+      "version": "4.0.2"
+    },
+    {
+      "name": "d3-scale-chromatic",
+      "version": "3.1.0"
+    },
+    {
+      "name": "d3-selection",
+      "version": "3.0.0"
+    },
+    {
+      "name": "d3-shape",
+      "version": "1.3.7"
+    },
+    {
+      "name": "d3-shape",
+      "version": "3.2.0"
+    },
+    {
+      "name": "d3-time",
+      "version": "3.1.0"
+    },
+    {
+      "name": "d3-time-format",
+      "version": "4.1.0"
+    },
+    {
+      "name": "d3-timer",
+      "version": "3.0.1"
+    },
+    {
+      "name": "d3-transition",
+      "version": "3.0.1"
+    },
+    {
+      "name": "d3-zoom",
+      "version": "3.0.0"
+    },
+    {
+      "name": "dagre-d3-es",
+      "version": "7.0.14"
+    },
+    {
+      "name": "dayjs",
+      "version": "1.11.21"
+    },
+    {
+      "name": "dompurify",
+      "version": "3.4.17"
+    },
+    {
+      "name": "es-toolkit",
+      "version": "1.45.1"
+    },
+    {
+      "name": "fastdom",
+      "version": "1.0.12"
+    },
+    {
+      "name": "fmin",
+      "version": "0.0.4"
+    },
+    {
+      "name": "hachure-fill",
+      "version": "0.5.2"
+    },
+    {
+      "name": "internmap",
+      "version": "2.0.3"
+    },
+    {
+      "name": "js-yaml",
+      "version": "4.3.2"
+    },
+    {
+      "name": "katex",
+      "version": "0.18.10"
+    },
+    {
+      "name": "khroma",
+      "version": "2.1.0"
+    },
+    {
+      "name": "langium",
+      "version": "4.2.1"
+    },
+    {
+      "name": "layout-base",
+      "version": "1.0.2"
+    },
+    {
+      "name": "layout-base",
+      "version": "2.0.1"
+    },
+    {
+      "name": "lodash-es",
+      "version": "4.18.1"
+    },
+    {
+      "name": "marked",
+      "version": "16.3.0"
+    },
+    {
+      "name": "mathjax",
+      "version": "3.2.1"
+    },
+    {
+      "name": "mathjax-full",
+      "version": "3.2.1"
+    },
+    {
+      "name": "mermaid",
+      "version": "11.17.2"
+    },
+    {
+      "name": "mj-context-menu",
+      "version": "0.6.1"
+    },
+    {
+      "name": "path-data-parser",
+      "version": "0.1.0"
+    },
+    {
+      "name": "points-on-curve",
+      "version": "0.2.0"
+    },
+    {
+      "name": "points-on-path",
+      "version": "0.2.1"
+    },
+    {
+      "name": "roughjs",
+      "version": "4.6.6"
+    },
+    {
+      "name": "speech-rule-engine",
+      "version": "4.0.6"
+    },
+    {
+      "name": "stylis",
+      "version": "4.3.6"
+    },
+    {
+      "name": "ts-dedent",
+      "version": "2.2.0"
+    },
+    {
+      "name": "uuid",
+      "version": "14.0.0"
+    },
+    {
+      "name": "vscode-jsonrpc",
+      "version": "8.2.0"
+    },
+    {
+      "name": "vscode-languageserver-protocol",
+      "version": "3.17.5"
+    },
+    {
+      "name": "vscode-languageserver-textdocument",
+      "version": "1.0.15"
+    },
+    {
+      "name": "vscode-languageserver-types",
+      "version": "3.17.5"
+    },
+    {
+      "name": "vscode-uri",
+      "version": "3.1.0"
+    }
+  ]
+}

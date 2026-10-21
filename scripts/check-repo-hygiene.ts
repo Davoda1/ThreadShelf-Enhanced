@@ -25,6 +25,8 @@ const forbiddenExtensions =
 const allowedJson = [
   /^(?:package|package-lock|tsconfig|tsconfig\.build|vite\.config)\.json$/i,
   /^client\/(?:package|tsconfig)\.json$/i,
+  /^client\/src\/enhanced-renderer\/licenses\/dependencies\.json$/,
+  /^scripts\/renderer-build\/package(?:-lock)?\.json$/,
   /^test\/fixture\.json$/i,
   /^test\/fixtures\/.+\.json$/i,
 ];

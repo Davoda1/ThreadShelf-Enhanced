@@ -74,12 +74,12 @@ jobs:
               raise SystemExit('Release must contain exactly the source ZIP and TAR.GZ.')
           lines = [f'# ThreadShelf Enhanced {version}', '',
                    'Independent fork based on [ThreadShelf v1.3.0](https://github.com/ChrystianSchutz/ThreadShelf/tree/v1.3.0), with upstream history and license retained.', '',
-                   '- Rich rendering, safer viewport layouts and expanded conversation imports.',
-                   '- Compatible archive APIs and integrated Local Reader pagination.',
-                   '- Project-local Linux/Windows setup and a portable Linux launcher.', '',
+                   '- Security-maintained application dependencies and verified offline renderer bundles.',
+                   '- Required dependency audits, upload lifecycle regressions and Linux/Windows validation.',
+                   '- Existing archive APIs, Local Reader compatibility and project-local setup retained.', '',
                    'Extract either source archive and follow README.md. Node 24.22.1 LTS and npm 12.2.1 are installed locally by setup.', '',
                    'See CHANGELOG.md for changes, THIRD_PARTY_NOTICES.md for retained licenses, and docs/ENHANCED_COMPATIBILITY.md for known limitations.', '',
-                   'This release requires passing Linux and Windows CI before publication.', '',
+                   'This release requires passing dependency security checks and Linux/Windows CI before publication.', '',
                    '## SHA-256', '', '```text']
           for path in assets:
               with path.open('rb') as source:

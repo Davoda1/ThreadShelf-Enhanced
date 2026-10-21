@@ -1,5 +1,39 @@
 # Changelog
 
+## ThreadShelf Enhanced 1.1.0 — 2026-10-21
+
+Security maintenance release. The original Enhanced 1.0.0 tag and release assets
+are preserved; 1.1.0 uses its own version tag and source archives.
+
+### Fixed
+
+- Update affected upload, HTTP parsing, serialization, image-processing, archive
+  and development-tool dependencies inherited from upstream v1.3.0.
+- Remove the vulnerable legacy logging dependency chain from the ONNX installer
+  while preserving the native inference runtime and embedding model.
+- Review and update affected components embedded in the offline rendering
+  libraries, including nested dependencies not covered by the application lockfile.
+
+### Added
+
+- A required dependency-security gate for the application and renderer-build
+  lockfiles and bundled renderer inventory, including asset-integrity checks. Unavailable or invalid
+  advisory data fails the check rather than producing a clean result.
+- Scheduled dependency auditing within the existing CI workflow, retaining the
+  existing Dependabot maintenance configuration and release permissions.
+- Focused upload lifecycle and dependency compatibility regressions alongside
+  the existing Linux/Windows, browser, API, import and packaging checks.
+
+### Compatibility
+
+The server API, source identities, database format, embedding model and Local
+Suite compatibility contract remain unchanged. No archive reimport is required
+for this dependency update. Original licenses and copyright notices are retained;
+changed browser bundles include updated dependency provenance and notices.
+
+See [validation](docs/ENHANCED_VALIDATION.md) for the release gate and its status.
+The known import limitations documented for 1.0.0 still apply.
+
 ## ThreadShelf Enhanced 1.0.0
 
 Initial source release of the Enhanced fork, based on ThreadShelf v1.3.0

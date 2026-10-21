@@ -22,8 +22,12 @@ images. A saved, validated image URL has a separate download-arrow load control;
 no search query is sent, URL invented, or image fetched before a click.
 
 The bundled offline assets in `client/public/renderer` are MathJax 3.2.1
-(Apache-2.0) and Mermaid 11.17.2 (MIT), bundled through the same Local Reader implementation.
-Their original notices and the Reader license are retained in `licenses/` here.
+(Apache-2.0) and Mermaid 11.17.2 (MIT). MathJax remains the verified original
+asset used by the Local Reader. ThreadShelf Enhanced 1.1.0 rebuilds Mermaid from
+its original sources and generated grammar inputs with patched DOMPurify,
+js-yaml, KaTeX and Lodash dependencies. The separate locked build recipe is
+`scripts/rebuild-renderer.py`; exact versions, hashes and nested components are
+recorded in `licenses/`. Their original notices and the Reader license are retained.
 `marked` and `highlight.js` are pinned to the Reader's versions; their notices are
 also retained. The application continues to use the upstream light/dark palette.
 

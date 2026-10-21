@@ -6,6 +6,9 @@ name: CI
   pull_request:
   workflow_dispatch:
   workflow_call:
+  schedule:
+    # Advisory data can change even when the committed source does not.
+    - cron: '23 6 * * 1'
 
 permissions:
   contents: read
@@ -20,8 +23,37 @@ env:
   THREADSHELF_NPM_VERSION: 12.2.1
 
 jobs:
+  dependency-security:
+    name: Dependency and bundled-asset security
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install only the verified local runtime
+        timeout-minutes: 7
+        run: |
+          bash setup-threadshelf.sh --runtime-only
+          case "$(uname -m)" in
+            x86_64) architecture=x64 ;;
+            aarch64|arm64) architecture=arm64 ;;
+            *) echo 'Unsupported runner architecture.' >&2; exit 1 ;;
+          esac
+          runtime="$GITHUB_WORKSPACE/.local/node-v${THREADSHELF_NODE_VERSION}-linux-${architecture}"
+          echo "$runtime/bin" >> "$GITHUB_PATH"
+          echo "npm_config_cache=$GITHUB_WORKSPACE/.local/npm-cache" >> "$GITHUB_ENV"
+
+      - name: Audit locked dependencies and verified renderer bundles
+        timeout-minutes: 10
+        run: npm run check:security
+
   full-check:
     name: Full check (Linux)
+    if: ${{ github.event_name != 'schedule' }}
+    needs: dependency-security
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -130,6 +162,8 @@ jobs:
 
   windows-core:
     name: Portable setup and core checks (Windows)
+    if: ${{ github.event_name != 'schedule' }}
+    needs: dependency-security
     runs-on: windows-latest
     timeout-minutes: 30
     defaults:
@@ -244,6 +278,7 @@ jobs:
 
   source-packages:
     name: Source packaging (${{ matrix.os }})
+    if: ${{ github.event_name != 'schedule' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:

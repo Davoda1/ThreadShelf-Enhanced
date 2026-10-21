@@ -103,9 +103,10 @@ root installs both.
 | `npm test`                                           | Fast unit/regression tests (node test runner via tsx).                                  |
 | `npm run test:e2e`                                   | API + MCP E2E (spawns a temp server + temp LanceDB).                                    |
 | `npm run test:playwright`                            | Browser E2E (needs Playwright browsers).                                                |
+| `npm run check:security`                             | Audit locked dependencies and bundled renderer inventory; requires the advisory service. |
 | `npm run check:repo`                                 | Reject private artifacts, secrets, and user-specific home paths from commit candidates. |
 | `npm run lint`                                       | ESLint over `src/` and `mcp/`.                                                          |
-| `npm run check`                                      | repo hygiene + lint + tsc + unit + API/MCP E2E + client build + Playwright. Full gate.  |
+| `npm run check`                                      | security + repo hygiene + lint + tsc + unit + API/MCP E2E + client build + Playwright. Full gate.  |
 | `npm run parse -- <file> -- [flags]`                 | Parse one export to normalized JSON; the second `--` is required before flags.          |
 | `npm run ingest -- <folder> [collection] -- [flags]` | Ingest a folder (`--clear`; `--watch`; `--debounce`).                                   |
 | `npm run search -- "<query>" -- [flags]`             | Search from the CLI (`--mode keyword`, `--collection`, `--n`, `--json`).                |
@@ -329,7 +330,9 @@ and data-path compatibility. `scripts/release-source.py` packages public source
 and must exclude `.env`, user archives, databases, local runtimes, credentials and
 build output. Keep archive contents reproducible and verify their checksums.
 Tags use `v<package.json version>`; `.github/workflows/publish.yml` runs reusable
-Linux and Windows CI before creating a release with exactly the two source assets.
+Linux and Windows CI, including dependency security checks, before creating a release
+with exactly the two source assets. Keep previously published version tags and
+assets intact; 1.1.0 is a separate release from 1.0.0.
 Only its release job has repository write permission.
 
 Run `python3 test/source-release.test.py` for packaging regressions (`python` on
@@ -337,6 +340,28 @@ Windows). CI runs these on both platforms as well as auditing the actual
 committed archives. Keep test-server waits and cleanup bounded; allocate fixture
 ports through `getAvailablePort()` instead of hardcoded random ranges. Failure
 diagnostics must contain only isolated test output, never configuration or stores.
+
+## Dependency security maintenance
+
+`npm run check:security` audits the application lockfile (all and production
+dependencies), the separate renderer-build lockfile, and the explicit
+bundled-library inventory at
+`client/src/enhanced-renderer/licenses/dependencies.json`. Browser libraries can
+contain nested packages that are absent from `package-lock.json`; a clean npm
+audit alone is insufficient. Keep asset hashes, package versions, source provenance
+and original license notices synchronized whenever a bundle changes.
+
+The security check requires network access to the advisory service. Errors,
+timeouts and malformed responses are failures, not evidence of a clean audit.
+Do not bypass the gate with broad ignores, `continue-on-error`, or silently
+removed inventory entries. Audit output belongs in temporary diagnostics, not
+source control. Review dependency overrides and exact `allowScripts` entries
+before changing native runtime dependencies. Preserve the embedding model,
+vector dimension and stored identities during maintenance updates.
+
+CI runs scheduled security auditing in the existing workflow and retains the
+existing Dependabot npm/Actions schedules. New releases must pass the complete
+security, functional, platform and packaging gates before asset publication.
 
 ## Known gaps (as of this writing)
 
@@ -351,7 +376,7 @@ conventions.
 
 ## Enhanced fork conventions
 
-ThreadShelf Enhanced 1.0.0 is based on upstream v1.3.0, with Node 24+ required
+ThreadShelf Enhanced 1.1.0 is based on upstream v1.3.0, with Node 24+ required
 for lossless JSON numeric tokens. Distribution is source ZIP/TAR.GZ only. The
 package is private. The source release workflow validates tagged source through
 reusable CI before publishing the two source archives; it never publishes to npm.
