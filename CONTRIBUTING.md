@@ -1,71 +1,70 @@
-# Contributing
+# Contributing to ThreadShelf Enhanced
 
-ThreadShelf is a local-first tool for private AI chat archives. Contributions should preserve privacy, keep the app simple, and include tests for behavior changes.
+Contributions should preserve local archive privacy, existing ThreadShelf API and
+data identities, and the source distribution workflow. Use
+[GitHub Issues](https://github.com/Davoda1/ThreadShelf-Enhanced/issues) for bugs and
+feature discussions. Follow [SECURITY.md](SECURITY.md) for vulnerabilities.
 
-## Development Setup
+## Development setup
+
+Use Node 24+ and a compatible npm version. The setup scripts install the pinned
+project-local Node 24.22.1/npm 12.2.1 runtime and build the application; see the
+[installation guide](README.md#installation).
+
+With Node/npm available in your shell:
 
 ```bash
-npm install
+npm ci
+npm run build
 npm start
 ```
 
-Open:
+Open [http://localhost:3000](http://localhost:3000). For development, run
+`npm run dev` and `npm run dev:client` in separate terminals. The Vite UI proxies
+API calls to the server. The root and client are npm workspaces sharing one
+lockfile; install dependencies at the root.
 
-```text
-http://localhost:3000
-```
+## Validation
 
-## Test Commands
+Use focused checks while iterating, then run the complete gate before submitting
+behavior changes:
 
-Run the smallest relevant set:
+| Command | Scope |
+| --- | --- |
+| `npm test` | Parsers, validation, chunking, import behavior and unit regressions |
+| `npm run test:e2e` | HTTP API, LanceDB, search, threads and MCP integration |
+| `npm run build:client` | Client TypeScript and production UI build |
+| `npm run test:playwright` | UI and browser workflows; requires the built UI and Chromium |
+| `npm run build:server` | Compiled server and MCP output |
+| `npm run check` | Repository hygiene, lint, TypeScript, unit, integration, UI build and browser checks |
 
-```bash
-npm test
-npm run test:e2e
-npm run test:playwright
-```
+Install the browser once with `npx playwright install chromium`. Integration
+tests use temporary stores; never redirect them to a live archive. Report which
+commands ran and any skips or platform limitations. The first embedding run may
+need a model download.
 
-Use `npm test` for parser, chunking, validation, MCP protocol, and ingest unit changes.
+## Fixtures and privacy
 
-Use `npm run test:e2e` for API, LanceDB, ingest, search, thread, and MCP stdio changes.
+Fixtures must be synthetic and anonymized. Do not commit real prompts, assistant
+answers, account metadata, API keys, emails, names or private project content.
+When an export breaks, preserve only the shape needed to reproduce it, substitute
+synthetic multilingual content, add a fixture and a focused regression, then fix
+the behavior. Keep original input handling read-only.
 
-Use `npm run test:playwright` for UI, upload, collection, thread-reader, or browser workflow changes.
+## Code and pull requests
 
-## Fixtures
+- Use ES modules, two-space indentation, semicolons and single quotes.
+- Keep HTTP behavior in `src/routes/` and shared logic in `src/services/`.
+- Prefer structured parsing over fragile string substitutions.
+- Preserve adjacent source attribution and licenses for adapted components.
+- Describe the problem, resulting behavior and validation in the pull request.
+- Include screenshots for visible UI changes and note storage, environment or
+  privacy effects.
+- Check `git status --short --ignored` before committing. Exclude `.env`, exports,
+  generated databases, logs, local runtimes and credentials.
+- Update user-facing docs when behavior changes, including known limitations.
 
-Fixtures must be synthetic and anonymized. Do not commit real prompts, real assistant answers, account metadata, API keys, emails, names, or private project content.
-
-When a real export breaks:
-
-1. Preserve only the JSON shape needed to reproduce the bug.
-2. Replace text with synthetic multilingual content.
-3. Add a fixture under `test/fixtures/`.
-4. Add a failing test.
-5. Fix the behavior.
-
-## Code Style
-
-- ES modules.
-- Two-space indentation.
-- Semicolons.
-- Single quotes.
-- Keep reusable logic in `src/`.
-- Keep HTTP-specific behavior in `src/routes/` and shared business logic in `src/services/`.
-- Prefer structured parser logic over fragile string hacks.
-
-## Pull Requests
-
-Include:
-
-- What changed.
-- Why it changed.
-- Commands run.
-- Screenshots for UI changes.
-- Notes about local data, LanceDB schema, environment variables, or privacy impact.
-
-Before opening a PR:
-
-- Check `git status --short --ignored`.
-- Confirm no private exports or generated databases are tracked.
-- Run `npm run check`.
-- Update the relevant user-facing docs or issue when behavior changes.
+Enhanced releases contain source ZIP and TAR.GZ archives. The npm package remains
+private. Do not re-enable the upstream npm publishing workflow. See [AGENTS.md](AGENTS.md)
+for the repository map and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for
+component provenance.

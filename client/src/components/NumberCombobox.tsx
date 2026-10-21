@@ -1,4 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useListboxPosition } from './useListboxPosition';
 
 interface NumberComboboxProps {
   readonly id?: string;
@@ -29,15 +31,26 @@ export function NumberCombobox({
   placeholder,
 }: NumberComboboxProps) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const listId = `${useId()}-options`;
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const safeActiveIndex = Math.min(activeIndex, Math.max(options.length - 1, 0));
+  const position = useListboxPosition(rootRef, open, 210);
+
+  useEffect(() => {
+    if (open)
+      listRef.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest' });
+  }, [open, safeActiveIndex]);
 
   useEffect(() => {
     if (!open) return undefined;
     const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      if (
+        !rootRef.current?.contains(event.target as Node) &&
+        !listRef.current?.contains(event.target as Node)
+      )
+        setOpen(false);
     };
     document.addEventListener('pointerdown', onPointerDown);
     return () => document.removeEventListener('pointerdown', onPointerDown);
@@ -56,6 +69,7 @@ export function NumberCombobox({
         aria-label={label}
         aria-expanded={open}
         aria-controls={listId}
+        aria-activedescendant={open ? `${listId}-${safeActiveIndex}` : undefined}
         aria-autocomplete="list"
         aria-invalid={invalid}
         autoComplete="off"
@@ -69,6 +83,13 @@ export function NumberCombobox({
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
+        onBlur={(event) => {
+          if (
+            !rootRef.current?.contains(event.relatedTarget) &&
+            !listRef.current?.contains(event.relatedTarget)
+          )
+            setOpen(false);
+        }}
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown') {
             event.preventDefault();
@@ -101,25 +122,37 @@ export function NumberCombobox({
       >
         ▾
       </button>
-      {open && options.length > 0 && (
-        <div className="number-combobox-popover" id={listId} role="listbox">
-          {options.map((option, index) => (
-            <button
-              type="button"
-              role="option"
-              aria-selected={String(option) === value}
-              data-active={index === safeActiveIndex}
-              data-selected={String(option) === value}
-              key={option}
-              onMouseEnter={() => setActiveIndex(index)}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => choose(option)}
-            >
-              {optionLabel ? optionLabel(option) : option.toLocaleString()}
-            </button>
-          ))}
-        </div>
-      )}
+      {open &&
+        options.length > 0 &&
+        createPortal(
+          <div
+            className="number-combobox-popover"
+            id={listId}
+            role="listbox"
+            aria-label="Token presets"
+            ref={listRef}
+            style={position}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            {options.map((option, index) => (
+              <button
+                type="button"
+                id={`${listId}-${index}`}
+                role="option"
+                aria-selected={String(option) === value}
+                data-active={index === safeActiveIndex}
+                data-selected={String(option) === value}
+                key={option}
+                onMouseEnter={() => setActiveIndex(index)}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => choose(option)}
+              >
+                {optionLabel ? optionLabel(option) : option.toLocaleString()}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

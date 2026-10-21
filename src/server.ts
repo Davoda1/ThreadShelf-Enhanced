@@ -51,6 +51,6 @@ const HOST = process.env.HOST || '127.0.0.1';
 app.listen(PORT, HOST, () => {
   startIndexRecovery();
   void startLocalApiNetworkListener(PORT);
-  console.log(`Server: http://localhost:${PORT}`);
+  console.log(`Server listening on ${HOST}:${PORT}`);
   console.log('Data directory:', dataDir());
 });

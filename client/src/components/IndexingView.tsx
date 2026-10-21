@@ -129,6 +129,7 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
   const [newCollOpen, setNewCollOpen] = useState(false);
   const [copied, setCopied] = useState('');
   const pickerRef = useRef<HTMLInputElement>(null);
+  const filesPickerRef = useRef<HTMLInputElement>(null);
   const indexingController = useRef<AbortController | null>(null);
 
   const copyScript = useCallback(async (file: string) => {
@@ -151,11 +152,12 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
   const applyPickedFiles = useCallback((files: readonly RelativeFile[]) => {
     if (!files.length) return;
 
+    setPath('');
     setUploadFiles([...files]);
     const first = relativePathOf(files[0]!).replace(/\\/g, '/');
-    const folder = first.split('/')[0] ?? 'folder';
+    const folder = first.includes('/') ? first.split('/')[0] : null;
     const sup = files.filter((f) => isPotentialExport(relativePathOf(f)));
-    setPickedLabel(`${sup.length} files from "${folder}"`);
+    setPickedLabel(`${sup.length} export files${folder ? ` from "${folder}"` : ' selected'}`);
     setPreview(
       files.map((f) => {
         const relPath = relativePathOf(f);
@@ -200,6 +202,8 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
 
   const onUsePath = useCallback(async () => {
     if (!path.trim()) return;
+    setUploadFiles(null);
+    setPreview(null);
     setPickedLabel('Checking…');
     try {
       const d = await api.ingestPreview(path, targetColl);
@@ -230,7 +234,8 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
 
     if (useUpload && coll === 'chunks') {
       const first = relativePathOf(uploadFiles[0]!).replace(/\\/g, '/');
-      coll = first.split('/').filter(Boolean)[0] ?? coll;
+      // Individual file selections have no directory name to use as a collection.
+      if (first.includes('/')) coll = first.split('/').filter(Boolean)[0] ?? coll;
     }
 
     if (!useUpload && !path.trim()) {
@@ -291,7 +296,7 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
         </span>
       </div>
 
-      <details className="panel" style={{ marginBottom: 16 }}>
+      <details className="panel export-guides" style={{ marginBottom: 16 }}>
         <summary
           style={{ cursor: 'pointer', padding: '12px 14px', fontWeight: 500, listStyle: 'revert' }}
         >
@@ -383,13 +388,26 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
         }}
       >
         <div className="ico-big">{Icons.folder}</div>
-        <h3>Drop a folder of exports here</h3>
+        <h3>Drop export files or a folder here</h3>
         <p>
-          Supported: Google AI Studio, OpenRouter, ChatGPT/OpenAI, Claude/Anthropic, LM Studio, and
-          Grok JSON exports. Subfolders are recursed; account metadata files are skipped
-          automatically.
+          Import JSON, HTML, ZIP archives, or folders from ChatGPT/OpenAI, Claude/Anthropic, Google
+          AI Studio, Gemini Takeout, OpenRouter, LM Studio, Grok, Meta, and Venice. ThreadShelf
+          Local Reader and ChatGPT Export Processor formats are supported. Subfolders are included;
+          account metadata files are skipped automatically.
         </p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <input
+            id="exportFileInput"
+            ref={filesPickerRef}
+            type="file"
+            accept=".json,.html,.htm,.zip"
+            multiple
+            hidden
+            onChange={(event) => {
+              applyPickedFiles(Array.from(event.currentTarget.files ?? []));
+              event.currentTarget.value = '';
+            }}
+          />
           <input
             id="folderFileInput"
             ref={pickerRef}
@@ -404,6 +422,9 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
           />
           <button className="btn primary" onClick={() => pickerRef.current?.click()}>
             {Icons.folder} Choose folder
+          </button>
+          <button className="btn" onClick={() => filesPickerRef.current?.click()}>
+            {Icons.plus} Choose files
           </button>
           {pickedLabel && (
             <span
@@ -485,37 +506,20 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
           </div>
           <div style={{ maxHeight: 260, overflow: 'auto' }}>
             {preview.slice(0, 60).map((f, i) => (
-              <div
-                key={i}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '20px 1fr auto',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '6px 14px',
-                  borderBottom: '1px solid var(--border-0)',
-                  fontSize: 12,
-                }}
-              >
+              <div key={i} className="ingest-preview-row">
                 <span style={{ color: f.ok ? 'var(--success)' : 'var(--text-4)' }}>
                   {f.ok ? Icons.check : '·'}
                 </span>
                 <span
+                  className="ingest-preview-name"
+                  title={f.name}
                   style={{
-                    fontFamily: 'var(--font-mono)',
                     color: f.ok ? 'var(--text-1)' : 'var(--text-3)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
                   }}
                 >
                   {f.name}
                 </span>
-                <span
-                  style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--text-3)' }}
-                >
-                  {f.note || (f.ok ? '' : 'skipped')}
-                </span>
+                <span className="ingest-preview-note">{f.note || (f.ok ? '' : 'skipped')}</span>
               </div>
             ))}
           </div>

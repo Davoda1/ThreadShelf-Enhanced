@@ -586,6 +586,7 @@ describe('local model API (/v1) E2E', () => {
         let body = await putConfig(ctx.baseUrl, { localApi: { networkAccess: true, networkPort } });
         assert.strictEqual(body.config.localApi.networkAccess, true);
         let status = await (await fetch(`${ctx.baseUrl}/api/generation/local-api`)).json();
+        assert.ok(status.network, JSON.stringify(status));
         assert.strictEqual(status.network.state, 'listening');
         assert.strictEqual(status.network.port, networkPort);
         for (const url of status.network.urls) {

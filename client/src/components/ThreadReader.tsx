@@ -94,6 +94,8 @@ export function ThreadReader({
   query,
   onSimilar,
 }: ThreadReaderProps) {
+  const [originalIdentity, setOriginalIdentity] = useState<unknown>(undefined);
+  const [originalConversation, setOriginalConversation] = useState<unknown>(undefined);
   const [turns, setTurns] = useState<ThreadTurn[] | null>(null);
   const [createdInThreadShelf, setCreatedInThreadShelf] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +108,8 @@ export function ThreadReader({
   useEffect(() => {
     const resetId = window.setTimeout(() => {
       setTurns(null);
+      setOriginalConversation(undefined);
+      setOriginalIdentity(undefined);
       setCreatedInThreadShelf(false);
       setError(null);
       setExpanded(new Set());
@@ -118,6 +122,8 @@ export function ThreadReader({
       .thread(sourceFile, col, conversationKey, controller.signal)
       .then((d) => {
         setTurns(d.turns);
+        setOriginalConversation(d.raw);
+        setOriginalIdentity(d.sourceIdentity);
         setCreatedInThreadShelf(d.createdInThreadShelf);
       })
       .catch((e: unknown) => {
@@ -271,6 +277,8 @@ export function ThreadReader({
       model: detectedModel || modelName || undefined,
       exportedAt: new Date().toISOString(),
       turns: portableTurns,
+      raw: originalConversation,
+      sourceIdentity: originalIdentity,
     };
     downloadFile(
       `${slugify(title)}.json`,
@@ -514,7 +522,7 @@ export function ThreadReader({
                         // The search match keeps raw text so hits can be highlighted.
                         <Highlighted text={text} q={query} />
                       ) : role === 'ai' ? (
-                        <Markdown text={text} />
+                        <Markdown text={text} metadata={turn.metadata} assets={turn.assets} />
                       ) : (
                         text
                       )}

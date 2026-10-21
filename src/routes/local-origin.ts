@@ -7,6 +7,7 @@ const normalizeRequestHost = (value: string | undefined): string => {
     .trim()
     .toLowerCase();
   if (!host) return '';
+  if (isIP(host)) return host;
   if (host.startsWith('[')) return host.replace(/]:\d+$/, ']').replace(/^\[(.*)]$/, '$1');
   return host.replace(/:\d+$/, '');
 };

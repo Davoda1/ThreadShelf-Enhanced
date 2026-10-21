@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible ThreadShelf problem using synthetic data.
+description: Report a reproducible ThreadShelf Enhanced problem using synthetic data.
 title: '[Bug]: '
 labels:
   - bug
@@ -7,12 +7,12 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for helping improve ThreadShelf. Never attach a real chat export,
+        Thanks for helping improve ThreadShelf Enhanced. Never attach a real chat export,
         API key, local database, private model path, or screenshot with private content.
   - type: input
     id: version
     attributes:
-      label: ThreadShelf version or commit
+      label: ThreadShelf Enhanced version or commit
       placeholder: v1.0.0 or commit SHA
     validations:
       required: true
@@ -38,7 +38,7 @@ body:
       label: Reproduction
       description: Use a tiny synthetic example and list exact steps.
       placeholder: |
-        1. Start ThreadShelf with...
+        1. Start ThreadShelf Enhanced with...
         2. Index the attached synthetic fixture...
         3. Search for...
     validations:

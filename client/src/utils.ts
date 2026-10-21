@@ -128,8 +128,9 @@ export const splitHighlightedText = (text: string, query: string): string[] => {
 export const isPotentialExport = (path: string): boolean => {
   if (!path || SKIP.test(path)) return false;
   const name = path.replace(/\\/g, '/').split('/').pop() ?? '';
-  if (!name.toLowerCase().endsWith('.json') && /^file[-_]/i.test(name)) return false;
-  return name.toLowerCase().endsWith('.json') || !name.includes('.');
+  const supportedExtension = /\.(?:json|html?|zip)$/i.test(name);
+  if (!supportedExtension && /^file[-_]/i.test(name)) return false;
+  return supportedExtension || !name.includes('.');
 };
 
 /**
@@ -250,7 +251,8 @@ export const downloadFile = (
 /** Byte sizes for model files: GB once past a gigabyte, MB below it. */
 export const fmtBytes = (bytes: number | undefined): string => {
   if (!bytes || bytes <= 0) return '—';
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(bytes >= 10 * 1024 ** 3 ? 0 : 1)} GB`;
+  if (bytes >= 1024 ** 3)
+    return `${(bytes / 1024 ** 3).toFixed(bytes >= 10 * 1024 ** 3 ? 0 : 1)} GB`;
   if (bytes >= 1024 ** 2) return `${Math.round(bytes / 1024 ** 2)} MB`;
   return `${Math.round(bytes / 1024)} KB`;
 };

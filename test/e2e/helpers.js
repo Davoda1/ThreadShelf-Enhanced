@@ -27,6 +27,8 @@ export const startApiServer = async ({
       ...process.env,
       PORT: port,
       HOST: '127.0.0.1',
+      // Deployment host settings must not restrict isolated HTTP fixtures.
+      ALLOWED_HOSTS: '',
       LANCEDB_PATH: join(tempRoot, '.lancedb'),
       UPLOADS_DIR: join(tempRoot, '.uploads'),
       COLLECTIONS_PATH: join(tempRoot, '.collections.json'),

@@ -1,19 +1,11 @@
 {
-  "name": "threadshelf",
-  "version": "1.3.0",
-  "description": "Local semantic search, backup, and RAG for your AI chats — ChatGPT, Claude, Google AI Studio, OpenRouter, LM Studio, and Grok — searchable from a web UI, HTTP API, or MCP",
+  "name": "threadshelf-enhanced",
+  "version": "1.0.0",
+  "description": "ThreadShelf Enhanced — local AI conversation archive, rich reader and compatible search server",
   "license": "MIT",
   "type": "module",
   "engines": {
-    "node": ">=20.19.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/ChrystianSchutz/ThreadShelf.git"
-  },
-  "homepage": "https://github.com/ChrystianSchutz/ThreadShelf#readme",
-  "bugs": {
-    "url": "https://github.com/ChrystianSchutz/ThreadShelf/issues"
+    "node": ">=24.0.0"
   },
   "keywords": [
     "semantic-search",
@@ -45,6 +37,12 @@
   "workspaces": [
     "client"
   ],
+  "allowScripts": {
+    "@parcel/watcher@2.6.0": true,
+    "esbuild@0.28.1": true,
+    "onnxruntime-node@1.24.3": true,
+    "protobufjs@7.6.5": true
+  },
   "overrides": {
     "@huggingface/transformers": {
       "sharp": "0.35.3"
@@ -57,19 +55,18 @@
     "test": "node scripts/run-node-tests.js test",
     "test:e2e": "node scripts/run-node-tests.js test/e2e",
     "test:playwright": "playwright test",
-    "check:repo": "tsx scripts/check-repo-hygiene.ts",
+    "check:repo": "node --import tsx scripts/check-repo-hygiene.ts",
     "check": "npm run check:repo && npm run lint && npx tsc --noEmit && npm test && npm run test:e2e && npm run build:client && npm run test:playwright",
-    "parse": "tsx src/cli.ts",
-    "ingest": "tsx src/ingest-cli.ts",
-    "search": "tsx src/search-cli.ts",
-    "setup:llama": "tsx scripts/setup-llama-cpp.ts",
-    "start": "tsx src/server.ts",
-    "dev": "tsx --watch src/server.ts",
+    "parse": "node --import tsx src/cli.ts",
+    "ingest": "node --import tsx src/ingest-cli.ts",
+    "search": "node --import tsx src/search-cli.ts",
+    "setup:llama": "node --import tsx scripts/setup-llama-cpp.ts",
+    "start": "node --import tsx src/server.ts",
+    "dev": "node --watch --import tsx src/server.ts",
     "dev:client": "npm run dev --workspace client",
     "build": "npm run build:client && npm run build:server",
     "build:client": "npm run build --workspace client",
-    "docs:screenshots": "tsx scripts/capture-docs-screenshots.ts",
-    "mcp": "tsx mcp/server.ts",
+    "mcp": "node --import tsx mcp/server.ts",
     "lint": "eslint src/ mcp/ client/src/",
     "format": "prettier --write \"src/**/*.ts\" \"client/src/**/*.{ts,tsx}\"",
     "build:server": "tsc -p tsconfig.build.json",
@@ -81,8 +78,10 @@
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
     "@lancedb/lancedb": "^0.29.0",
+    "@zip.js/zip.js": "2.24.0",
     "express": "^5.2.1",
-    "multer": "^2.2.0"
+    "multer": "^2.2.0",
+    "parse5": "8.0.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -99,5 +98,14 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.61.1",
     "vite": "^8.2.0"
-  }
+  },
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Davoda1/ThreadShelf-Enhanced.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Davoda1/ThreadShelf-Enhanced/issues"
+  },
+  "homepage": "https://github.com/Davoda1/ThreadShelf-Enhanced#readme"
 }

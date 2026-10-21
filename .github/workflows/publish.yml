@@ -1,98 +1,99 @@
-name: Publish to npm
+name: Source release
 
-# Tag-driven release: `npm version patch && git push --follow-tags` is the whole
-# release ritual. The tag is the trigger, and nothing is published unless the
-# full check suite passes first.
-on:
+'on':
   push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
-    inputs:
-      dry_run:
-        description: 'Build and pack only, do not publish'
-        type: boolean
-        default: true
+    tags: ['v*']
 
 permissions:
   contents: read
 
+concurrency:
+  group: source-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  publish:
-    name: Test, pack and publish
-    runs-on: ubuntu-latest
+  validate:
+    name: Validate release source
+    uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
-      # Required for npm Trusted Publishing (OIDC). No NPM_TOKEN secret is
-      # stored anywhere: npm mints a short-lived credential for this workflow
-      # in this repository only.
-      id-token: write
 
+  release:
+    name: Publish source ZIP and TAR.GZ
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      # Gate the release on the Node version CI actually validates. Testing
-      # here on a version CI never runs means a release can fail for a reason
-      # no pull request could ever have caught — which is exactly what happened
-      # on the first tagged run.
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
+      - name: Checkout the validated tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 20
-          registry-url: https://registry.npmjs.org
-          cache: npm
+          persist-credentials: false
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Cache embedding model
-        uses: actions/cache@v6
-        with:
-          path: .threadshelf/model-cache
-          key: hf-transformers-paraphrase-multilingual-minilm-l12-v2
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Type check
-        run: npx tsc --noEmit
-
-      - name: Unit tests
-        run: npm test
-
-      - name: End-to-end tests
-        run: npm run test:e2e
-
-      - name: Build package (client + server)
-        run: npm run build:package
-
-      - name: Verify the tag matches package.json
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Check the release version
+        id: version
         run: |
-          tag="${GITHUB_REF_NAME#v}"
-          version="$(node -p "require('./package.json').version")"
-          if [ "$tag" != "$version" ]; then
-            echo "Tag $GITHUB_REF_NAME does not match package.json version $version" >&2
-            exit 1
-          fi
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+          package = json.loads(Path('package.json').read_text())
+          version = package['version']
+          if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?', version):
+              raise SystemExit('Unsupported release version.')
+          if os.environ['GITHUB_REF_NAME'] != 'v' + version:
+              raise SystemExit('Release tag does not match package.json version.')
+          if package.get('private') is not True:
+              raise SystemExit('Enhanced must remain a private npm package.')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('value=' + version + '\n')
+          PY
 
-      - name: Inspect package contents
-        run: npm pack --dry-run
+      - name: Build the two source archives
+        run: python3 scripts/release-source.py --output release
 
-      - name: Verify the packed tarball installs and runs
-        run: node scripts/verify-package.js
+      - name: Verify assets and prepare release notes
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+          version = os.environ['RELEASE_VERSION']
+          prefix = 'ThreadShelf-Enhanced-' + version + '-Source'
+          expected = {prefix + '.zip', prefix + '.tar.gz'}
+          assets = sorted(Path('release').iterdir())
+          if {path.name for path in assets} != expected or not all(path.is_file() for path in assets):
+              raise SystemExit('Release must contain exactly the source ZIP and TAR.GZ.')
+          lines = [f'# ThreadShelf Enhanced {version}', '',
+                   'Independent fork based on [ThreadShelf v1.3.0](https://github.com/ChrystianSchutz/ThreadShelf/tree/v1.3.0), with upstream history and license retained.', '',
+                   '- Rich rendering, safer viewport layouts and expanded conversation imports.',
+                   '- Compatible archive APIs and integrated Local Reader pagination.',
+                   '- Project-local Linux/Windows setup and a portable Linux launcher.', '',
+                   'Extract either source archive and follow README.md. Node 24.22.1 LTS and npm 12.2.1 are installed locally by setup.', '',
+                   'See CHANGELOG.md for changes, THIRD_PARTY_NOTICES.md for retained licenses, and docs/ENHANCED_COMPATIBILITY.md for known limitations.', '',
+                   'This release requires passing Linux and Windows CI before publication.', '',
+                   '## SHA-256', '', '```text']
+          for path in assets:
+              with path.open('rb') as source:
+                  digest = hashlib.file_digest(source, 'sha256').hexdigest()
+              lines.append(digest + '  ' + path.name)
+          lines.extend(['```', ''])
+          (Path(os.environ['RUNNER_TEMP']) / 'threadshelf-release-notes.md').write_text('\n'.join(lines))
+          PY
 
-      # Trusted Publishing needs npm >= 11.5.1, which ships with Node 24.
-      # Switch only for the publish itself, after everything is already built
-      # and verified, so the toolchain change cannot affect the artifact.
-      - name: Setup Node.js for Trusted Publishing
-        if: startsWith(github.ref, 'refs/tags/v') && inputs.dry_run != true
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          registry-url: https://registry.npmjs.org
-
-      - name: Publish
-        if: startsWith(github.ref, 'refs/tags/v') && inputs.dry_run != true
-        run: npm publish
+      - name: Create the GitHub source release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          prefix="release/ThreadShelf-Enhanced-${RELEASE_VERSION}-Source"
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --title "ThreadShelf Enhanced ${RELEASE_VERSION}" \
+            --notes-file "$RUNNER_TEMP/threadshelf-release-notes.md" \
+            "${prefix}.zip" "${prefix}.tar.gz"

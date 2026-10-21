@@ -1,37 +1,63 @@
 name: CI
 
-on:
-  pull_request:
+'on':
   push:
-    branches:
-      - main
-      - master
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+  THREADSHELF_NODE_VERSION: 24.22.1
+  THREADSHELF_NPM_VERSION: 12.2.1
 
 jobs:
   full-check:
     name: Full check (Linux)
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
+    timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 20
-          cache: npm
+          persist-credentials: false
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Run portable Linux setup
+        run: |
+          bash setup-threadshelf.sh
+          case "$(uname -m)" in
+            x86_64) architecture=x64 ;;
+            aarch64|arm64) architecture=arm64 ;;
+            *) echo 'Unsupported runner architecture.' >&2; exit 1 ;;
+          esac
+          runtime="$GITHUB_WORKSPACE/.local/node-v${THREADSHELF_NODE_VERSION}-linux-${architecture}"
+          test "$("$runtime/bin/node" --version)" = "v$THREADSHELF_NODE_VERSION"
+          test "$(PATH="$runtime/bin:$PATH" "$runtime/bin/npm" --version)" = "$THREADSHELF_NPM_VERSION"
+          echo "$runtime/bin" >> "$GITHUB_PATH"
+          echo "npm_config_prefix=$runtime" >> "$GITHUB_ENV"
+          echo "npm_config_cache=$GITHUB_WORKSPACE/.local/npm-cache" >> "$GITHUB_ENV"
+          echo "XDG_CACHE_HOME=$GITHUB_WORKSPACE/.local/cache" >> "$GITHUB_ENV"
+          echo "HF_HOME=$GITHUB_WORKSPACE/.local/huggingface" >> "$GITHUB_ENV"
+
+      - name: Check the installed runtime
+        run: |
+          test "$(node --version)" = "v$THREADSHELF_NODE_VERSION"
+          test "$(npm --version)" = "$THREADSHELF_NPM_VERSION"
+          ./threadshelf-enhanced --check-runtime
 
       - name: Cache embedding model
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .threadshelf/model-cache
-          key: hf-transformers-paraphrase-multilingual-minilm-l12-v2
+          key: ${{ runner.os }}-embeddings-paraphrase-multilingual-minilm-l12-v2
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
@@ -39,30 +65,80 @@ jobs:
       - name: Run full check
         run: npm run check
 
-  windows-core:
-    name: Core checks (Windows)
-    runs-on: windows-latest
-    permissions:
-      contents: read
+      - name: Build compiled server
+        run: npm run build:server
 
+  windows-core:
+    name: Portable setup and core checks (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 20
-          cache: npm
+          persist-credentials: false
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Run portable Windows setup
+        run: |
+          ./setup-threadshelf.ps1
+          $Architecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+          $Runtime = Join-Path $PWD ".local/node-v$env:THREADSHELF_NODE_VERSION-win-$Architecture"
+          if ((& "$Runtime/node.exe" --version) -ne "v$env:THREADSHELF_NODE_VERSION") { throw 'Unexpected Node version.' }
+          if ((& "$Runtime/npm.cmd" --version) -ne $env:THREADSHELF_NPM_VERSION) { throw 'Unexpected npm version.' }
+          $Runtime | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          "THREADSHELF_CI_RUNTIME=$Runtime" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "npm_config_prefix=$Runtime" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "npm_config_cache=$(Join-Path $PWD '.local/npm-cache')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Repository hygiene
-        run: npm run check:repo
-
-      - name: Lint and typecheck
-        run: npm run lint && npx tsc --noEmit
+      - name: Repository hygiene, lint and typecheck
+        run: |
+          & "$env:THREADSHELF_CI_RUNTIME/npm.cmd" run check:repo
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$env:THREADSHELF_CI_RUNTIME/npm.cmd" run lint
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$env:THREADSHELF_CI_RUNTIME/node.exe" node_modules/typescript/bin/tsc --noEmit
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Unit and regression tests
-        run: npm test
+        run: |
+          & "$env:THREADSHELF_CI_RUNTIME/npm.cmd" test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Smoke-test the compiled server
+        run: |
+          $SmokeDir = Join-Path $env:RUNNER_TEMP ("threadshelf-smoke-" + [Guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $SmokeDir | Out-Null
+          $Listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+          $Listener.Start()
+          $SmokePort = $Listener.LocalEndpoint.Port
+          $Listener.Stop()
+          $env:HOST = '127.0.0.1'
+          $env:PORT = "$SmokePort"
+          $env:THREADSHELF_DATA_DIR = $SmokeDir
+          $Server = $null
+          try {
+            $Server = Start-Process -FilePath "$env:THREADSHELF_CI_RUNTIME/node.exe" -ArgumentList 'dist/src/server.js' -PassThru -NoNewWindow -RedirectStandardOutput "$SmokeDir/stdout.log" -RedirectStandardError "$SmokeDir/stderr.log"
+            $Ready = $false
+            for ($Attempt = 0; $Attempt -lt 40; $Attempt++) {
+              $Server.Refresh()
+              if ($Server.HasExited) { throw "Server exited with code $($Server.ExitCode)." }
+              try {
+                $Response = Invoke-WebRequest -Uri "http://127.0.0.1:$SmokePort/api/health" -TimeoutSec 2
+                if ($Response.StatusCode -eq 200) { $Ready = $true; break }
+              } catch { Start-Sleep -Milliseconds 500 }
+            }
+            if (-not $Ready) { throw 'Server did not become healthy.' }
+            $Ui = Invoke-WebRequest -Uri "http://127.0.0.1:$SmokePort/" -TimeoutSec 5
+            if ($Ui.StatusCode -ne 200) { throw 'Built UI was not served.' }
+            $Capabilities = Invoke-WebRequest -Uri "http://127.0.0.1:$SmokePort/api/reader/capabilities" -TimeoutSec 5
+            if ($Capabilities.StatusCode -ne 200) { throw 'Reader capabilities were unavailable.' }
+          } catch {
+            Get-Content "$SmokeDir/stdout.log", "$SmokeDir/stderr.log" -ErrorAction SilentlyContinue
+            throw
+          } finally {
+            if ($Server -and -not $Server.HasExited) { Stop-Process -Id $Server.Id -Force; $Server.WaitForExit() }
+            Remove-Item -LiteralPath $SmokeDir -Recurse -Force -ErrorAction SilentlyContinue
+          }

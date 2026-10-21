@@ -75,3 +75,19 @@ data/
 *.png
 !docs/assets/
 !docs/assets/*.png
+
+# Portable local runtime and installer caches
+.local/
+
+.migration-stage-*/
+
+__pycache__/
+*.pyc
+
+# Symlinked local dependency roots and source-release output
+/node_modules
+/.local
+/release/
+/personal/
+
+/client/node_modules

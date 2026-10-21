@@ -239,6 +239,20 @@ export interface Turn {
   readonly createdAt?: string;
   readonly createdInThreadShelf?: boolean;
   readonly generationProvider?: 'llama-cpp' | 'openrouter';
+  /** Original source message and provider metadata; never interpreted as executable code. */
+  readonly raw?: unknown;
+  readonly metadata?: Record<string, unknown>;
+  readonly source_role?: string;
+  readonly source_message_id?: unknown;
+  readonly source_node_id?: unknown;
+  readonly parent_message_id?: unknown;
+  readonly channel?: unknown;
+  readonly turn_index?: number;
+  readonly assets?: readonly {
+    readonly url: string;
+    readonly label?: string;
+    readonly source?: string;
+  }[];
 }
 
 export const validateTurn = (turn: unknown, { index }: { index?: number } = {}): NormalizedTurn => {

@@ -10,10 +10,10 @@ const root = packageRoot();
 const readPackageJson = async () => JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
 
 describe('npm package manifest', () => {
-  it('is publishable and exposes the threadshelf bin', async () => {
+  it('prevents accidental publication and preserves legacy CLI aliases', async () => {
     const pkg = await readPackageJson();
-    assert.equal(pkg.private, undefined, 'private:true would block npm publish');
-    assert.equal(pkg.name, 'threadshelf');
+    assert.equal(pkg.name, 'threadshelf-enhanced');
+    assert.equal(pkg.private, true);
     assert.equal(pkg.bin.threadshelf, './bin/threadshelf.js');
     assert.equal(pkg.bin['threadshelf-mcp'], './bin/threadshelf-mcp.js');
     for (const entry of Object.values(pkg.bin)) {

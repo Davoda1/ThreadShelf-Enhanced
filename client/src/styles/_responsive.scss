@@ -3,7 +3,7 @@
     font-size: 16px;
   }
   .app {
-    grid-template-columns: 296px 1fr;
+    grid-template-columns: 296px minmax(0, 1fr);
   }
   .view {
     max-width: 1280px;
@@ -30,7 +30,7 @@
 @media (max-width: 1180px) {
   .app,
   .app[data-reading='true'] {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .sidebar,
@@ -41,12 +41,17 @@
     display: flex;
     width: min(320px, 86vw);
     transform: translateX(-105%);
-    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    visibility: hidden;
+    transition:
+      transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+      visibility 0s 0.2s;
     box-shadow: 24px 0 60px -32px oklch(0 0 0 / 0.8);
   }
 
   .app[data-sidebar-open='true'] .sidebar {
     transform: translateX(0);
+    visibility: visible;
+    transition-delay: 0s;
   }
 
   .sidebar-scrim {
@@ -191,7 +196,7 @@
   }
 
   .turn {
-    grid-template-columns: 32px 1fr;
+    grid-template-columns: 32px minmax(0, 1fr);
     gap: 12px;
   }
 

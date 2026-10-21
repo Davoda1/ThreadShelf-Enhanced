@@ -101,9 +101,20 @@ export function Sidebar({
   return (
     <aside className="sidebar">
       <div className="sb-brand">
-        <div className="sb-logo" aria-hidden="true" />
+        <div className="sb-logo" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none" focusable="false">
+            <circle cx="14" cy="14" r="6.5" stroke="currentColor" strokeWidth="2.4" />
+            <path d="M19 19l5 5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+            <path
+              d="M14 9.5v2M14 16.5v2M9.5 14h2M16.5 14h2"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          </svg>
+        </div>
         <div className="sb-name">
-          <b>ThreadShelf</b>
+          <b>ThreadShelf Enhanced</b>
           <span>v{__APP_VERSION__} · local</span>
         </div>
       </div>

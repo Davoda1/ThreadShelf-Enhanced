@@ -1,6 +1,7 @@
-import { readdir, readFile } from 'fs/promises';
+import { readdir } from 'fs/promises';
 import { join, relative, resolve } from 'path';
-import { parseConversationGroups, detectProvider } from './parser.js';
+import { importEnhancedFile } from './enhanced-import/index.js';
+import { groupNativeBackupFiles } from './enhanced-import/venice-groups.js';
 import { replaceImportedFiles, type ImportedFile } from './store.js';
 
 interface DirEntry {
@@ -25,8 +26,8 @@ const SKIP_FILES = new Set(
 export const isExportFileName = (name: string): boolean => {
   const lowerName = name.toLowerCase();
   if (SKIP_FILES.has(lowerName)) return false;
-  if (!lowerName.endsWith('.json') && /^file[-_]/.test(lowerName)) return false;
-  return lowerName.endsWith('.json') || !name.includes('.');
+  if (!/\.(?:json|html?|zip)$/.test(lowerName) && /^file[-_]/.test(lowerName)) return false;
+  return /\.(?:json|html?|zip)$/.test(lowerName) || !name.includes('.');
 };
 
 const isPotentialExportFile = (entry: { name: string; isFile: () => boolean }): boolean => {
@@ -38,16 +39,23 @@ const getCanonicalExportKey = (fileName: string): string => {
   return lower.endsWith('.json') ? lower.slice(0, -5) : lower;
 };
 
-const collectExportEntries = async (folderPath: string): Promise<DirEntry[]> => {
+const collectExportEntries = async (
+  folderPath: string,
+  signal?: AbortSignal,
+): Promise<DirEntry[]> => {
   const entries: DirEntry[] = [];
 
-  const walk = async (currentDir: string): Promise<void> => {
+  const walk = async (currentDir: string, depth = 0): Promise<void> => {
+    signal?.throwIfAborted();
+    if (depth > 64) throw new Error('Folder nesting exceeds import depth limit.');
     const dirEntries = await readdir(currentDir, { withFileTypes: true });
-    for (const entry of dirEntries) {
+    for (const entry of dirEntries.sort((a, b) => a.name.localeCompare(b.name))) {
+      signal?.throwIfAborted();
       const fullPath = join(currentDir, entry.name);
       if (entry.isDirectory()) {
-        await walk(fullPath);
+        await walk(fullPath, depth + 1);
       } else if (isPotentialExportFile(entry)) {
+        if (entries.length >= 100000) throw new Error('Too many export files in selected folder.');
         entries.push({
           name: entry.name,
           relativePath: relative(folderPath, fullPath),
@@ -127,8 +135,9 @@ export const ingestFolder = async (
 
   let entries: DirEntry[];
   try {
-    entries = await collectExportEntries(resolved);
+    entries = await collectExportEntries(resolved, opts.signal);
   } catch (e) {
+    if (opts.signal?.aborted) throw opts.signal.reason;
     return {
       conversations: 0,
       ingested: 0,
@@ -183,7 +192,10 @@ const ingestFilesInternal = async (
     elapsedMs: 0,
   });
 
-  for (const filePath of files) {
+  const grouped = await groupNativeBackupFiles(files, opts.signal);
+  errors.push(...grouped.diagnostics);
+  for (const fileGroup of grouped.groups) {
+    const filePath = fileGroup[0]!;
     opts.signal?.throwIfAborted();
     try {
       onProgress({
@@ -199,33 +211,37 @@ const ingestFilesInternal = async (
         providers,
       });
 
-      const raw = await readFile(filePath, 'utf-8');
+      const parsed = await importEnhancedFile(filePath, {
+        signal: opts.signal,
+        companionPaths: fileGroup.slice(1),
+        onProgress: (event) =>
+          onProgress({
+            status: 'progress',
+            phase: event.phase,
+            totalFiles,
+            processedFiles,
+            currentFile: event.sourceFile ?? filePath,
+            totalChunks,
+            totalTokens,
+            elapsedMs: Date.now() - startTime,
+            errorsCount: errors.length,
+            providers,
+          }),
+      });
       opts.signal?.throwIfAborted();
-
-      // Parse once, use for both detection and extraction
-      let jsonData: unknown;
-      try {
-        jsonData = JSON.parse(raw);
-      } catch {
-        errors.push(`${filePath}: Invalid JSON`);
-        processedFiles++;
+      if (parsed.diagnostics.length) {
+        errors.push(...parsed.diagnostics);
+        processedFiles += fileGroup.length;
         continue;
       }
-
-      const provider = detectProvider(jsonData);
-      providers[provider] = (providers[provider] || 0) + 1;
-
-      const parsed = parseConversationGroups(jsonData as string | object);
-
-      if (parsed.error) {
-        errors.push(`${filePath}: ${parsed.error}`);
-        processedFiles++;
-        continue;
+      const provider = parsed.provider;
+      for (const nativeProvider of new Set(parsed.conversations.map((entry) => entry.provider))) {
+        providers[nativeProvider] = (providers[nativeProvider] || 0) + 1;
       }
 
       if (parsed.conversations.length === 0) {
         skippedFiles.push(filePath);
-        processedFiles++;
+        processedFiles += fileGroup.length;
         continue;
       }
 
@@ -276,7 +292,7 @@ const ingestFilesInternal = async (
       errors.push(`${filePath}: ${(e as Error).message}`);
     }
 
-    processedFiles++;
+    processedFiles += fileGroup.length;
     onProgress({
       status: 'progress',
       phase: clearFirst ? 'reading' : undefined,

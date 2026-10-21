@@ -6,6 +6,9 @@ import { getAllCollections } from './collections.js';
 import { portableModelLabel } from '../model-label.js';
 
 export interface ThreadResult {
+  readonly raw?: unknown;
+  readonly sourceIdentity?: unknown;
+  readonly provider?: string;
   readonly sourceFile: string;
   readonly conversationKey: string;
   readonly title?: string;
@@ -30,6 +33,14 @@ const sanitizeTurns = (turns: Turn[]): Turn[] => {
           typeof turn.thinking === 'string' ||
           typeof turn.ai === 'string'),
     );
+  }
+};
+
+const parseRaw = (rawJson: string): unknown => {
+  try {
+    return rawJson ? JSON.parse(rawJson) : undefined;
+  } catch {
+    return undefined;
   }
 };
 
@@ -82,6 +93,9 @@ const loadStoredThread = async (
       sourceFile,
       conversationKey: row.conversationKey,
       title: row.title || undefined,
+      provider: row.provider,
+      raw: parseRaw(row.rawJson),
+      sourceIdentity: parseRaw(row.sourceIdentityJson),
       createdInThreadShelf: row.createdInThreadShelf,
       threadCreatedAt: row.threadCreatedAt || undefined,
       turns: sanitizeTurns(parseStoredTurns(row.turnsJson)),
@@ -94,6 +108,9 @@ const loadStoredThread = async (
       sourceFile,
       conversationKey: row.conversationKey,
       title: row.title || undefined,
+      provider: row.provider,
+      raw: parseRaw(row.rawJson),
+      sourceIdentity: parseRaw(row.sourceIdentityJson),
       createdInThreadShelf: row.createdInThreadShelf,
       threadCreatedAt: row.threadCreatedAt || undefined,
       turns: sanitizeTurns(parseStoredTurns(row.turnsJson)),

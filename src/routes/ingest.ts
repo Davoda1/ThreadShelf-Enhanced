@@ -20,7 +20,8 @@ const router = Router();
 
 const UPLOADS_DIR = process.env.UPLOADS_DIR || dataPath('uploads');
 const INCOMING_DIR = join(UPLOADS_DIR, '.incoming');
-const MAX_UPLOAD_SIZE = 500 * 1024 * 1024; // 500 MB
+// Disk-backed uploads remain bounded; large local archives can also be indexed by folder path.
+const MAX_UPLOAD_SIZE = 4 * 1024 ** 3; // 4 GiB per file
 const MAX_UPLOAD_FILES = 1000;
 
 const upload = multer({
@@ -196,7 +197,7 @@ router.post('/api/ingest-upload', upload.any(), async (req, res) => {
   if (files.length === 0) {
     return res
       .status(400)
-      .json({ error: 'No files uploaded. Choose a folder with JSON export files.' });
+      .json({ error: 'No files uploaded. Choose JSON, HTML or ZIP exports, or an export folder.' });
   }
 
   const requestedCollection = tryNormalizeCollectionName(req.body?.collectionName);

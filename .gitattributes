@@ -13,3 +13,6 @@
 *.db binary
 *.sqlite binary
 *.sqlite3 binary
+
+# Preserve original third-party license bytes and recorded verification hashes.
+client/src/enhanced-renderer/licenses/** -text

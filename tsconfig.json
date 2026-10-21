@@ -15,8 +15,20 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": true
+    "noUncheckedIndexedAccess": true,
+    "allowJs": true,
+    "checkJs": false
   },
-  "include": ["src/**/*.ts", "mcp/**/*.ts"],
-  "exclude": ["node_modules", "client", "dist", "test", "public"]
+  "include": [
+    "src/**/*.ts",
+    "mcp/**/*.ts",
+    "src/**/*.mjs"
+  ],
+  "exclude": [
+    "node_modules",
+    "client",
+    "dist",
+    "test",
+    "public"
+  ]
 }

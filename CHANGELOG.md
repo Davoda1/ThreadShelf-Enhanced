@@ -1,6 +1,49 @@
 # Changelog
 
-All notable changes to ThreadShelf are documented here.
+## ThreadShelf Enhanced 1.0.0
+
+Initial source release of the Enhanced fork, based on ThreadShelf v1.3.0
+(commit `3430dd04f50218fdea916b104709d24a651017fc`).
+
+### Added
+
+- Rich conversation rendering adapted from ThreadShelf Local Reader, including
+  math, diagrams, citations, code controls and safe source fallbacks.
+- Expanded native and converted JSON/HTML/ZIP import support, with conversation
+  raw data, message metadata and exact unsafe integer identifiers preserved.
+- Checked local image resolution and explicit remote image loading.
+- Integrated Reader pagination and released Local Suite HTTP adapter fixtures.
+- Project-local setup for Node 24.22.1 LTS and npm 12.2.1 on Linux and Windows.
+- A general Linux launcher for the compiled server, runtime checks and folder
+  indexing, with configurable installation location and controlled Ctrl+C shutdown
+  that permits subsequent shell commands.
+
+### Changed
+
+- Bounded viewport layouts, scrollable navigation and responsive dialogs keep
+  controls reachable in short and narrow windows.
+- The sidebar logo matches the favicon.
+- Releases use source ZIP and TAR.GZ archives; the npm package is private.
+- Default host configuration is loopback-only. Source archives exclude user data,
+  local configuration, credentials and generated runtime files.
+
+### Compatibility and known limitations
+
+Legacy API routes, stored identity keys, path/environment names and MIT licensing
+are retained. See the [compatibility contract](docs/ENHANCED_COMPATIBILITY.md) and
+[validation record](docs/ENHANCED_VALIDATION.md) for scope and release-gate status.
+
+A ZIP containing both `conversations.json` and `chat.html` can import duplicate
+conversations. Browser folder uploads omit image companions; use a server-local
+folder or a ZIP with one conversation JSON representation and its images.
+Encrypted Venice backups and JSONL inputs are unsupported.
+
+---
+
+## Upstream ThreadShelf history
+
+The entries below are retained from upstream ThreadShelf. Their version numbers
+and npm publication notes describe upstream releases, not Enhanced releases.
 
 ## 1.3.0 — 2026-10-02
 

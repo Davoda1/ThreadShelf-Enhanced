@@ -1,4 +1,5 @@
 import type { Turn } from './validation.js';
+import { parseEnhancedDocument, importEnhancedFile } from './enhanced-import/index.js';
 
 // --- Public types ---
 
@@ -6,6 +7,10 @@ export interface Conversation {
   readonly key: string;
   readonly title: string;
   readonly turns: Turn[];
+  readonly raw?: unknown;
+  readonly provider?: string;
+  readonly sourceFile?: string;
+  readonly sourceIdentity?: Record<string, unknown>;
 }
 
 export interface ParseResult {
@@ -76,9 +81,20 @@ export const parseFile = async (
   filePath: string,
   options: ParseOptions = {},
 ): Promise<FlatParseResult> => {
-  const fs = await import('fs/promises');
-  const content = await fs.readFile(filePath, 'utf-8');
-  return parseExport(content, options);
+  // Keep the public v1.3 JSON parser's exact output contract unless callers
+  // request rich source fields. Import/indexing always uses the enhanced path.
+  if (!options.preserveSource && !/\.(?:zip|html?)$/i.test(filePath)) {
+    const fs = await import('node:fs/promises');
+    const result = parseExport(await fs.readFile(filePath, 'utf8'), options);
+    if (!result.error) return result;
+  }
+  const parsed = await importEnhancedFile(filePath);
+  if (parsed.diagnostics.length) return { turns: [], error: parsed.diagnostics.join('\n') };
+  return {
+    turns: parsed.conversations.flatMap((conversation) =>
+      filterEnhancedTurns(conversation.turns, options),
+    ),
+  };
 };
 
 export const parseGoogleAIStudio = (
@@ -130,6 +146,11 @@ export type Provider =
   | 'openrouter'
   | 'lm-studio'
   | 'grok'
+  | 'meta'
+  | 'gemini'
+  | 'venice'
+  | 'threadshelf'
+  | 'converted'
   | 'unknown';
 
 export const detectProvider = (data: unknown): Provider => {
@@ -139,15 +160,40 @@ export const detectProvider = (data: unknown): Provider => {
   if (isOpenAIFormat(data)) return 'openai';
   if (isOpenRouterFormat(data)) return 'openrouter';
   if (isLMStudioFormat(data)) return 'lm-studio';
+  const d = (Array.isArray(data) ? data[0] : data) as AnyObj | undefined;
+  if (Array.isArray(d?.label_values) || d?._meta_ai_archive) return 'meta';
+  if (d?.format === 'venice-chat-history' || Array.isArray(d?.owners) || d?.venice_conversion)
+    return 'venice';
+  if (/gemini/i.test(String(d?.header) + String(d?.titleUrl) + String(d?.products)))
+    return 'gemini';
+  if (
+    (Array.isArray(d?.turns) && d.turns.length > 0) ||
+    (d && ['user', 'ai', 'thinking'].some((key) => typeof d[key] === 'string'))
+  )
+    return 'threadshelf';
+  if (
+    (Array.isArray(d?.messages) &&
+      d.messages.some(
+        (message: AnyObj) =>
+          message &&
+          (message.content !== undefined ||
+            message.text !== undefined ||
+            message.message !== undefined),
+      )) ||
+    (Array.isArray(d?.conversations) && d.conversations.length > 0)
+  )
+    return 'converted';
   return 'unknown';
 };
 
 // --- Internal types ---
 
-interface ParseOptions {
+export interface ParseOptions {
   readonly includeUser?: boolean;
   readonly includeThinking?: boolean;
   readonly includeAi?: boolean;
+  /** Preserve native source messages, references and unknown fields for rich display. */
+  readonly preserveSource?: boolean;
 }
 
 type AnyObj = Record<string, unknown>;
@@ -257,10 +303,33 @@ const flattenParseResult = (result: ParseResult): FlatParseResult => {
   return { turns: result.conversations.flatMap((c) => c.turns) };
 };
 
+const filterEnhancedTurns = (turns: Turn[], options: ParseOptions): Turn[] =>
+  turns.filter((turn) =>
+    turn.user !== undefined
+      ? options.includeUser !== false
+      : turn.thinking !== undefined
+        ? options.includeThinking !== false
+        : options.includeAi !== false,
+  );
+
+const enhancedGroups = (data: unknown, options: ParseOptions): ParseResult => {
+  try {
+    return {
+      conversations: parseEnhancedDocument(data).map((conversation) => ({
+        ...conversation,
+        turns: filterEnhancedTurns(conversation.turns, options),
+      })),
+    };
+  } catch (error) {
+    return { conversations: [], error: (error as Error).message };
+  }
+};
+
 const parseConversations = (input: unknown, options: ParseOptions = {}): ParseResult => {
   const parsed = parseInput(input);
   if (parsed.error) return { conversations: [], error: parsed.error };
   const { data } = parsed;
+  if (options.preserveSource) return enhancedGroups(data, options);
 
   switch (detectProvider(data)) {
     case 'google-ai-studio':
@@ -275,6 +344,12 @@ const parseConversations = (input: unknown, options: ParseOptions = {}): ParseRe
       return buildOpenRouterConversation(data as AnyObj, options);
     case 'lm-studio':
       return buildLMStudioConversation(data as AnyObj, options);
+    case 'meta':
+    case 'gemini':
+    case 'venice':
+    case 'threadshelf':
+    case 'converted':
+      return enhancedGroups(data, options);
     case 'unknown':
       return {
         conversations: [],

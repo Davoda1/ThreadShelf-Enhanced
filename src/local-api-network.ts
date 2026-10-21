@@ -38,11 +38,18 @@ let lastError: { readonly port: number; readonly message: string } | undefined;
 let mainPort: number | undefined;
 let queue: Promise<void> = Promise.resolve();
 
-const lanAddresses = (): string[] =>
-  Object.values(networkInterfaces())
-    .flat()
-    .filter((address) => address && address.family === 'IPv4' && !address.internal)
-    .map((address) => address!.address);
+const lanAddresses = (): string[] => {
+  try {
+    return Object.values(networkInterfaces())
+      .flat()
+      .filter((address) => address && address.family === 'IPv4' && !address.internal)
+      .map((address) => address!.address);
+  } catch {
+    // Restricted containers may allow listening but deny interface enumeration.
+    // URL suggestions are optional; keep status/settings usable in that case.
+    return [];
+  }
+};
 
 const close = (): Promise<void> => {
   const current = server;

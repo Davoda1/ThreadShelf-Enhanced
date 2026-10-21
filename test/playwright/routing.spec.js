@@ -31,7 +31,7 @@ test.describe('Collection routing', () => {
     await expect(notFound).toBeVisible({ timeout: 15_000 });
     await expect(notFound).toContainText('That page does not exist.');
     // The shell stays usable rather than dropping to bare "Not Found" text.
-    await expect(page.locator('.sb-name b')).toHaveText('ThreadShelf');
+    await expect(page.locator('.sb-name b')).toHaveText('ThreadShelf Enhanced');
 
     await page.getByRole('button', { name: 'Back to search' }).click();
     await expect(page).toHaveURL(/\/search\//);

@@ -155,6 +155,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  > * {
+    min-width: 0;
+    flex-shrink: 0;
+  }
   background:
     radial-gradient(
       900px 380px at 50% 0%,
@@ -174,6 +178,7 @@
 
   h1 {
     margin: 0;
+    overflow-wrap: anywhere;
     font-size: clamp(30px, 2.3vw, 48px);
     font-weight: 500;
     letter-spacing: -0.025em;
@@ -285,7 +290,7 @@
 
 // Reasoning stub
 .turn-stub {
-  grid-template-columns: 44px 1fr;
+  grid-template-columns: 44px minmax(0, 1fr);
   align-items: start;
 
   .reasoning-stub {
@@ -423,7 +428,7 @@
 
 .turn {
   display: grid;
-  grid-template-columns: 44px 1fr;
+  grid-template-columns: 44px minmax(0, 1fr);
   gap: 18px;
   align-items: start;
   position: relative;

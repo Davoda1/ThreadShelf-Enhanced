@@ -6,7 +6,7 @@ project. `CLAUDE.md` simply points here so Claude Code picks up the same rules.
 
 ## What this project is
 
-**ThreadShelf** — a local, offline semantic-search and backup tool for AI chat
+**ThreadShelf Enhanced** — a local, offline semantic-search and backup tool for AI chat
 exports (Google AI Studio, OpenRouter, OpenAI/ChatGPT, Anthropic/Claude, LM Studio,
 Grok/xAI). It
 parses exported JSON into normalized turns, chunks and embeds them locally
@@ -95,12 +95,11 @@ root installs both.
 
 | Command                                              | Use                                                                                     |
 | ---------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `npm install`                                        | Install server + client deps (workspaces).                                              |
+| `npm ci`                                             | Install locked server + client deps (workspaces).                                              |
 | `npm start`                                          | Run server on :3000 (`npm start -- 3001` for another port).                             |
 | `npm run dev`                                        | Server with watch mode.                                                                 |
 | `npm run dev:client`                                 | Vite dev server (UI hot reload on :5173, API proxied to :3000).                         |
 | `npm run build:client`                               | Build the UI into `public/`.                                                            |
-| `npm run docs:screenshots`                           | Generate README screenshots from repo-safe mock data into `docs/assets/`.               |
 | `npm test`                                           | Fast unit/regression tests (node test runner via tsx).                                  |
 | `npm run test:e2e`                                   | API + MCP E2E (spawns a temp server + temp LanceDB).                                    |
 | `npm run test:playwright`                            | Browser E2E (needs Playwright browsers).                                                |
@@ -111,7 +110,7 @@ root installs both.
 | `npm run ingest -- <folder> [collection] -- [flags]` | Ingest a folder (`--clear`; `--watch`; `--debounce`).                                   |
 | `npm run search -- "<query>" -- [flags]`             | Search from the CLI (`--mode keyword`, `--collection`, `--n`, `--json`).                |
 | `npm run setup:llama`                                | Local discovery only; `-- -- --check` reads metadata; install needs explicit consent.   |
-| `npm run build:package`                              | Build the publishable package: client UI into `public/`, server + MCP into `dist/`.     |
+| `npm run build:package`                              | Build package output: client UI into `public/`, server + MCP into `dist/`.     |
 | `npm pack --dry-run`                                 | Inspect exactly what would be published (runs `prepack`).                               |
 | `npm run pack:verify`                                | Pack, install into a temp dir, boot the CLI from an unrelated cwd, assert data landing. |
 
@@ -120,7 +119,7 @@ touched the parser/ingest/search, `npm test && npm run test:e2e` is the minimum.
 
 ## Conventions
 
-- **Language/runtime:** TypeScript, ESM (`"type": "module"`), Node 20.19+. In
+- **Language/runtime:** TypeScript, ESM (`"type": "module"`), Node 24+. In
   development the server runs directly through `tsx`; for distribution it is
   compiled to plain JavaScript in `dist/` (`tsconfig.build.json`), because the
   published package must not need `tsx` or `typescript` at runtime.
@@ -292,7 +291,7 @@ locale or time zone only when that behavior is what the test is meant to verify.
 
 ## External network surfaces
 
-Three, all opt-in and none of them carrying chat content:
+The optional generation integrations use these external services:
 
 1. **OpenRouter** — the only surface that sends conversation text off-device.
 2. **GitHub Releases** (`ggml-org/llama.cpp`) — release metadata; archives only
@@ -321,27 +320,17 @@ Two rules hold for every route that streams a long download:
   against the value the client approved. A mismatch returns 409 with the new plan
   rather than downloading something the user never agreed to.
 
-## Publishing (npm)
+## Source distribution
 
-The package is published to npm as unscoped `threadshelf`, so `npx threadshelf`
-starts it with no clone and no build.
-
-- `bin/threadshelf.js` (web UI + API, plus `search`/`ingest`/`parse`
-  subcommands) and `bin/threadshelf-mcp.js` (MCP stdio) are plain JavaScript on
-  purpose and import from `dist/`, never from `src/`. Adding a CLI under `src/`
-  means adding a subcommand here too, otherwise it ships but is unreachable —
-  `test/packaging.test.js` guards the existing three.
-- `prepack` runs `build:package`, so `npm pack` / `npm publish` can never ship a
-  stale `dist/` or `public/`.
-- `files` in `package.json` is an allow-list. Anything not listed is not
-  published — keep `src/`, `test/`, `client/`, `docs/` (screenshots), `.env`,
-  `.lancedb/` and other user data out of it.
-- Releases run through `.github/workflows/publish.yml` on a `v*` tag, using npm
-  Trusted Publishing (OIDC). There is deliberately **no `NPM_TOKEN` secret**;
-  the workflow needs `id-token: write` and the npm side must list this repo and
-  `publish.yml` as a trusted publisher.
-- Release ritual: `npm version patch` then `git push --follow-tags`. The
-  workflow refuses to publish if the tag does not match `package.json`.
+Enhanced is distributed as source ZIP and TAR.GZ archives from
+`Davoda1/ThreadShelf-Enhanced`. `package.json` is private; do not enable npm
+publication. Preserve the upstream CLI names and compiled entry points for API
+and data-path compatibility. `scripts/release-source.py` packages public source
+and must exclude `.env`, user archives, databases, local runtimes, credentials and
+build output. Keep archive contents reproducible and verify their checksums.
+Tags use `v<package.json version>`; `.github/workflows/publish.yml` runs reusable
+Linux and Windows CI before creating a release with exactly the two source assets.
+Only its release job has repository write permission.
 
 ## Known gaps (as of this writing)
 
@@ -353,3 +342,40 @@ starts it with no clone and no build.
 
 When you finish a task, update this file if you changed commands, layout, or
 conventions.
+
+## Enhanced fork conventions
+
+ThreadShelf Enhanced 1.0.0 is based on upstream v1.3.0, with Node 24+ required
+for lossless JSON numeric tokens. Distribution is source ZIP/TAR.GZ only. The
+package is private. The source release workflow validates tagged source through
+reusable CI before publishing the two source archives; it never publishes to npm.
+Use setup-threadshelf.sh (Linux) or setup-threadshelf.ps1 (Windows) to install a
+checksum-verified, project-local Node 24.22.1 LTS runtime and npm 12.2.1. Existing
+.env files are preserved. Version overrides are --node-version / --npm-version
+(PowerShell: -NodeVersion / -NpmVersion); npm compatibility is enforced.
+The root package's allowScripts entries are pinned to reviewed dependency
+versions for npm 12; review them when updating those dependencies.
+Keep legacy ThreadShelf API, data paths, environment names and identity keys.
+Enhanced import code includes attributed Local Reader adapters under
+src/enhanced-import; preserve their source provenance and original raw exports.
+
+The root `threadshelf-enhanced` Bash launcher runs the compiled server or importer
+without a terminal multiplexer. It resolves the installation from
+`THREADSHELF_ENHANCED_DIR` or its own symlink-resolved project directory and uses
+the local setup runtime by default. Its flags are `--help`/`-h`, `--version`/`-V`,
+`--check-runtime`, and `--index FOLDER COLLECTION [--clear]`.
+`scripts/network-addresses.mjs` reports addresses after Node loads `.env`; keep
+its filtering aligned with `routes/local-origin.ts` and HOST binding rules.
+
+Test upgrades and migrations only with synthetic temporary stores. Do not publish
+user configuration or run tests against a live store. Public compatibility is
+scoped to the released Local Suite v1.0.0 HTTP adapter fixtures and documented
+contracts; do not require separately supplied application source trees. Preserve
+the attribution to ThreadShelf Local Reader by davoda1 without asserting that
+all adapted components are byte-identical to a public release.
+
+Document current import limits: a ZIP with both `conversations.json` and
+`chat.html` can create duplicates; browser folder uploads exclude image
+companions; encrypted Venice backups and JSONL are unsupported. Server-local
+folders or ZIPs with one conversation JSON representation and image companions
+are the supported path for local media.

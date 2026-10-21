@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { readFile, lstat } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
 
 const repoRoot = resolve('.');
@@ -19,7 +19,7 @@ const violations: string[] = [];
 // with THREADSHELF_PATH, so an exact `\.threadshelf` once let a 130 MB
 // `.threadshelf-demo/` LanceDB tree reach the index unnoticed.
 const forbiddenDirectories =
-  /(^|\/)(DO_NOT_COMMIT|private|exports|\.lancedb[^/]*|\.uploads[^/]*|\.threadshelf[^/]*|\.tmp-[^/]+|\.playwright-mcp|test-results|playwright-report)(\/|$)/i;
+  /(^|\/)(DO_NOT_COMMIT|personal|private|exports|node_modules|\.local|\.cache|\.home|\.config|\.npm-cache|\.npm-global|\.lancedb[^/]*|\.uploads[^/]*|\.threadshelf[^/]*|\.tmp-[^/]+|\.playwright-mcp|test-results|playwright-report)(\/|$)/i;
 const forbiddenExtensions =
   /\.(?:zip|7z|tar|gz|gguf|onnx|lance|txn|manifest|db|sqlite3?|pem|key|p12|log)$/i;
 const allowedJson = [
@@ -27,12 +27,18 @@ const allowedJson = [
   /^client\/(?:package|tsconfig)\.json$/i,
   /^test\/fixture\.json$/i,
   /^test\/fixtures\/.+\.json$/i,
-  /^docs\/mock-data\/.+\.json$/i,
 ];
 const allowedImages = /^docs\/assets\/.+\.(?:png|gif|jpe?g|webp)$/i;
 
 for (const rawPath of files) {
   const path = rawPath.replace(/\\/g, '/');
+  try {
+    if ((await lstat(resolve(repoRoot, path))).isSymbolicLink()) {
+      violations.push(`${path}: symbolic link outside the source-file policy`);
+    }
+  } catch {
+    continue; // A tracked deletion is not a publication candidate.
+  }
   const basename = path.split('/').at(-1) ?? path;
 
   if (forbiddenDirectories.test(path)) {
@@ -61,6 +67,10 @@ const textExtensions = new Set([
   '.example',
   '.html',
   '.js',
+  '.mjs',
+  '.ps1',
+  '.py',
+  '.sh',
   '.json',
   '.md',
   '.scss',
@@ -83,6 +93,9 @@ for (const path of files) {
   }
   if (content.includes('\0')) continue;
 
+  if (/github_pat_[A-Za-z0-9_]{30,}|gh[pousr]_[A-Za-z0-9]{30,}/.test(content)) {
+    violations.push(`${path}: value resembling a GitHub credential`);
+  }
   if (/sk-or-v1-[A-Za-z0-9_-]{20,}/.test(content)) {
     violations.push(`${path}: value resembling an OpenRouter API key`);
   }
@@ -95,9 +108,9 @@ for (const path of files) {
       violations.push(`${path}: user-specific Windows home path (${match[1]})`);
     }
   }
-  for (const match of content.matchAll(/\/Users\/([^/\s`'"]+)/g)) {
+  for (const match of content.matchAll(/\/(?:Users|home)\/([^/\s`'"]+)/g)) {
     if (!allowedHomeSegments.has(match[1].toLowerCase())) {
-      violations.push(`${path}: user-specific macOS home path (${match[1]})`);
+      violations.push(`${path}: user-specific home path (${match[1]})`);
     }
   }
 }

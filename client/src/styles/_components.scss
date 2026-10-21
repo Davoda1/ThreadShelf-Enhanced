@@ -88,6 +88,7 @@
 
 // Panels
 .panel {
+  min-width: 0;
   border: 1px solid var(--border-0);
   background: var(--bg-1);
   border-radius: var(--r-lg);
@@ -100,6 +101,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
   background: linear-gradient(180deg, var(--bg-2), transparent);
 
   h3 {
@@ -187,6 +189,8 @@
 
   .grow {
     flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   code {
@@ -205,8 +209,10 @@
   background: var(--scrim-bg);
   backdrop-filter: blur(6px);
   display: grid;
+  grid-template-rows: minmax(0, 1fr);
   place-items: start center;
-  padding-top: 14vh;
+  padding: min(14dvh, 80px) 12px 12px;
+  overflow: auto;
   z-index: 100;
 
   &[hidden] {
@@ -217,6 +223,10 @@
 // Command palette
 .cmdk {
   width: min(640px, 92vw);
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
   background: var(--bg-1);
   border: 1px solid var(--border-1);
   border-radius: var(--r-lg);
@@ -228,9 +238,10 @@
 
 .cmdk-input {
   display: grid;
-  grid-template-columns: 38px 1fr auto;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
   align-items: center;
   height: 48px;
+  flex-shrink: 0;
   border-bottom: 1px solid var(--border-0);
 
   svg {
@@ -241,6 +252,7 @@
   }
 
   input {
+    min-width: 0;
     background: transparent;
     border: 0;
     outline: 0;
@@ -261,6 +273,7 @@
 }
 
 .cmdk-list {
+  min-height: 0;
   max-height: 50vh;
   overflow: auto;
   padding: 6px;
@@ -277,11 +290,12 @@
 
 .cmdk-item {
   display: grid;
-  grid-template-columns: 18px 1fr auto;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  height: 34px;
-  padding: 0 10px;
+  min-height: 34px;
+  padding: 6px 10px;
+  overflow-wrap: anywhere;
   border-radius: var(--r-sm);
   background: transparent;
   border: 0;
@@ -312,15 +326,23 @@
 
 // Modal
 .modal-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
   background: var(--bg-1);
   border: 1px solid var(--border-1);
   border-radius: var(--r-lg);
   width: min(480px, 92vw);
   box-shadow: var(--dialog-shadow);
-  overflow: hidden;
+  overflow: auto;
 }
 
 .modal-head {
+  flex-shrink: 0;
+  overflow-wrap: anywhere;
   padding: 14px 16px;
   border-bottom: 1px solid var(--border-0);
 
@@ -337,6 +359,9 @@
 }
 
 .modal-body {
+  flex-shrink: 0;
+  min-height: 0;
+  overflow: auto;
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
@@ -348,6 +373,8 @@
   }
 
   input {
+    min-width: 0;
+    flex-shrink: 0;
     height: 32px;
     padding: 0 10px;
     border-radius: var(--r-sm);
@@ -363,9 +390,11 @@
 }
 
 .modal-foot {
+  flex-shrink: 0;
   padding: 12px 16px;
   border-top: 1px solid var(--border-0);
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
 }

@@ -230,6 +230,9 @@ export const api = {
       conversationKey?: string;
       createdInThreadShelf: boolean;
       threadCreatedAt?: string;
+      raw?: unknown;
+      sourceIdentity?: unknown;
+      provider?: string;
       turns: ThreadTurn[];
     }>(buildUrl('/api/thread', { sourceFile, collection, conversationKey }), { signal });
   },

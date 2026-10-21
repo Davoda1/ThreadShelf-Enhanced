@@ -122,6 +122,9 @@ export interface ArchiveInsights {
 }
 
 export interface ThreadTurn {
+  readonly raw?: unknown;
+  readonly metadata?: Record<string, unknown>;
+  readonly assets?: readonly { url: string; label?: string; source?: string }[];
   readonly user?: string;
   readonly thinking?: string;
   readonly ai?: string;

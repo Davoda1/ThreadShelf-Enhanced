@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 
 test.describe('Search workflow', () => {
   test('loads the UI shell with expected sections', async ({ appPage }) => {
-    await expect(appPage.locator('.sb-name b')).toHaveText('ThreadShelf');
+    await expect(appPage.locator('.sb-name b')).toHaveText('ThreadShelf Enhanced');
     await expect(appPage.getByLabel('Filter by conversation origin')).toHaveValue('all');
     await expect(appPage.locator('#searchInput')).toBeVisible();
     await expect(appPage.getByText('Library')).toBeVisible();

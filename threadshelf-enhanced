@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# Start the Enhanced server or index a folder with its project-local runtime.
+set -euo pipefail
+
+# Follow installation symlinks so the launcher works from any shell directory.
+SOURCE=${BASH_SOURCE[0]}
+LINKS=0
+while [[ -L "$SOURCE" ]]; do
+  ((LINKS += 1))
+  ((LINKS <= 40)) || { echo 'Too many launcher symlinks.' >&2; exit 1; }
+  SOURCE_DIR="$(cd -P -- "$(dirname -- "$SOURCE")" && pwd)"
+  SOURCE="$(readlink -- "$SOURCE")"
+  [[ "$SOURCE" == /* ]] || SOURCE="$SOURCE_DIR/$SOURCE"
+done
+ROOT="${THREADSHELF_ENHANCED_DIR:-$(cd -P -- "$(dirname -- "$SOURCE")" && pwd)}"
+VERSION=1.0.0
+MODE=server
+CLEAR=0
+FOLDER=
+COLLECTION=
+while (($#)); do
+  case "$1" in
+    -h|--help)
+      cat <<HELP
+threadshelf-enhanced $VERSION
+Usage: threadshelf-enhanced [--index FOLDER COLLECTION [--clear]]
+Starts only the Enhanced server; Ctrl-C stops it.
+--check-runtime validates the local runtime/build without starting services.
+--index FOLDER COLLECTION indexes an export folder without starting the server.
+--clear replaces the selected collection during indexing.
+THREADSHELF_ENHANCED_DIR overrides the installation directory.
+THREADSHELF_NODE_VERSION selects the project-local Node version (default 24.22.1).
+Install directory: $ROOT
+HELP
+      exit 0 ;;
+    -V|--version) echo "threadshelf-enhanced $VERSION"; exit 0 ;;
+    --check-runtime)
+      [[ "$MODE" == server ]] || { echo '--check-runtime cannot be combined with --index.' >&2; exit 2; }
+      MODE=check; shift ;;
+    -i|--index)
+      [[ "$MODE" == server && $# -ge 3 ]] || { echo '--index requires one FOLDER and COLLECTION and cannot be combined with --check-runtime.' >&2; exit 2; }
+      MODE=index; FOLDER=$2; COLLECTION=$3; shift 3 ;;
+    --clear) CLEAR=1; shift ;;
+    *) echo "Unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+[[ "$MODE" == index || $CLEAR == 0 ]] || { echo '--clear requires --index.' >&2; exit 2; }
+[[ -d "$ROOT" ]] || { echo "Missing Enhanced installation: $ROOT. Set THREADSHELF_ENHANCED_DIR to the unpacked source directory." >&2; exit 1; }
+ROOT="$(cd -P -- "$ROOT" && pwd)"
+[[ -f "$ROOT/.env" ]] || {
+  printf 'Missing configuration: %s/.env\nRun bash %q first, or copy .env.example to .env in that directory.\n' "$ROOT" "$ROOT/setup-threadshelf.sh" >&2
+  exit 1
+}
+[[ "$(uname -s)" == Linux ]] || { echo 'This launcher supports Linux. Use setup-threadshelf.ps1 on Windows.' >&2; exit 1; }
+case "$(uname -m)" in x86_64) ARCH=x64 ;; aarch64|arm64) ARCH=arm64 ;; *) echo 'Supported Linux architectures: x64, arm64.' >&2; exit 1 ;; esac
+NODE_VERSION="${THREADSHELF_NODE_VERSION:-24.22.1}"; NODE_VERSION="${NODE_VERSION#v}"
+[[ "$NODE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Invalid Node version.' >&2; exit 2; }
+RUNTIME="$ROOT/.local/node-v${NODE_VERSION}-linux-${ARCH}"
+NODE="$RUNTIME/bin/node"
+[[ -x "$NODE" && -f "$ROOT/dist/src/server.js" && -f "$ROOT/dist/src/ingest-cli.js" && -f "$ROOT/scripts/network-addresses.mjs" ]] || {
+  printf 'Run bash %q first to install the local runtime and build ThreadShelf Enhanced.\n' "$ROOT/setup-threadshelf.sh" >&2
+  exit 1
+}
+"$NODE" -e 'if(Number(process.versions.node.split(".")[0])<24)process.exit(1)' || { echo 'Node 24+ required.' >&2; exit 1; }
+export PATH="$RUNTIME/bin:$PATH"
+# Match setup defaults while preserving the user's explicit cache locations.
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$ROOT/.local/cache}"
+export HF_HOME="${HF_HOME:-$ROOT/.local/huggingface}"
+[[ "$MODE" != check ]] || { echo "Enhanced runtime/build ready: $ROOT"; exit 0; }
+# Supervise Node so Ctrl-C is a successful stop for commands chained by the caller.
+# A separate process group also receives shutdown when Node has spawned workers.
+CHILD_PID=
+STOP_STATUS=
+stop_child() {
+  [[ -n "$CHILD_PID" ]] || return 0
+  # Background jobs can inherit ignored SIGINT. Node's SIGTERM hooks do cleanup.
+  kill -TERM -- "-$CHILD_PID" 2>/dev/null || kill -TERM "$CHILD_PID" 2>/dev/null || true
+}
+request_stop() {
+  [[ -z "$STOP_STATUS" ]] || return 0
+  case "$1" in
+    INT) STOP_STATUS=0; printf '\nCTRL-C\n\n' ;;
+    TERM) STOP_STATUS=143 ;;
+    HUP) STOP_STATUS=129 ;;
+  esac
+  stop_child
+}
+run_supervised() {
+  local child_status=0
+  trap 'request_stop INT' INT
+  trap 'request_stop TERM' TERM
+  trap 'request_stop HUP' HUP
+  # Bash job control gives this child its own group without an extra dependency.
+  set -m
+  "$@" &
+  CHILD_PID=$!
+  set +m
+  [[ -z "$STOP_STATUS" ]] || stop_child
+  while true; do
+    if wait "$CHILD_PID"; then child_status=0; else child_status=$?; fi
+    # A trapped signal interrupts wait before the child has necessarily stopped.
+    kill -0 "$CHILD_PID" 2>/dev/null || break
+  done
+  trap - INT TERM HUP
+  CHILD_PID=
+  return "${STOP_STATUS:-$child_status}"
+}
+if [[ "$MODE" == index ]]; then
+  [[ -d "$FOLDER" && -n "$COLLECTION" && "$COLLECTION" != -* ]] || { echo 'Invalid source folder or collection.' >&2; exit 2; }
+  FOLDER="$(cd -- "$FOLDER" && pwd -P)"
+  cd "$ROOT"
+  ARGS=("$FOLDER" "$COLLECTION")
+  ((CLEAR == 0)) || ARGS+=(--clear)
+  printf 'Indexing %s into %s with ThreadShelf Enhanced.\n' "$FOLDER" "$COLLECTION"
+  run_supervised "$NODE" --env-file="$ROOT/.env" "$ROOT/dist/src/ingest-cli.js" "${ARGS[@]}"
+  exit $?
+fi
+cd "$ROOT"
+printf 'Starting ThreadShelf Enhanced only. Press Ctrl-C to stop.\nInstallation: %s\n' "$ROOT"
+run_supervised "$NODE" --env-file="$ROOT/.env" --import "$ROOT/scripts/network-addresses.mjs" "$ROOT/dist/src/server.js"

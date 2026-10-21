@@ -9,6 +9,10 @@ export const PROVIDERS: Readonly<Record<string, Provider>> = {
   claude: { label: 'Claude', short: 'Claude', color: 'var(--p-claude)' },
   'lm-studio': { label: 'LM Studio', short: 'LM Studio', color: 'var(--p-lmstudio)' },
   grok: { label: 'Grok', short: 'Grok', color: 'var(--p-grok)' },
+  meta: { label: 'Meta AI', short: 'Meta AI', color: 'var(--p-google)' },
+  gemini: { label: 'Gemini', short: 'Gemini', color: 'var(--p-google)' },
+  venice: { label: 'Venice', short: 'Venice', color: 'var(--p-openrouter)' },
+  converted: { label: 'Converted export', short: 'Converted', color: 'var(--p-openai)' },
   threadshelf: {
     label: 'ThreadShelf',
     short: 'ThreadShelf',

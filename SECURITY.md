@@ -1,74 +1,76 @@
-# Security And Privacy
+# Security and privacy
 
-ThreadShelf is designed for local private archives. It does not require a cloud vector database or external embedding API for the main search path.
+ThreadShelf Enhanced is designed for local archives. Its main search path uses
+local embeddings and LanceDB; it does not require a cloud vector database or an
+external embedding API.
 
-## Private Data
+## Protect archive data
 
-Do not commit:
+Keep real chat exports, uploaded sources, `.env`, databases, `.collections.json`,
+`.threadshelf/`, logs, temporary folders and screenshots of conversations out of
+source control. Committed fixtures must be synthetic and anonymized. Back up
+archive data before upgrades or migrations.
 
-- Real chat exports.
-- Uploaded source files.
-- LanceDB databases.
-- `.collections.json`.
-- `.threadshelf/` (generation settings and optional llama.cpp tools).
-- Logs.
-- Temp folders.
-- Screenshots containing private conversations.
+## Server exposure
 
-The repo's committed fixtures should be synthetic and anonymized.
+The supplied configuration binds the server to `127.0.0.1`. Keep this default for
+single-machine use. You can set it explicitly in `.env`:
 
-## Local Server Exposure
-
-By default the server binds only to `127.0.0.1`. Keep that default for private
-single-machine use:
-
-```bash
-$env:HOST='127.0.0.1'
-npm start
+```dotenv
+HOST=127.0.0.1
+PORT=3000
 ```
 
-Setting `HOST=0.0.0.0` exposes the unauthenticated API to the local network. Do
-not do this on an untrusted network.
+`HOST=0.0.0.0` allows network access to the archive API. `ALLOWED_HOSTS` validates
+request hosts; it is not user authentication. Use a trusted network boundary or
+an authenticated reverse proxy before enabling remote access. The browser UI uses
+same-origin requests and does not enable cross-origin access by default.
 
-The browser UI uses same-origin API requests and does not enable cross-origin
-access by default.
+The optional model API has separate access settings; its API key does not add
+authentication to the archive UI/API.
 
-## Generation Boundary
+## Imports and rendering
 
-Managed `llama-server` processes bind to an ephemeral `127.0.0.1` port, configured llama.cpp URLs must
-be loopback-only, and selected GGUF files must be under configured model roots.
+Imported HTML is parsed as data rather than executed. Local media resolution is
+limited to supported raster images under the selected source or ZIP and rejects
+unsafe paths and content. Remote images load only after an explicit click.
+Unsupported rich content remains readable source or an inert placeholder.
 
-OpenRouter is an explicit external exception to the local data path. Sending a
-continuation transmits the selected archive's user/assistant turns and prompt to
-OpenRouter and its routed provider; archived thinking is excluded. The UI
-marks the provider as **OpenRouter · external**, adds an `off-device` chip to the
-model button, and repeats the boundary in the composer. ZDR-only routing and
-provider data-collection denial are optional controls, but users must still treat
-every OpenRouter request as disclosure to an external service.
+Retain original exports: normalization cannot represent every future format or
+attachment. Do not use live exports in public bug reports.
 
-Prefer `OPENROUTER_API_KEY`. Keys entered in Settings remain in process memory
-only and are never returned by the API or persisted to generation config.
+## Generation and MCP
 
-## MCP Exposure
+Managed `llama-server` processes bind to an ephemeral loopback port. Configured
+llama.cpp URLs must be loopback-only, and GGUF files must be under configured
+model roots.
 
-The MCP server gives connected MCP clients access to indexed local chat data. Only configure it in clients you trust.
+OpenRouter is an explicit external integration. Sending a continuation transmits
+the selected thread's user/assistant turns and prompt to OpenRouter and its
+routed provider; archived thinking is excluded. The UI labels this provider as
+external. Optional routing and data-collection controls do not make the request
+local.
 
-## Reporting Issues
+Prefer `OPENROUTER_API_KEY`. Keys entered in Settings remain in process memory;
+they are not returned by the API or persisted in generation configuration.
 
-If you find a vulnerability or privacy leak:
+The MCP server gives connected clients access to indexed local chat data. Configure
+it only in clients you trust. Initial dependency, runtime and model downloads use
+external services even when subsequent search and generation run locally.
 
-- Do not include real private exports in the report.
-- Describe the issue with synthetic examples.
-- Include affected routes/tools and reproduction steps.
+## Reporting a vulnerability
 
-## Dependency Notes
+Use [GitHub's private vulnerability reporting](https://github.com/Davoda1/ThreadShelf-Enhanced/security/advisories/new)
+if it is enabled for this repository. If unavailable, open an
+[issue](https://github.com/Davoda1/ThreadShelf-Enhanced/issues) requesting a private
+reporting channel, without publishing exploit details or sensitive data.
 
-The app uses:
+Provide affected versions, routes or tools, reproduction steps and a synthetic
+example. Never include credentials or real conversation exports. General bugs
+that do not expose a vulnerability can be reported in ordinary issues.
 
-- Express for the local HTTP server.
-- Multer for uploads.
-- LanceDB for local vector storage.
-- Xenova Transformers for local embeddings.
-- Playwright for browser tests.
+## Dependencies
 
-Review dependency updates before publishing public releases.
+The application uses Express, Multer, LanceDB, Transformers.js and bundled browser
+rendering libraries. Review dependency changes and retained licenses before a
+release. Exact dependency versions are recorded in `package-lock.json`.

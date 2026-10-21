@@ -108,7 +108,8 @@ test.describe('Result card titles', () => {
     await stubLongTitledConversation(page);
     await page.setViewportSize({ width: 320, height: 700 });
     await page.goto(`${serverContext.baseUrl}/`);
-    await expect(page.locator('#collection-pw_fixture')).toBeVisible({ timeout: 15_000 });
+    // The closed mobile drawer is intentionally hidden; wait for data, then navigate.
+    await expect(page.locator('#collection-pw_fixture')).toBeAttached({ timeout: 15_000 });
     await selectFixtureCollection(page);
 
     const title = page.locator('.result .r-title').first();
@@ -144,7 +145,8 @@ test.describe('Result card titles', () => {
       await stubLongTitledHit(page);
       await page.setViewportSize({ width, height: 844 });
       await page.goto(`${serverContext.baseUrl}/`);
-      await expect(page.locator('#collection-pw_fixture')).toBeVisible({ timeout: 15_000 });
+      // The closed mobile drawer is intentionally hidden; wait for data, then navigate.
+      await expect(page.locator('#collection-pw_fixture')).toBeAttached({ timeout: 15_000 });
       await selectFixtureCollection(page);
       await page.locator('#searchInput').fill('contraseña');
       await page.locator('#searchInput').press('Enter');
@@ -219,7 +221,8 @@ test.describe('Result card titles', () => {
   }) => {
     await page.setViewportSize({ width: 320, height: 700 });
     await page.goto(`${serverContext.baseUrl}/`);
-    await expect(page.locator('#collection-pw_fixture')).toBeVisible({ timeout: 15_000 });
+    // The closed mobile drawer is intentionally hidden; wait for data, then navigate.
+    await expect(page.locator('#collection-pw_fixture')).toBeAttached({ timeout: 15_000 });
     await selectFixtureCollection(page);
     await expect(page.locator('.results-meta-bar')).toBeVisible({ timeout: 30_000 });
 

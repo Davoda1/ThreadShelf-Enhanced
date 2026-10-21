@@ -178,6 +178,9 @@ const embedChunks = async (
 const THREADS_TABLE = '__threads';
 
 export interface ThreadConversationInput {
+  readonly raw?: unknown;
+  readonly sourceIdentity?: unknown;
+  readonly provider?: string;
   readonly key: string;
   readonly title: string;
   readonly turns: readonly unknown[];
@@ -194,6 +197,8 @@ export interface StoredThreadRow {
   readonly ordinal: number;
   readonly turnCount: number;
   readonly turnsJson: string;
+  readonly rawJson: string;
+  readonly sourceIdentityJson: string;
   readonly ingestedAt: string;
   readonly lastTurnAt: string;
   readonly lastModel: string;
@@ -233,6 +238,8 @@ const storedThreadRow = (row: Record<string, unknown>): StoredThreadRow => ({
   ordinal: Number(row.ordinal) || 0,
   turnCount: Number(row.turnCount) || 0,
   turnsJson: (row.turnsJson as string) ?? '',
+  rawJson: (row.rawJson as string) ?? '',
+  sourceIdentityJson: (row.sourceIdentityJson as string) ?? '',
   ingestedAt: (row.ingestedAt as string) ?? '',
   lastTurnAt: (row.lastTurnAt as string) ?? '',
   lastModel: (row.lastModel as string) ?? '',
@@ -282,6 +289,8 @@ const migrateThreadsSchema = async (tbl: Table): Promise<void> => {
 
   schema = await tbl.schema();
   const metadataColumns = [
+    { name: 'rawJson', valueSql: "''" },
+    { name: 'sourceIdentityJson', valueSql: "''" },
     { name: 'createdInThreadShelf', valueSql: 'false' },
     { name: 'threadCreatedAt', valueSql: "''" },
     { name: 'hasThreadShelfTurns', valueSql: 'false' },
@@ -344,10 +353,13 @@ const threadRows = (
     sourceFile,
     conversationKey: conversation.key ?? '',
     title: conversation.title ?? '',
-    provider,
+    provider: conversation.provider ?? provider,
     ordinal,
     turnCount: conversation.turns.length,
     turnsJson: JSON.stringify(conversation.turns),
+    rawJson: conversation.raw === undefined ? '' : JSON.stringify(conversation.raw),
+    sourceIdentityJson:
+      conversation.sourceIdentity === undefined ? '' : JSON.stringify(conversation.sourceIdentity),
     ingestedAt,
     lastTurnAt: latestTurnTimestamp(conversation.turns),
     lastModel: latestTurnModel(conversation.turns),
@@ -385,6 +397,8 @@ const replaceThreadRowsLocked = async (
         ...row,
         title: '',
         turnsJson: '[]',
+        rawJson: '',
+        sourceIdentityJson: '',
         lastModel: '',
         turnCount: 0,
         indexPending: 'delete',
@@ -600,6 +614,11 @@ const conversationFromRow = (row: Record<string, unknown>): ThreadConversationIn
       key: String(row.conversationKey),
       title: String(row.title),
       turns: validateTurns(JSON.parse(String(row.turnsJson))),
+      raw: row.rawJson ? JSON.parse(String(row.rawJson)) : undefined,
+      sourceIdentity: row.sourceIdentityJson
+        ? JSON.parse(String(row.sourceIdentityJson))
+        : undefined,
+      provider: String(row.provider || ''),
       createdInThreadShelf: Boolean(row.createdInThreadShelf),
       threadCreatedAt: String(row.threadCreatedAt || ''),
     };
@@ -1432,4 +1451,105 @@ const withCollectionWriteLock = async <T>(collection: string, fn: () => Promise<
       collectionWriteLocks.delete(collection);
     }
   }
+};
+
+// ThreadShelf Local Reader pagination extension v1. Upstream MIT attribution is
+// retained in ThreadShelf Local Suite server-patch/THIRD-PARTY-NOTICES.md. Existing APIs are unchanged.
+export interface ReaderSnapshotOptions extends SearchOptions {
+  readonly mode: 'keyword' | 'semantic';
+  readonly provider?: string;
+  readonly signal?: AbortSignal;
+  readonly onResult?: (row: SearchResult) => void;
+}
+
+/** All eligible indexed chunks, before a page is selected. No 50/200-row cutoff. */
+export const readerSearchCollectionSnapshot = async (
+  collection: string,
+  query: string,
+  opts: ReaderSnapshotOptions,
+  embedding?: number[],
+): Promise<SearchResult[]> => {
+  opts.signal?.throwIfAborted();
+  const tbl = await openTable(collection);
+  if (!tbl) return [];
+  await ensureChunkMetadataSchema(tbl);
+  const clauses = [
+    buildCreatedAtFilter(opts.from, opts.to),
+    await readyIndexFilter(collection),
+  ].filter(Boolean);
+  if (opts.roles?.length)
+    clauses.push(`role IN (${opts.roles.map((role) => `'${escapeSqlString(role)}'`).join(', ')})`);
+  if (opts.origin) clauses.push(`createdInThreadShelf = ${opts.origin === 'threadshelf'}`);
+  if (opts.provider) clauses.push(`provider = '${escapeSqlString(opts.provider)}'`);
+  const needle = query.trim().toLowerCase();
+  if (opts.mode === 'keyword')
+    clauses.push(`lower(document) LIKE '%${escapeLikePattern(needle)}%'`);
+  opts.signal?.throwIfAborted();
+  // Use the native backend's cosine implementation, but bypass any approximate
+  // vector index so a small ANN candidate window cannot hide later pages.
+  const count = await tbl.countRows();
+  if (!count) return [];
+  const base =
+    opts.mode === 'semantic'
+      ? tbl
+          .vectorSearch(embedding ?? (await embedOne(query)))
+          .distanceType('cosine')
+          .bypassVectorIndex()
+      : tbl.query();
+  const filtered = clauses.length ? base.where(clauses.join(' AND ')) : base;
+  const columns = [
+    'id',
+    'document',
+    'sourceFile',
+    'provider',
+    'conversationKey',
+    'title',
+    'role',
+    'turnIndex',
+    'model',
+    'createdAt',
+    'createdInThreadShelf',
+    'generationProvider',
+  ];
+  if (opts.mode === 'semantic') columns.push('_distance');
+  const scan = filtered.select(columns).limit(count);
+  const model = normalizeModelFilter(opts.model);
+  const rows: SearchResult[] = [];
+  for await (const batch of scan) {
+    opts.signal?.throwIfAborted();
+    const raw = batch.toArray();
+    for (let i = 0; i < raw.length; i++) {
+      // Allow socket-close/cancel events to run during a large materialization.
+      if (i % 256 === 0) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        opts.signal?.throwIfAborted();
+      }
+      const row = raw[i]!;
+      const document = String(row.document ?? '');
+      const rowModel = portableModelLabel(String(row.model ?? '')) || undefined;
+      if (!isSearchableDocument(document)) continue;
+      if (model && !normalizeModelFilter(rowModel).includes(model)) continue;
+      const result: SearchResult = {
+        id: String(row.id),
+        document,
+        metadata: {
+          collection,
+          sourceFile: String(row.sourceFile ?? ''),
+          provider: String(row.provider ?? '') || undefined,
+          conversationKey: String(row.conversationKey ?? '') || undefined,
+          title: String(row.title ?? '') || undefined,
+          role: String(row.role ?? ''),
+          turnIndex: String(row.turnIndex ?? ''),
+          model: rowModel,
+          createdAt: String(row.createdAt ?? '') || undefined,
+          createdInThreadShelf: Boolean(row.createdInThreadShelf),
+          generationProvider: String(row.generationProvider ?? '') || undefined,
+        },
+        ...(opts.mode === 'semantic' ? { distance: Number(row._distance) } : {}),
+      };
+      opts.onResult?.(result);
+      rows.push(result);
+    }
+  }
+  return rows;
 };

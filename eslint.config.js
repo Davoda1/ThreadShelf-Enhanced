@@ -4,9 +4,36 @@ import reactHooksPlugin from 'eslint-plugin-react-hooks';
 import eslintConfigPrettier from 'eslint-config-prettier';
 
 export default tseslint.config(
-  { ignores: ['dist/', 'public/', 'node_modules/', 'client/node_modules/', '*.js', '!eslint.config.js'] },
+  {
+    ignores: [
+      'src/enhanced-import/vendor/**',
+      'dist/',
+      'public/',
+      'node_modules/',
+      'client/node_modules/',
+      '*.js',
+      '!eslint.config.js',
+    ],
+  },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
+  {
+    files: ['client/src/enhanced-renderer/*.js'],
+    languageOptions: {
+      globals: Object.fromEntries(
+        [
+          'window',
+          'document',
+          'navigator',
+          'console',
+          'URL',
+          'AbortController',
+          'MutationObserver',
+          'NodeFilter',
+        ].map((name) => [name, 'readonly']),
+      ),
+    },
+  },
   {
     files: ['client/src/**/*.{ts,tsx}'],
     plugins: { 'react-hooks': reactHooksPlugin },

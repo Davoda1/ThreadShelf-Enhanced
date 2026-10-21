@@ -1,0 +1,57 @@
+@import './rich-layout.css';
+@import './rich-charts.css';
+
+/* Existing ThreadShelf tokens remain the only theme palette. */
+.enhanced-markdown {
+  --text-primary: var(--text-0); --text-secondary: var(--text-2);
+  --text-accent: var(--accent); --bg-primary: var(--bg-0);
+  --bg-secondary: var(--bg-1); --bg-tertiary: var(--bg-3);
+  --border-color: var(--border-1);
+  min-width: 0; max-width: 100%; overflow-wrap: anywhere;
+}
+.enhanced-markdown :is(h1,h2,h3,h4,h5,h6) { line-height: 1.35; margin: 1.2em 0 .5em; color: var(--text-0); }
+.enhanced-markdown h1 { font-size: 1.45em; } .enhanced-markdown h2 { font-size: 1.3em; }
+.enhanced-markdown h3 { font-size: 1.15em; } .enhanced-markdown :is(h4,h5,h6) { font-size: 1em; }
+.enhanced-markdown :is(pre,figure,table) { min-width: 0; max-width: 100%; }
+.enhanced-markdown figure { margin-inline: 0; }
+.enhanced-markdown pre { display: block; box-sizing: border-box; white-space: pre; overflow: auto; }
+.enhanced-markdown pre.has-code-controls { padding: 0; }
+.enhanced-markdown pre code { display: block; width: max-content; min-width: 100%; box-sizing: border-box; padding: 12px; background: transparent; white-space: pre; font-size: .93em; }
+.enhanced-markdown .code-block-titlebar { display: flex; gap: 8px; align-items: center; justify-content: space-between; box-sizing: border-box; position: sticky; left: 0; padding: 6px 10px; width: 100%; background: var(--bg-2); border-bottom: 1px solid var(--border-0); font: var(--fs-meta)/1.5 var(--font-mono); white-space: normal; }
+.enhanced-markdown .code-copy-button { flex: none; border: 1px solid var(--border-1); border-radius: var(--r-xs); background: var(--bg-1); color: var(--text-1); font: inherit; padding: 2px 7px; cursor: pointer; }
+.enhanced-markdown .code-copy-button:hover { background: var(--bg-hover); color: var(--text-0); }
+.enhanced-markdown .code-copy-button[hidden] { display: none; }
+.enhanced-markdown :is(button,[tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.enhanced-markdown .markdown-table-scroll { max-width: 100%; overflow: auto; margin-block: 1em; }
+.enhanced-markdown table { border-collapse: collapse; width: max-content; min-width: min(100%, 360px); }
+.enhanced-markdown :is(th,td) { border: 1px solid var(--border-1); padding: 7px 10px; vertical-align: top; text-align: start; }
+.enhanced-markdown th { background: var(--bg-2); }
+.enhanced-markdown :is(ul,ol) { padding-inline-start: 1.6em; }
+.enhanced-markdown li > p { margin-block: .35em; }
+.enhanced-markdown input[type=checkbox] { margin-inline: 0 .45em; }
+.enhanced-markdown .mermaid-block { border: 1px solid var(--border-1); border-radius: var(--r-md); overflow: hidden; margin-block: 1em; }
+.enhanced-markdown .mermaid-titlebar-right { display: flex; gap: 6px; flex-wrap: wrap; }
+.enhanced-markdown .mermaid-diagram { overflow: auto; max-width: 100%; padding: 12px; }
+.enhanced-markdown .mermaid-diagram svg { display: block; max-width: 100%; height: auto; margin-inline: auto; }
+.enhanced-markdown .mermaid-error-message { color: var(--warning); font-size: .9em; }
+.enhanced-markdown .mermaid-error-source { max-height: 28rem; }
+.enhanced-markdown .chatgpt-math-display { display: block; overflow-x: auto; max-width: 100%; margin-block: .75em; }
+.enhanced-markdown .chatgpt-math-inline { display: inline-block; max-width: 100%; vertical-align: middle; overflow-x: auto; }
+.enhanced-markdown .chatgpt-math-source { white-space: pre-wrap; font-family: var(--font-mono); }
+.enhanced-markdown .hljs-comment,.enhanced-markdown .hljs-quote { color: var(--text-2); font-style: italic; }
+.enhanced-markdown :is(.hljs-keyword,.hljs-selector-tag,.hljs-built_in,.hljs-literal) { color: var(--role-reasoning); }
+.enhanced-markdown :is(.hljs-string,.hljs-addition,.hljs-regexp) { color: var(--role-response); }
+.enhanced-markdown :is(.hljs-number,.hljs-attr,.hljs-symbol,.hljs-type) { color: var(--accent); }
+.enhanced-markdown :is(.hljs-name,.hljs-deletion,.hljs-title,.hljs-section) { color: var(--danger); }
+.enhanced-markdown .archived-image { display: inline-flex; max-width: 100%; min-width: 0; box-sizing: border-box; vertical-align: middle; }
+.enhanced-markdown .archived-image-loadable { min-height: 110px; border: 1px dashed var(--accent-border); border-radius: var(--r-md); background: var(--accent-soft); overflow: hidden; }
+.enhanced-markdown .archived-image-load { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; width: 100%; padding: 12px; border: 0; background: transparent; color: var(--text-1); font: inherit; cursor: pointer; white-space: normal; overflow-wrap: anywhere; }
+.enhanced-markdown .archived-image-load svg { width: 30px; height: 30px; stroke: var(--accent); fill: none; stroke-width: 2; }
+.enhanced-markdown .archived-image-label { font-size: var(--fs-meta); max-width: 100%; color: var(--text-2); }
+.enhanced-markdown .archived-image-loaded { background: transparent; border: 0; }
+.enhanced-markdown .archived-image-attachments { display: flex; flex-wrap: wrap; gap: 12px; margin-block: 1em; max-width: 100%; }
+.enhanced-markdown .archived-image img { display: block; max-width: 100%; width: auto; height: auto; object-fit: contain; }
+.enhanced-markdown .rich-original-source { white-space: pre-wrap; overflow-wrap: anywhere; }
+.enhanced-markdown .rich-size-2xs,.enhanced-markdown .rich-size-xs { font-size: max(var(--fs-meta), .8em); }
+.enhanced-markdown .rich-chart table { min-width: auto; }
+@media(max-width:480px) { .enhanced-markdown .rich-grid { grid-template-columns: minmax(0,1fr); } }
