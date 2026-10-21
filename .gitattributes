@@ -16,3 +16,6 @@
 
 # Preserve original third-party license bytes and recorded verification hashes.
 client/src/enhanced-renderer/licenses/** -text
+
+# Generated bundle includes intentional whitespace in upstream template literals.
+client/public/renderer/mermaid.min.js whitespace=-blank-at-eol

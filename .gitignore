@@ -59,6 +59,9 @@ data/
 *.json
 !package.json
 !package-lock.json
+!client/src/enhanced-renderer/licenses/dependencies.json
+!scripts/renderer-build/package.json
+!scripts/renderer-build/package-lock.json
 !tsconfig.json
 !tsconfig.build.json
 !vite.config.ts

@@ -1,40 +1,20 @@
-# Nested Mermaid bundle provenance
+# Nested bundle provenance
 
-The offline `client/public/renderer/mermaid.min.js` asset is the unchanged
-`dist/mermaid.min.js` published in the official **mermaid 11.17.2** npm package.
-Its official source map identifies several already-bundled inputs. The
-dependency notices supplied in this directory also cover the components below;
-the top-level Mermaid license alone does not replace their licenses.
-
-Source package: <https://registry.npmjs.org/mermaid/-/mermaid-11.17.2.tgz>.
-The source map used for this inventory is `package/dist/mermaid.min.js.map`
-inside that tarball. No dependency was installed or executed for this inventory.
+ThreadShelf Enhanced 1.1.0 ships a reproducible rebuild of **Mermaid 11.17.2**.
+See [the build recipe and checksums](BUNDLED-ASSET-PROVENANCE.md). Its generated
+metafile identifies nonzero package contributions to the output; additional
+components already bundled inside upstream inputs are documented below.
 
 ## Mermaid parser
 
-All **32** `../../parser/dist/` inputs embedded in the Mermaid source map
-match the corresponding files in **@mermaid-js/parser 1.2.1** byte for byte.
-The exact source is
-<https://registry.npmjs.org/@mermaid-js/parser/-/parser-1.2.1.tgz>.
-The parser's own source maps identify these nested packages and versions:
-
-| Package | Version |
-| --- | --- |
-| @chevrotain/gast | 11.1.2 |
-| @chevrotain/regexp-to-ast | 11.1.2 |
-| @chevrotain/utils | 11.1.2 |
-| chevrotain | 11.1.2 |
-| chevrotain-allstar | 0.3.1 |
-| langium | 4.2.1 |
-| lodash-es | 4.17.23 and 4.18.1 |
-| vscode-jsonrpc | 8.2.0 |
-| vscode-languageserver-protocol | 3.17.5 |
-| vscode-languageserver-textdocument | 1.0.12 |
-| vscode-languageserver-types | 3.17.5 |
-
-These versions come from package paths in the published source maps, including
-both Lodash versions. Development dependencies that are absent from the bundle
-are not included merely because they occur in package metadata.
+The parser is rebuilt from **@mermaid-js/parser 1.2.1** original source-map
+contents, including generated Langium grammars. It is not copied as a prebuilt
+chunk. The original generated grammar logic is preserved while the build resolves
+Lodash imports to **lodash-es 4.18.1**. The old nested 4.17.23 copy is absent.
+The standalone build lock supplies the exact dependency resolution; only packages
+with retained output are listed in `dependencies.json`. Some files within
+Langium and Chevrotain are eliminated by tree shaking, which does not remove the
+license obligations for their retained code.
 
 ## Rough.js
 
@@ -78,10 +58,19 @@ Source package:
 
 ## KaTeX
 
-The embedded `katex/dist/katex.mjs` is byte-identical to the official
-**katex 0.16.47** file. Its SHA-256 is
-`09a78a9812d1e7d3ace85033512e6a450127b9554ef281b4b6567408694c6e36`.
-The retained KaTeX license applies to this code. Its CLI dependency Commander
-is not imported by the browser module and is not identified as bundled here.
+The new build imports `katex/dist/katex.mjs` from official **katex 0.18.10**,
+replacing 0.16.47. Its module SHA-256 is
+`694a531495903e374957e9a9c904a402e2f413762635df486c4cf6163320d1aa`.
+The complete KaTeX license is retained. Its CLI dependency Commander is not
+imported by the browser module and is not identified as bundled here.
 
-Source package: <https://registry.npmjs.org/katex/-/katex-0.16.47.tgz>.
+Source package: <https://registry.npmjs.org/katex/-/katex-0.18.10.tgz>.
+
+## MathJax
+
+The unchanged MathJax 3.2.1 `tex-svg.js` bundle includes speech-rule-engine 4.0.6
+and mj-context-menu 0.6.1. Exact upstream release-lock evidence, source notices
+and full license terms are recorded in
+[BUNDLED-ASSET-PROVENANCE.md](BUNDLED-ASSET-PROVENANCE.md).
+`mhchemparser` is an optional autoload; `xmldom-sre`, `wicked-good-xpath` and
+Commander belong to external Node fallbacks, not the embedded browser runtime.

@@ -73,4 +73,29 @@ that do not expose a vulnerability can be reported in ordinary issues.
 
 The application uses Express, Multer, LanceDB, Transformers.js and bundled browser
 rendering libraries. Review dependency changes and retained licenses before a
-release. Exact dependency versions are recorded in `package-lock.json`.
+release. Exact application dependency versions are recorded in `package-lock.json`.
+The separately shipped offline renderer has a versioned component inventory and
+asset hashes in
+[`client/src/enhanced-renderer/licenses/dependencies.json`](client/src/enhanced-renderer/licenses/dependencies.json),
+with full notices and source provenance beside it. This inventory includes nested
+bundle components that ordinary `npm audit` cannot discover from the lockfile.
+
+The maintainer renderer build has a separate lockfile in
+`scripts/renderer-build/package-lock.json`; it is audited as well.
+
+Run `npm run check:security` for the required dependency checks. It queries the
+public package advisory service using package names and versions, verifies the
+recorded browser asset hashes, and fails on advisory findings or unavailable or
+invalid audit data. No conversations, credentials or user configuration are
+submitted by this check. A clean audit is a point-in-time dependency result, not
+a guarantee that every possible vulnerability has been discovered.
+
+The full `npm run check` gate includes dependency security checks. Release CI
+also requires Linux and Windows validation before uploading the source archives.
+Scheduled audits and Dependabot updates help identify later advisories; releases
+are not automatically merged or republished when a new dependency appears.
+
+Enhanced 1.1.0 is a separate security maintenance release. The original 1.0.0
+release is retained for historical reproducibility; use the current validated
+release for deployment. See [CHANGELOG.md](CHANGELOG.md) and the
+[validation record](docs/ENHANCED_VALIDATION.md).

@@ -1,6 +1,6 @@
 # Compatibility contract
 
-ThreadShelf Enhanced 1.0.0 preserves the upstream server contracts and integrates
+ThreadShelf Enhanced 1.1.0 preserves the upstream server contracts and integrates
 Reader pagination. The public client reference is [ThreadShelf Local Suite
 v1.0.0](https://github.com/Davoda1/ThreadShelf-Local-Suite/tree/v1.0.0), commit
 `e17d5874342ce0069acba2ed387d46eefbf61f24`.
@@ -18,6 +18,10 @@ Those hashes identify only the named adapter files; they do not imply that other
 application code is identical. Compatibility checks do not launch Electron or
 validate desktop installers. See [validation](ENHANCED_VALIDATION.md) for the
 current public-source gate.
+
+The 1.1.0 security update preserves the database format, embedding model and
+existing vector dimension. It does not require reimporting archives or changing
+client data stores. The original Enhanced 1.0.0 release remains available.
 
 ## Stable identity
 
