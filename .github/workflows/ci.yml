@@ -31,6 +31,7 @@ jobs:
           persist-credentials: false
 
       - name: Run portable Linux setup
+        timeout-minutes: 10
         run: |
           bash setup-threadshelf.sh
           case "$(uname -m)" in
@@ -46,8 +47,10 @@ jobs:
           echo "npm_config_cache=$GITHUB_WORKSPACE/.local/npm-cache" >> "$GITHUB_ENV"
           echo "XDG_CACHE_HOME=$GITHUB_WORKSPACE/.local/cache" >> "$GITHUB_ENV"
           echo "HF_HOME=$GITHUB_WORKSPACE/.local/huggingface" >> "$GITHUB_ENV"
+          echo "THREADSHELF_TEST_LOG_DIR=$RUNNER_TEMP/threadshelf-test-logs" >> "$GITHUB_ENV"
 
       - name: Check the installed runtime
+        timeout-minutes: 1
         run: |
           test "$(node --version)" = "v$THREADSHELF_NODE_VERSION"
           test "$(npm --version)" = "$THREADSHELF_NPM_VERSION"
@@ -60,13 +63,70 @@ jobs:
           key: ${{ runner.os }}-embeddings-paraphrase-multilingual-minilm-l12-v2
 
       - name: Install Playwright Chromium
+        timeout-minutes: 5
         run: npx playwright install --with-deps chromium
 
-      - name: Run full check
-        run: npm run check
+      # These named steps preserve every gate in npm run check and expose failures.
+      - name: Repository hygiene
+        timeout-minutes: 2
+        run: npm run check:repo
+
+      - name: Lint
+        timeout-minutes: 3
+        run: npm run lint
+
+      - name: Server TypeScript
+        timeout-minutes: 3
+        run: npx tsc --noEmit
+
+      - name: Prepare and verify real embeddings
+        timeout-minutes: 5
+        run: |
+          node --import tsx --input-type=module <<'JS'
+          import { embedOne } from './src/embedding.ts';
+          console.log('Preparing the real embedding model; download progress follows.');
+          const started = Date.now();
+          const vector = await embedOne('synthetic CI readiness probe');
+          if (vector.length !== 384 || !vector.every(Number.isFinite)) {
+            throw new Error('Embedding readiness check requires 384 finite values.');
+          }
+          console.log(`Real embedding readiness passed in ${Date.now() - started} ms (384 finite values).`);
+          JS
+
+      - name: Unit and regression tests
+        timeout-minutes: 5
+        run: npm test
+
+      - name: HTTP API and MCP integration tests
+        timeout-minutes: 8
+        run: npm run test:e2e
+
+      - name: Client TypeScript and production build
+        timeout-minutes: 5
+        run: npm run build:client
+
+      - name: Chromium browser regressions
+        timeout-minutes: 12
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: ${{ github.workspace }}/test-results/playwright-report.json
+        run: npm run test:playwright -- --reporter=github,json
 
       - name: Build compiled server
+        timeout-minutes: 3
         run: npm run build:server
+
+      - name: Upload Linux failure diagnostics
+        if: ${{ failure() || cancelled() }}
+        timeout-minutes: 3
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-test-diagnostics-${{ github.run_attempt }}
+          path: |
+            test-results/
+            ${{ runner.temp }}/threadshelf-test-logs/
+          if-no-files-found: ignore
+          include-hidden-files: false
+          retention-days: 7
 
   windows-core:
     name: Portable setup and core checks (Windows)
@@ -82,6 +142,7 @@ jobs:
           persist-credentials: false
 
       - name: Run portable Windows setup
+        timeout-minutes: 10
         run: |
           ./setup-threadshelf.ps1
           $Architecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
@@ -92,22 +153,34 @@ jobs:
           "THREADSHELF_CI_RUNTIME=$Runtime" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "npm_config_prefix=$Runtime" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "npm_config_cache=$(Join-Path $PWD '.local/npm-cache')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "THREADSHELF_TEST_LOG_DIR=$(Join-Path $env:RUNNER_TEMP 'threadshelf-test-logs')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Repository hygiene, lint and typecheck
+      - name: Repository hygiene
+        timeout-minutes: 2
         run: |
           & "$env:THREADSHELF_CI_RUNTIME/npm.cmd" run check:repo
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Lint
+        timeout-minutes: 3
+        run: |
           & "$env:THREADSHELF_CI_RUNTIME/npm.cmd" run lint
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Server TypeScript
+        timeout-minutes: 3
+        run: |
           & "$env:THREADSHELF_CI_RUNTIME/node.exe" node_modules/typescript/bin/tsc --noEmit
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Unit and regression tests
+        timeout-minutes: 5
         run: |
           & "$env:THREADSHELF_CI_RUNTIME/npm.cmd" test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Smoke-test the compiled server
+        timeout-minutes: 3
         run: |
           $SmokeDir = Join-Path $env:RUNNER_TEMP ("threadshelf-smoke-" + [Guid]::NewGuid().ToString('N'))
           New-Item -ItemType Directory -Path $SmokeDir | Out-Null
@@ -136,9 +209,98 @@ jobs:
             $Capabilities = Invoke-WebRequest -Uri "http://127.0.0.1:$SmokePort/api/reader/capabilities" -TimeoutSec 5
             if ($Capabilities.StatusCode -ne 200) { throw 'Reader capabilities were unavailable.' }
           } catch {
-            Get-Content "$SmokeDir/stdout.log", "$SmokeDir/stderr.log" -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Force -Path $env:THREADSHELF_TEST_LOG_DIR | Out-Null
+            foreach ($Name in @('stdout.log', 'stderr.log')) {
+              $LogPath = Join-Path $SmokeDir $Name
+              if (Test-Path $LogPath) {
+                $Stream = [System.IO.File]::OpenRead($LogPath)
+                try {
+                  $Size = [int][Math]::Min(131072, $Stream.Length)
+                  $null = $Stream.Seek(-$Size, [System.IO.SeekOrigin]::End)
+                  $Bytes = New-Object byte[] $Size
+                  $Read = $Stream.Read($Bytes, 0, $Size)
+                  $Tail = [System.Text.Encoding]::UTF8.GetString($Bytes, 0, $Read)
+                  $Tail | Set-Content -LiteralPath (Join-Path $env:THREADSHELF_TEST_LOG_DIR "windows-smoke-$Name")
+                  Write-Host $Tail
+                } finally { $Stream.Dispose() }
+              }
+            }
             throw
           } finally {
             if ($Server -and -not $Server.HasExited) { Stop-Process -Id $Server.Id -Force; $Server.WaitForExit() }
             Remove-Item -LiteralPath $SmokeDir -Recurse -Force -ErrorAction SilentlyContinue
           }
+
+      - name: Upload Windows failure diagnostics
+        if: ${{ failure() || cancelled() }}
+        timeout-minutes: 3
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-test-diagnostics-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/threadshelf-test-logs/
+          if-no-files-found: ignore
+          include-hidden-files: false
+          retention-days: 7
+
+  source-packages:
+    name: Source packaging (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Source packaging regressions
+        timeout-minutes: 5
+        run: python test/source-release.test.py
+
+      - name: Build committed source archives
+        timeout-minutes: 2
+        run: python scripts/release-source.py --output "$RUNNER_TEMP/threadshelf-source"
+
+      - name: Audit committed source archives
+        timeout-minutes: 2
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import tarfile
+          import zipfile
+          from pathlib import Path
+          version = json.loads(Path('package.json').read_text())['version']
+          prefix = 'ThreadShelf-Enhanced-' + version + '-Source'
+          directory = Path(os.environ['RUNNER_TEMP']) / 'threadshelf-source'
+          expected = {prefix + '.zip', prefix + '.tar.gz'}
+          assets = sorted(directory.iterdir())
+          if {path.name for path in assets} != expected:
+              raise SystemExit('Expected exactly the source ZIP and TAR.GZ.')
+          with zipfile.ZipFile(directory / (prefix + '.zip')) as archive:
+              zip_names = set(archive.namelist())
+          with tarfile.open(directory / (prefix + '.tar.gz')) as archive:
+              tar_names = set(archive.getnames())
+          if zip_names != tar_names:
+              raise SystemExit('Source archive file lists differ.')
+          required = ['README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', '.env.example',
+                      'setup-threadshelf.sh', 'setup-threadshelf.ps1', 'threadshelf-enhanced']
+          if not all(prefix + '/' + name in zip_names for name in required):
+              raise SystemExit('Required source files or notices are missing.')
+          excluded = {'.env', '.git', '.local', 'node_modules', '.lancedb', '.uploads', '.threadshelf'}
+          for name in zip_names:
+              parts = name.split('/')[1:]
+              if any(part in excluded for part in parts):
+                  raise SystemExit('An excluded local-data path appears in a source archive.')
+          for asset in assets:
+              with asset.open('rb') as source:
+                  digest = hashlib.file_digest(source, 'sha256').hexdigest()
+              print(asset.name, 'files=', len(zip_names), 'sha256=', digest)
+          PY

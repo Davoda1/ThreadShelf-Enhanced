@@ -80,7 +80,11 @@ const startOpenRouterStub = async () => {
     llamaBaseUrl: `http://127.0.0.1:${port}`,
     baseUrl: `http://127.0.0.1:${port}/api/v1`,
     requests,
-    close: () => new Promise((resolve) => server.close(resolve)),
+    close: () =>
+      new Promise((resolve) => {
+        server.close(resolve);
+        server.closeAllConnections();
+      }),
   };
 };
 
@@ -88,8 +92,11 @@ describe('generation API E2E', () => {
   it(
     'configures a session-only key, discovers current models, and continues a stored thread privately',
     { timeout: 180_000 },
-    async () => {
+    async (t) => {
       const openRouter = await startOpenRouterStub();
+      // Register cleanup before API startup: a failed health check must not
+      // leave this listening socket alive and prevent the test runner exiting.
+      t.after(openRouter.close);
       const ctx = await startApiServer({
         prefix: 'threadshelf-generation-',
         env: { OPENROUTER_BASE_URL: openRouter.baseUrl },
@@ -571,7 +578,6 @@ describe('generation API E2E', () => {
         assert.strictEqual(response.status, 400);
       } finally {
         await ctx.stop();
-        await openRouter.close();
       }
     },
   );

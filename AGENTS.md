@@ -238,7 +238,7 @@ Three layers, all runnable offline:
 1. **Unit / logic** — `test/*.test.js` (node:test via tsx). Fast, deterministic,
    no server. Parser, chunking, validation, etc. Run with `npm test`.
 2. **API + MCP E2E** — `test/e2e/*.test.js`. `startApiServer` (in
-   `test/e2e/helpers.js`) spawns a real `src/server.ts` on a random port with an
+   `test/e2e/helpers.js`) spawns a real `src/server.ts` on an OS-assigned ephemeral port with an
    **isolated temp LanceDB + uploads dir**, then drives it over HTTP
    (`ingestViaNdjson`, `/api/search`, …). The MCP test spawns the stdio server.
    Run with `npm run test:e2e`.
@@ -331,6 +331,12 @@ build output. Keep archive contents reproducible and verify their checksums.
 Tags use `v<package.json version>`; `.github/workflows/publish.yml` runs reusable
 Linux and Windows CI before creating a release with exactly the two source assets.
 Only its release job has repository write permission.
+
+Run `python3 test/source-release.test.py` for packaging regressions (`python` on
+Windows). CI runs these on both platforms as well as auditing the actual
+committed archives. Keep test-server waits and cleanup bounded; allocate fixture
+ports through `getAvailablePort()` instead of hardcoded random ranges. Failure
+diagnostics must contain only isolated test output, never configuration or stores.
 
 ## Known gaps (as of this writing)
 

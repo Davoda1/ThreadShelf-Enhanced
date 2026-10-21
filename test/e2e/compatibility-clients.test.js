@@ -56,14 +56,14 @@ const conversation = (index) => ({
   },
 });
 
-describe('Released private and public Local client compatibility', () => {
+describe('Released Local client HTTP adapter compatibility', () => {
   let ctx;
   let reader;
   let other;
 
   before(
     async () => {
-      ctx = await startApiServer({ prefix: 'threadshelf-clients-', portBase: 7300 });
+      ctx = await startApiServer({ prefix: 'threadshelf-clients-' });
       reader = new ThreadShelfClient(ctx.baseUrl);
       other = new ServerClient(ctx.baseUrl);
       const folder = join(ctx.tempRoot, 'synthetic-exports');

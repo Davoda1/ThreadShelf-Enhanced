@@ -15,13 +15,13 @@ before publishing the two archives.
 | --- | --- | --- |
 | Repository hygiene | `npm run check:repo` | Passed; public files and inherited history also audited |
 | Lint and server TypeScript | `npm run lint`; `npx tsc --noEmit` | Passed |
-| Unit and regression tests | `npm test` | 577 passed; 1 Windows-only test skipped on Linux |
+| Unit and regression tests | `npm test` | 586 passed; 1 Windows-only test skipped on Linux |
 | HTTP API and MCP integration | `npm run test:e2e` | 27 passed |
 | Client TypeScript and production build | `npm run build:client` | Passed |
 | Chromium browser regressions | `npm run test:playwright` | 86 passed |
 | Compiled server | `npm run build:server` | Passed |
 | Setup and launcher | Runtime-only setup, runtime check, health/UI/Reader API smoke | Passed on Linux x64 |
-| Source archives | Committed-tree-only ZIP/TAR.GZ packaging | Exclusion and reproducibility checks passed; final assets carry SHA-256 checksums |
+| Source archives | `python3 test/source-release.test.py`; committed-tree-only ZIP/TAR.GZ packaging | 12 packaging regressions passed; final assets carry SHA-256 checksums |
 
 `npm run check` runs repository hygiene, lint, server TypeScript, unit tests,
 HTTP/MCP integration, the client build and browser regressions in that order.
@@ -41,12 +41,22 @@ from user data.
   unsafe integer preservation, media bounds, traversal rejection, unencrypted
   Venice backup grouping, legacy identities and recovery behavior.
 - Portable setup and source-distribution checks that can run from public files.
+- Test infrastructure regressions for stalled HTTP headers/bodies, health-check
+  deadlines, child shutdown escalation, inherited pipes and Fetch-compatible
+  ephemeral ports. Generation mock cleanup is registered before server startup;
+  a fault-injected startup failure reports its error and exits without hanging.
 
 The public checks do not require separately supplied application source trees.
 Launcher checks also verified actual terminal Ctrl+C handling: cleanup completes,
 the exact `CTRL-C` block prints, and subsequent `;` and `&&` commands run.
 Unexpected exits still fail. Source packaging excludes untracked and dirty
 working-tree content and rejects private paths, nested dependencies and symlinks.
+
+CI exposes separate Linux gates and native Windows setup/core checks, with source
+packaging regressions on both platforms. Stages have explicit deadlines. Failure
+artifacts contain bounded isolated-server logs and browser diagnostics, retained
+for seven days. User configuration and stores are excluded. Source releases run
+these required jobs again on the version tag before publishing either archive.
 
 ## Platform and format scope
 

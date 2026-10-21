@@ -8,7 +8,7 @@ test(
   'ZIP and Processor HTML retain raw data, citations and images after source removal',
   { timeout: 180000 },
   async (t) => {
-    const ctx = await startApiServer({ prefix: 'enhanced-import-api-', portBase: 8500 });
+    const ctx = await startApiServer({ prefix: 'enhanced-import-api-' });
     t.after(() => ctx.stop());
     const folder = join(ctx.tempRoot, 'source');
     await mkdir(folder);

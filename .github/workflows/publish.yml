@@ -3,6 +3,8 @@ name: Source release
 'on':
   push:
     tags: ['v*']
+  # For manual runs, select the existing version tag as the workflow ref.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -43,6 +45,8 @@ jobs:
           version = package['version']
           if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?', version):
               raise SystemExit('Unsupported release version.')
+          if os.environ['GITHUB_REF_TYPE'] != 'tag':
+              raise SystemExit('Run source releases from an existing version tag, not a branch.')
           if os.environ['GITHUB_REF_NAME'] != 'v' + version:
               raise SystemExit('Release tag does not match package.json version.')
           if package.get('private') is not True:

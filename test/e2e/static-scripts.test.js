@@ -6,7 +6,7 @@ import { startApiServer } from './helpers.js';
 // server's /scripts static route. Confirm they are served.
 describe('static scripts route', () => {
   it('serves the OpenRouter export scripts', { timeout: 120_000 }, async () => {
-    const ctx = await startApiServer({ prefix: 'threadshelf-scripts-', portBase: 4700 });
+    const ctx = await startApiServer({ prefix: 'threadshelf-scripts-' });
     try {
       for (const file of ['openrouter-export-all.js', 'openrouter-export-browser.js']) {
         const res = await fetch(`${ctx.baseUrl}/scripts/${file}`);

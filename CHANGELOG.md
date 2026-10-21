@@ -17,6 +17,8 @@ Initial source release of the Enhanced fork, based on ThreadShelf v1.3.0
 - A general Linux launcher for the compiled server, runtime checks and folder
   indexing, with configurable installation location and controlled Ctrl+C shutdown
   that permits subsequent shell commands.
+- Granular Linux/Windows CI, bounded test-server cleanup and failure diagnostics,
+  and cross-platform source archive exclusion and reproducibility regressions.
 
 ### Changed
 

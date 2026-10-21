@@ -17,7 +17,6 @@ describe('files listing resilience', () => {
       for (const hasBlankColumn of [false, true]) {
         const ctx = await startApiServer({
           prefix: `threadshelf-thread-migration-${hasBlankColumn ? 'blank' : 'missing'}-`,
-          portBase: hasBlankColumn ? 3700 : 3800,
         });
         try {
           const database = await connect(join(ctx.tempRoot, '.lancedb'));
@@ -77,7 +76,7 @@ describe('files listing resilience', () => {
     'still lists and opens conversations when a source file is removed after indexing',
     { timeout: 180_000 },
     async () => {
-      const ctx = await startApiServer({ prefix: 'threadshelf-files-', portBase: 3600 });
+      const ctx = await startApiServer({ prefix: 'threadshelf-files-' });
       const folder = join(ctx.tempRoot, 'exports');
       const fixtures = join(repoRoot, 'test', 'fixtures');
       await mkdir(folder, { recursive: true });

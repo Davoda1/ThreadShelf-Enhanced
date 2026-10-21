@@ -1,9 +1,10 @@
 import { spawn } from 'child_process';
-import { mkdtemp, rm } from 'fs/promises';
-import { join } from 'path';
+import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
+import { basename, join } from 'path';
 import { tmpdir } from 'os';
 import {
   createMixedFixtureFolder,
+  getAvailablePort,
   ingestViaNdjson,
   repoRoot,
   stopChildProcess,
@@ -12,13 +13,11 @@ import {
 
 export { createMixedFixtureFolder, ingestViaNdjson, repoRoot, stopChildProcess, waitForHealth };
 
-export const startApiServer = async ({
-  prefix = 'threadshelf-e2e-',
-  portBase = 3500,
-  env = {},
-} = {}) => {
+export const startApiServer = async ({ prefix = 'threadshelf-e2e-', env = {} } = {}) => {
+  // Low random ranges included Fetch-blocked ports such as 4045, and could
+  // collide with a parallel fixture. Ask the OS for an available ephemeral port.
+  const port = String(await getAvailablePort());
   const tempRoot = await mkdtemp(join(tmpdir(), prefix));
-  const port = String(portBase + Math.floor(Math.random() * 1000));
   const baseUrl = `http://127.0.0.1:${port}`;
   const output = [];
   const server = spawn(process.execPath, ['--import', 'tsx', 'src/server.ts'], {
@@ -47,14 +46,37 @@ export const startApiServer = async ({
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
-  server.stdout.on('data', (chunk) => output.push(String(chunk)));
-  server.stderr.on('data', (chunk) => output.push(String(chunk)));
+  let outputCharacters = 0;
+  const capture = (chunk) => {
+    const text = String(chunk).slice(-65536);
+    output.push(text);
+    outputCharacters += text.length;
+    while (outputCharacters > 65536 && output.length > 1) {
+      outputCharacters -= output.shift().length;
+    }
+  };
+  const saveDiagnosticLog = async () => {
+    const directory = process.env.THREADSHELF_TEST_LOG_DIR;
+    if (!directory) return;
+    try {
+      await mkdir(directory, { recursive: true });
+      await writeFile(join(directory, `${basename(tempRoot)}.log`), output.join(''), 'utf8');
+    } catch (error) {
+      console.error(`Could not save isolated test-server diagnostics: ${error.message}`);
+    }
+  };
+  server.stdout.on('data', capture);
+  server.stderr.on('data', capture);
 
   try {
     await waitForHealth(baseUrl);
   } catch (error) {
-    await stopChildProcess(server);
-    await rm(tempRoot, { recursive: true, force: true });
+    try {
+      await stopChildProcess(server);
+    } finally {
+      await saveDiagnosticLog();
+      await rm(tempRoot, { recursive: true, force: true });
+    }
     const detail = output.join('');
     throw new Error(
       `${error instanceof Error ? error.message : String(error)}${detail ? `\nServer output:\n${detail}` : ''}`,
@@ -62,8 +84,12 @@ export const startApiServer = async ({
   }
 
   const stop = async () => {
-    await stopChildProcess(server);
-    await rm(tempRoot, { recursive: true, force: true });
+    try {
+      await stopChildProcess(server);
+    } finally {
+      await saveDiagnosticLog();
+      await rm(tempRoot, { recursive: true, force: true });
+    }
   };
 
   return { baseUrl, output, server, stop, tempRoot };

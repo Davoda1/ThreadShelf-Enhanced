@@ -37,11 +37,17 @@ behavior changes:
 | `npm run test:playwright` | UI and browser workflows; requires the built UI and Chromium |
 | `npm run build:server` | Compiled server and MCP output |
 | `npm run check` | Repository hygiene, lint, TypeScript, unit, integration, UI build and browser checks |
+| `python3 test/source-release.test.py` | Source archive contents, permissions, exclusions and reproducibility (use `python` on Windows) |
 
 Install the browser once with `npx playwright install chromium`. Integration
 tests use temporary stores; never redirect them to a live archive. Report which
 commands ran and any skips or platform limitations. The first embedding run may
 need a model download.
+
+GitHub CI runs the full Linux gate, native Windows setup/core checks, and source
+packaging tests on both platforms. Each stage has a timeout. Failed runs retain
+bounded logs from isolated test servers and browser results for seven days;
+configuration, user stores and dependency caches are not diagnostic artifacts.
 
 ## Fixtures and privacy
 

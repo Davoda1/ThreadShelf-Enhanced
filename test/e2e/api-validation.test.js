@@ -48,7 +48,6 @@ describe('API validation E2E', () => {
     async () => {
       const ctx = await startApiServer({
         prefix: 'threadshelf-validation-',
-        portBase: 4500,
         env: { ALLOWED_HOSTS: 'allowed.test' },
       });
 
