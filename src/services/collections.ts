@@ -1,6 +1,7 @@
 import { mkdir, open, readFile, realpath, rename, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { dataPath, uploadsPath } from '../paths.js';
 import { withInterprocessLock } from '../interprocess-lock.js';
 import { listCollections, dropCollection } from '../store.js';
@@ -11,6 +12,30 @@ const COLLECTIONS_FILE = resolve(process.env.COLLECTIONS_PATH || dataPath('colle
 
 const validCollections = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((name) => typeof name === 'string');
+
+const publishRegistry = async (temporary: string, destination: string): Promise<void> => {
+  const deadline = performance.now() + 5_000;
+  let retryDelay = 10;
+  for (;;) {
+    try {
+      await rename(temporary, destination);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      const remaining = deadline - performance.now();
+      if (
+        process.platform !== 'win32' ||
+        !['EPERM', 'EACCES', 'EBUSY'].includes(code || '') ||
+        remaining <= 0
+      )
+        throw error;
+      // Windows readers or scanners can briefly deny replacement. Keep the old
+      // file readable and retry the same atomic rename while holding the lock.
+      await delay(Math.min(retryDelay, remaining));
+      retryDelay = Math.min(retryDelay * 2, 100);
+    }
+  }
+};
 
 export const readManualCollections = async (): Promise<string[]> => {
   let raw: string;
@@ -54,7 +79,7 @@ const writeManualCollectionsLocked = async (collections: string[]): Promise<void
     } finally {
       await handle.close();
     }
-    await rename(temporary, destination);
+    await publishRegistry(temporary, destination);
     // Windows does not expose directory fsync through Node's filesystem API.
     if (process.platform !== 'win32') {
       const directory = await open(dirname(destination), 'r');

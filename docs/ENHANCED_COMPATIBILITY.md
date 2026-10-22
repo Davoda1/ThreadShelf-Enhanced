@@ -44,7 +44,9 @@ Lock acquisition waits asynchronously and fails explicitly after 30 seconds of
 contention; it never continues without ownership. A failed acquisition can be
 retried after the other write completes. Malformed or unreadable collection JSON
 is now reported as an error and preserved for recovery rather than treated as an
-empty registry.
+empty registry. On Windows, transient file-sharing or access failures during
+atomic registry replacement are retried for up to five seconds. A persistent
+failure is returned to the caller without deleting the previous registry.
 
 ## Stable identity
 

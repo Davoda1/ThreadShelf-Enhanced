@@ -241,6 +241,63 @@ describe('collection registry concurrency and preservation', () => {
   });
 });
 
+describe('collection registry atomic replacement failures', () => {
+  const runFault = async (t, fault) => {
+    const root = await temporaryRoot(t);
+    const registry = join(root, 'data', 'collections.json');
+    await mkdir(dirname(registry), { recursive: true });
+    await writeFile(registry, JSON.stringify({ collections: ['preserved'] }));
+    const worker = await startWorker(t, root, { mode: 'registry-rename', operations: fault });
+    const result = await worker.run();
+    assert.equal(result.temporaryFiles.length, 0, 'publication must clean its temporary file');
+    for (const snapshot of result.snapshots) {
+      assert.deepEqual(snapshot.destination, { collections: ['preserved'] });
+      assert.deepEqual(snapshot.temporary, { collections: ['new_entry', 'preserved'] });
+    }
+    return result;
+  };
+
+  for (const code of ['EPERM', 'EACCES', 'EBUSY']) {
+    it(`retries transient Windows ${code} without removing the previous registry`, async (t) => {
+      const result = await runFault(t, { platform: 'win32', code, failures: 3 });
+      assert.deepEqual(result.outcome, { status: 'fulfilled' });
+      assert.ok(result.attempts >= 4, 'all three injected failures must be retried');
+      assert.deepEqual(result.after, ['new_entry', 'preserved']);
+      assert.deepEqual(result.followup, ['followup', 'new_entry', 'preserved']);
+    });
+  }
+
+  for (const [label, fault] of [
+    ['POSIX permission errors', { platform: 'linux', code: 'EPERM', failures: 1 }],
+    ['nontransient Windows errors', { platform: 'win32', code: 'ENOSPC', failures: 1 }],
+  ]) {
+    it(`immediately propagates ${label} and preserves the previous registry`, async (t) => {
+      const result = await runFault(t, fault);
+      assert.deepEqual(result.outcome, {
+        status: 'rejected',
+        code: fault.code,
+        originalError: true,
+      });
+      assert.equal(result.attempts, 1);
+      assert.deepEqual(result.after, ['preserved']);
+      assert.deepEqual(result.followup, ['followup', 'preserved']);
+    });
+  }
+
+  it('bounds permanent Windows denial and releases the lock without replacing the registry', async (t) => {
+    const result = await runFault(t, {
+      platform: 'win32',
+      code: 'EPERM',
+      failures: 1000,
+      advanceClockMs: 2000,
+    });
+    assert.deepEqual(result.outcome, { status: 'rejected', code: 'EPERM', originalError: true });
+    assert.equal(result.attempts, 3);
+    assert.deepEqual(result.after, ['preserved']);
+    assert.deepEqual(result.followup, ['followup', 'preserved']);
+  });
+});
+
 describe('collection HTTP deletion shares the ingestion upload resolver', () => {
   for (const override of ['unset', 'absolute', 'relative']) {
     it(`deletes the actual uploaded source with ${override} UPLOADS_DIR and preserves a cwd decoy`, async (t) => {
