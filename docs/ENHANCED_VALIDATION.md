@@ -16,7 +16,7 @@ Linux and Windows checks run before publication; their results are recorded in
 | --- | --- | --- |
 | Dependency security | Application lockfile, all and production; renderer-build lockfile; bundled inventory and asset hashes | Passed; zero advisory findings in all four scopes |
 | Repository hygiene, lint and server TypeScript | `npm run check:repo`; `npm run lint`; `npx tsc --noEmit` | Passed |
-| Unit and regression tests | `npm test` | 627 passed; one native-Windows-only case skipped on Linux |
+| Unit and regression tests | `npm test` | 633 passed; one native-Windows-only case skipped on Linux |
 | HTTP API and MCP integration | `npm run test:e2e` | 30 passed |
 | Client TypeScript and production build | `npm run build:client` | Passed |
 | Chromium browser regressions | `npm run test:playwright` | 88 passed |
@@ -39,7 +39,11 @@ queued sibling operations, expired asynchronous contexts, legacy-to-primary
 migration races, and the lookup window between legacy and primary storage.
 Collection tests cover concurrent registry registration and removal, corrupt
 registry preservation, atomic replacement, overridden upload paths, and failure
-ordering when a database cannot be deleted. SQLite lock sidecars and their
+ordering when a database cannot be deleted. Windows replacement regressions
+inject transient sharing errors, persistent denial and non-retryable errors; they
+verify bounded retry, unchanged old data on failure, temporary-file cleanup and
+subsequent lock acquisition. The real concurrent-reader test remains enabled
+on Windows. SQLite lock sidecars and their
 journal/WAL companions are excluded from source archives.
 
 The upgrade rehearsals each start with four conversations and 11 indexed chunks.

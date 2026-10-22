@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 
@@ -238,6 +238,70 @@ describe('collection registry concurrency and preservation', () => {
     assert.deepEqual(await readRegistry(root, alias), await readRegistry(root));
     const { lstat } = await import('node:fs/promises');
     assert.equal((await lstat(alias)).isSymbolicLink(), true);
+  });
+});
+
+describe('collection registry atomic replacement failures', () => {
+  const runFault = async (t, fault) => {
+    const root = await temporaryRoot(t);
+    const registry = join(root, 'data', 'collections.json');
+    await mkdir(dirname(registry), { recursive: true });
+    await writeFile(registry, JSON.stringify({ collections: ['preserved'] }));
+    // Preserve a noncanonical spelling to exercise fault matching on every OS.
+    const registryAlias = dirname(registry) + sep + '.' + sep + basename(registry);
+    const worker = await startWorker(t, root, {
+      mode: 'registry-rename',
+      operations: fault,
+      env: { COLLECTIONS_PATH: registryAlias },
+    });
+    const result = await worker.run();
+    assert.ok(result.attempts > 0, 'fault injection must intercept the canonical destination');
+    assert.equal(result.temporaryFiles.length, 0, 'publication must clean its temporary file');
+    for (const snapshot of result.snapshots) {
+      assert.deepEqual(snapshot.destination, { collections: ['preserved'] });
+      assert.deepEqual(snapshot.temporary, { collections: ['new_entry', 'preserved'] });
+    }
+    return result;
+  };
+
+  for (const code of ['EPERM', 'EACCES', 'EBUSY']) {
+    it(`retries transient Windows ${code} without removing the previous registry`, async (t) => {
+      const result = await runFault(t, { platform: 'win32', code, failures: 3 });
+      assert.deepEqual(result.outcome, { status: 'fulfilled' });
+      assert.ok(result.attempts >= 4, 'all three injected failures must be retried');
+      assert.deepEqual(result.after, ['new_entry', 'preserved']);
+      assert.deepEqual(result.followup, ['followup', 'new_entry', 'preserved']);
+    });
+  }
+
+  for (const [label, fault] of [
+    ['POSIX permission errors', { platform: 'linux', code: 'EPERM', failures: 1 }],
+    ['nontransient Windows errors', { platform: 'win32', code: 'ENOSPC', failures: 1 }],
+  ]) {
+    it(`immediately propagates ${label} and preserves the previous registry`, async (t) => {
+      const result = await runFault(t, fault);
+      assert.deepEqual(result.outcome, {
+        status: 'rejected',
+        code: fault.code,
+        originalError: true,
+      });
+      assert.equal(result.attempts, 1);
+      assert.deepEqual(result.after, ['preserved']);
+      assert.deepEqual(result.followup, ['followup', 'preserved']);
+    });
+  }
+
+  it('bounds permanent Windows denial and releases the lock without replacing the registry', async (t) => {
+    const result = await runFault(t, {
+      platform: 'win32',
+      code: 'EPERM',
+      failures: 1000,
+      advanceClockMs: 2000,
+    });
+    assert.deepEqual(result.outcome, { status: 'rejected', code: 'EPERM', originalError: true });
+    assert.equal(result.attempts, 3);
+    assert.deepEqual(result.after, ['preserved']);
+    assert.deepEqual(result.followup, ['followup', 'preserved']);
   });
 });
 

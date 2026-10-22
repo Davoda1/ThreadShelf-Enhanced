@@ -1,10 +1,75 @@
 // Synthetic subprocess fixture for registry races and real HTTP upload/deletion routes.
 import express from 'express';
+import fs from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
+import { dirname, basename } from 'node:path';
 
 const mode = process.argv[2];
 const collections = await import('../../src/services/collections.ts');
 
-if (mode === 'registry') {
+if (mode === 'registry-rename') {
+  const fault = JSON.parse(process.argv[3]);
+  // Match the production destination after Windows expands/canonicalizes paths.
+  // Resolve before platform spoofing so the actual host filesystem is used.
+  const registry = await fs.realpath(process.env.COLLECTIONS_PATH);
+  const originalRename = fs.rename;
+  const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform');
+  const clockDescriptor = Object.getOwnPropertyDescriptor(performance, 'now');
+  const error = Object.assign(new Error('Injected registry rename failure'), { code: fault.code });
+  const snapshots = [];
+  let attempts = 0;
+  let clock = 0;
+  process.send({ kind: 'ready' });
+  await new Promise((resolve) => process.once('message', resolve));
+  Object.defineProperty(process, 'platform', { value: fault.platform });
+  if (fault.advanceClockMs)
+    Object.defineProperty(performance, 'now', { configurable: true, value: () => clock });
+  fs.rename = async (temporary, destination) => {
+    if (destination !== registry) return originalRename(temporary, destination);
+    attempts++;
+    snapshots.push({
+      temporary: JSON.parse(await fs.readFile(temporary, 'utf8')),
+      destination: JSON.parse(await fs.readFile(destination, 'utf8')),
+    });
+    if (attempts <= fault.failures) {
+      clock += fault.advanceClockMs || 0;
+      throw error;
+    }
+    return originalRename(temporary, destination);
+  };
+  syncBuiltinESMExports();
+  let outcome;
+  try {
+    await collections.addManualCollection('new_entry');
+    outcome = { status: 'fulfilled' };
+  } catch (caught) {
+    outcome = { status: 'rejected', code: caught.code, originalError: caught === error };
+  } finally {
+    fs.rename = originalRename;
+    syncBuiltinESMExports();
+    Object.defineProperty(process, 'platform', platformDescriptor);
+    if (clockDescriptor) Object.defineProperty(performance, 'now', clockDescriptor);
+    else delete performance.now;
+  }
+  const after = await collections.readManualCollections();
+  const temporaryFiles = (await fs.readdir(dirname(registry))).filter(
+    (name) => name.startsWith(basename(registry) + '.') && name.endsWith('.tmp'),
+  );
+  // A failed publication must release its registry lock for the next writer.
+  await collections.addManualCollection('followup');
+  process.send({
+    kind: 'result',
+    results: {
+      outcome,
+      attempts,
+      snapshots,
+      after,
+      temporaryFiles,
+      followup: await collections.readManualCollections(),
+    },
+  });
+  process.disconnect();
+} else if (mode === 'registry') {
   const operations = JSON.parse(process.argv[3]);
   process.send({ kind: 'ready' });
   await new Promise((resolve) => process.once('message', resolve));

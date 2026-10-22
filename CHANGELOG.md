@@ -16,7 +16,8 @@ unchanged.
 - Serialize collection-registry read-modify-write operations within and between
   processes, then publish synced JSON through an atomic rename. Preserve corrupt
   or unreadable registries and report the failure instead of replacing them with
-  an apparently empty registry.
+  an apparently empty registry. Retry transient Windows replacement failures for
+  up to five seconds without deleting the previous registry.
 - Resolve the uploads directory consistently for ingestion and collection
   deletion, including custom data directories, explicit overrides and launches
   from an unrelated working directory.
