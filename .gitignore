@@ -81,6 +81,7 @@ data/
 *.png
 !docs/assets/
 !docs/assets/*.png
+!docs/extras/*.png
 
 # Portable local runtime and installer caches
 .local/
