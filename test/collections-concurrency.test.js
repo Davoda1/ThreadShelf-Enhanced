@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 
@@ -247,8 +247,15 @@ describe('collection registry atomic replacement failures', () => {
     const registry = join(root, 'data', 'collections.json');
     await mkdir(dirname(registry), { recursive: true });
     await writeFile(registry, JSON.stringify({ collections: ['preserved'] }));
-    const worker = await startWorker(t, root, { mode: 'registry-rename', operations: fault });
+    // Preserve a noncanonical spelling to exercise fault matching on every OS.
+    const registryAlias = dirname(registry) + sep + '.' + sep + basename(registry);
+    const worker = await startWorker(t, root, {
+      mode: 'registry-rename',
+      operations: fault,
+      env: { COLLECTIONS_PATH: registryAlias },
+    });
     const result = await worker.run();
+    assert.ok(result.attempts > 0, 'fault injection must intercept the canonical destination');
     assert.equal(result.temporaryFiles.length, 0, 'publication must clean its temporary file');
     for (const snapshot of result.snapshots) {
       assert.deepEqual(snapshot.destination, { collections: ['preserved'] });

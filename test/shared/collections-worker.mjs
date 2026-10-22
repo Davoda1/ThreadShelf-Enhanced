@@ -9,7 +9,9 @@ const collections = await import('../../src/services/collections.ts');
 
 if (mode === 'registry-rename') {
   const fault = JSON.parse(process.argv[3]);
-  const registry = process.env.COLLECTIONS_PATH;
+  // Match the production destination after Windows expands/canonicalizes paths.
+  // Resolve before platform spoofing so the actual host filesystem is used.
+  const registry = await fs.realpath(process.env.COLLECTIONS_PATH);
   const originalRename = fs.rename;
   const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform');
   const clockDescriptor = Object.getOwnPropertyDescriptor(performance, 'now');
