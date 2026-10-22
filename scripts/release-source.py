@@ -39,6 +39,7 @@ def main():
                           'node_modules', '.local', '.cache', '.home', '.npm-cache',
                           '.npm-global', 'test-results', 'playwright-report'}
     forbidden_suffixes = ('.zip', '.7z', '.tar', '.gz', '.db', '.sqlite', '.sqlite3',
+                          '.sqlite-journal', '.sqlite-wal', '.sqlite-shm',
                           '.lance', '.onnx', '.gguf', '.pem', '.key', '.p12', '.log')
     for entry in entries:
         if not entry:

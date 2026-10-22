@@ -78,8 +78,7 @@ router.delete('/api/collections/:name', async (req, res) => {
   }
 
   try {
-    const uploadsDir = process.env.UPLOADS_DIR || '.uploads';
-    await deleteCollectionFull(name, uploadsDir);
+    await deleteCollectionFull(name);
     res.json({ ok: true, collection: name });
   } catch (e) {
     console.error('[/api/collections/:name DELETE]', e);

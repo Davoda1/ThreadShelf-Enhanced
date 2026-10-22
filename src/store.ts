@@ -6,13 +6,14 @@ import { validateTurns } from './validation.js';
 import type { Provider } from './parser.js';
 import { createHash } from 'node:crypto';
 import { portableModelLabel } from './model-label.js';
+import { join } from 'node:path';
+import { withInterprocessLock } from './interprocess-lock.js';
 
 const DB_PATH = process.env.LANCEDB_PATH || dataPath('lancedb');
 const EMBED_BATCH_SIZE = Math.max(1, Number(process.env.EMBED_BATCH_SIZE) || 25);
 
 let db: Connection | null = null;
 const tableCache = new Map<string, Table>();
-const collectionWriteLocks = new Map<string, Promise<void>>();
 const COLLECTION_STATS_CACHE_MS = 5_000;
 const collectionStatsCache = new Map<
   string,
@@ -93,16 +94,24 @@ interface EmbeddedChunkRow extends Record<string, unknown> {
   readonly generationProvider: string;
 }
 
-const ensureChunkMetadataSchema = async (tbl: Table): Promise<void> => {
-  const schema = await tbl.schema();
-  const existing = new Set(schema.fields.map((field) => field.name));
-  const missing = [
-    ...['provider', 'conversationKey', 'title', 'model', 'createdAt', 'generationProvider'].map(
-      (name) => ({ name, valueSql: "''" }),
-    ),
-    { name: 'createdInThreadShelf', valueSql: 'false' },
-  ].filter((column) => !existing.has(column.name));
-  if (missing.length) await tbl.addColumns(missing);
+const ensureChunkMetadataSchema = async (tbl: Table, collection: string): Promise<void> => {
+  const missingColumns = async () => {
+    const schema = await tbl.schema();
+    const existing = new Set(schema.fields.map((field) => field.name));
+    return [
+      ...['provider', 'conversationKey', 'title', 'model', 'createdAt', 'generationProvider'].map(
+        (name) => ({ name, valueSql: "''" }),
+      ),
+      { name: 'createdInThreadShelf', valueSql: 'false' },
+    ].filter((column) => !existing.has(column.name));
+  };
+  // Normal searches must keep reading published rows while another process
+  // prepares embeddings under its collection lock. Only migration writes wait.
+  if (!(await missingColumns()).length) return;
+  await withInterprocessLock(collectionLockResource(collection), async () => {
+    const missing = await missingColumns();
+    if (missing.length) await tbl.addColumns(missing);
+  });
 };
 
 // A merge is one LanceDB commit: an insertion failure cannot expose a delete.
@@ -113,7 +122,7 @@ const replaceEmbeddedRowsLocked = async (
 ): Promise<void> => {
   const tbl = await openTable(collection);
   if (tbl) {
-    await ensureChunkMetadataSchema(tbl);
+    await ensureChunkMetadataSchema(tbl, collection);
     if (!rows.length) await tbl.delete(where);
     else
       await tbl
@@ -268,7 +277,7 @@ const latestTurnModel = (turns: readonly unknown[]): string => {
   return '';
 };
 
-let threadsSchemaMigration: Promise<void> | null = null;
+const threadsSchemaMigrations = new WeakMap<Table, Promise<void>>();
 
 // Schema upgrades on the request path must remain additive and bounded. In
 // particular, do not backfill metadata by materializing turnsJson for every
@@ -315,13 +324,41 @@ const migrateThreadsSchema = async (tbl: Table): Promise<void> => {
 };
 
 const ensureThreadsSchema = async (tbl: Table): Promise<void> => {
-  if (!threadsSchemaMigration) {
-    threadsSchemaMigration = migrateThreadsSchema(tbl).catch((error) => {
-      threadsSchemaMigration = null;
-      throw error;
-    });
+  const knownMigration = threadsSchemaMigrations.get(tbl);
+  if (knownMigration) return knownMigration;
+  const schema = await tbl.schema();
+  const names = new Set(schema.fields.map((field) => field.name));
+  if (
+    [
+      'lastTurnAt',
+      'rawJson',
+      'sourceIdentityJson',
+      'createdInThreadShelf',
+      'threadCreatedAt',
+      'hasThreadShelfTurns',
+      'lastModel',
+      'indexPending',
+      'indexAttempts',
+      'indexRetryAt',
+      'indexError',
+    ].every((name) => names.has(name))
+  ) {
+    threadsSchemaMigrations.set(tbl, Promise.resolve());
+    return;
   }
-  await threadsSchemaMigration;
+  await withInterprocessLock(collectionLockResource(THREADS_TABLE), async () => {
+    // Acquire first, then publish the promise. A getter must never publish a
+    // migration that waits for a lock held by a writer awaiting that promise.
+    let migration = threadsSchemaMigrations.get(tbl);
+    if (!migration) {
+      migration = migrateThreadsSchema(tbl).catch((error) => {
+        threadsSchemaMigrations.delete(tbl);
+        throw error;
+      });
+      threadsSchemaMigrations.set(tbl, migration);
+    }
+    await migration;
+  });
 };
 
 export const replaceThreadsForFile = async (
@@ -1056,7 +1093,7 @@ export const searchCollection = async (
 
   const tbl = await openTable(collection);
   if (!tbl) return [];
-  await ensureChunkMetadataSchema(tbl);
+  await ensureChunkMetadataSchema(tbl, collection);
 
   const filters = [
     dateFilter,
@@ -1153,7 +1190,7 @@ export const keywordSearchCollection = async (
 
   const tbl = await openTable(collection);
   if (!tbl) return [];
-  await ensureChunkMetadataSchema(tbl);
+  await ensureChunkMetadataSchema(tbl, collection);
 
   const clauses = [`lower(document) LIKE '%${escapeLikePattern(needle)}%'`];
   const ready = await readyIndexFilter(collection);
@@ -1340,11 +1377,10 @@ export const listCollections = async (): Promise<string[]> => {
 export const dropCollection = async (name: string): Promise<void> => {
   return withCollectionWriteLock(name, async () => {
     const database = await getDb();
-    try {
-      await database.dropTable(name);
-    } catch {
-      // table may not exist
-    }
+    // All cooperating writers hold this collection lock. An absent table is
+    // expected for an empty/manual collection; other backend errors must stop
+    // deletion before callers remove the corresponding uploaded originals.
+    if ((await database.tableNames()).includes(name)) await database.dropTable(name);
     tableCache.delete(name);
     invalidateCollectionStats(name);
     await deleteThreadsForCollection(name);
@@ -1433,25 +1469,20 @@ const isSearchableDocument = (text: string): boolean => {
   return text.trim().length >= 8;
 };
 
-const withCollectionWriteLock = async <T>(collection: string, fn: () => Promise<T>): Promise<T> => {
-  const previous = collectionWriteLocks.get(collection) ?? Promise.resolve();
-  let release: () => void = () => {};
-  const current = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const chained = previous.then(() => current);
-  collectionWriteLocks.set(collection, chained);
+const collectionLockResource = (collection: string): string =>
+  join(DB_PATH, '.threadshelf-locks', createHash('sha256').update(collection).digest('hex'));
 
-  await previous;
-  try {
-    return await fn();
-  } finally {
-    release();
-    if (collectionWriteLocks.get(collection) === chained) {
-      collectionWriteLocks.delete(collection);
-    }
-  }
-};
+const withCollectionWriteLock = async <T>(collection: string, fn: () => Promise<T>): Promise<T> =>
+  withInterprocessLock(collectionLockResource(collection), async () => {
+    // Another process may have dropped and recreated a collection while this
+    // process waited. A fresh handle avoids writing through the deleted table.
+    tableCache.delete(collection);
+    return fn();
+  });
+
+/** Short compound thread mutations; never hold this lock while embedding. */
+export const withStoredThreadWriteLock = <T>(fn: () => Promise<T>): Promise<T> =>
+  withCollectionWriteLock(THREADS_TABLE, fn);
 
 // ThreadShelf Local Reader pagination extension v1. Upstream MIT attribution is
 // retained in ThreadShelf Local Suite server-patch/THIRD-PARTY-NOTICES.md. Existing APIs are unchanged.
@@ -1472,7 +1503,7 @@ export const readerSearchCollectionSnapshot = async (
   opts.signal?.throwIfAborted();
   const tbl = await openTable(collection);
   if (!tbl) return [];
-  await ensureChunkMetadataSchema(tbl);
+  await ensureChunkMetadataSchema(tbl, collection);
   const clauses = [
     buildCreatedAtFilter(opts.from, opts.to),
     await readyIndexFilter(collection),

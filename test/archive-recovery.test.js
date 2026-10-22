@@ -76,7 +76,9 @@ const deferred = () => {
   return { promise, resolve };
 };
 
-describe('durable archive and index recovery', { concurrency: false, timeout: 60_000 }, () => {
+// This serial suite includes real embeddings and several process restarts; allow
+// bounded headroom when the full runner also executes multiprocess regressions.
+describe('durable archive and index recovery', { concurrency: false, timeout: 120_000 }, () => {
   it('lets another collection save while import embedding is paused', async () => {
     await store.replaceImportedFiles('unblocked_chat', [file()]);
     const target = await chats.resolveStoredThreadGenerationTarget(
