@@ -1,7 +1,7 @@
 # ThreadShelf Enhanced
 
 [![CI](https://github.com/Davoda1/ThreadShelf-Enhanced/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Davoda1/ThreadShelf-Enhanced/actions/workflows/ci.yml)
-[![Version 1.1.0](https://img.shields.io/badge/version-1.1.0-blue)](https://github.com/Davoda1/ThreadShelf-Enhanced/releases)
+[![Version 1.2.0](https://img.shields.io/badge/version-1.2.0-blue)](https://github.com/Davoda1/ThreadShelf-Enhanced/releases)
 [![MIT license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Node 24+](https://img.shields.io/badge/Node.js-24%2B-43853d)](#installation)
 [![Source distribution](https://img.shields.io/badge/distribution-source_ZIP_%2F_TAR.GZ-6f42c1)](https://github.com/Davoda1/ThreadShelf-Enhanced/releases)
@@ -21,9 +21,13 @@ Import, search, read and continue AI conversations on your own machine. ThreadSh
 
 Search embeddings and storage run locally. First setup and model use require network downloads. OpenRouter generation is an optional external service: using it sends selected conversation content to OpenRouter and its provider. See [security and privacy](SECURITY.md).
 
-## Security maintenance in 1.1.0
+## Correctness fixes in 1.2.0
 
-Version **1.1.0** updates affected application and development dependencies, audits the offline rendering bundles separately, and makes dependency security checks part of the release gate. It preserves the existing API, stored conversation identities, embedding model and database format. Existing exports do not need to be reimported for this update. The original **1.0.0** tag and release remain available as historical source.
+Version **1.2.0** fixes lost thread updates between concurrent processes, lost collection registrations during concurrent creation, and collection deletion using the wrong uploads directory. Shared operating-system locks protect complete mutations; collection registry updates are published atomically. Ingestion and deletion now use the same upload-path resolver.
+
+The existing API, stored conversation identities, embedding model and database format are preserved. No archive reimport or index rebuild is required. Stop older server, MCP, importer and watcher processes before upgrading: every process writing to the same store must use 1.2.0 to participate in the new locking protocol. The **1.0.0** and **1.1.0** tags and releases remain available.
+
+The dependency-security gates introduced in 1.1.0 remain required, including separate checks for bundled browser components and their asset hashes.
 
 See the [changelog](CHANGELOG.md) for the changes and [validation record](docs/ENHANCED_VALIDATION.md) for test results and platform scope.
 

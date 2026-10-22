@@ -1,6 +1,6 @@
 # Compatibility contract
 
-ThreadShelf Enhanced 1.1.0 preserves the upstream server contracts and integrates
+ThreadShelf Enhanced 1.2.0 preserves the upstream server contracts and integrates
 Reader pagination. The public client reference is [ThreadShelf Local Suite
 v1.0.0](https://github.com/Davoda1/ThreadShelf-Local-Suite/tree/v1.0.0), commit
 `e17d5874342ce0069acba2ed387d46eefbf61f24`.
@@ -15,13 +15,36 @@ v1.0.0](https://github.com/Davoda1/ThreadShelf-Local-Suite/tree/v1.0.0), commit
 Exact public adapter provenance and blob hashes are documented in
 [test/fixtures/compatibility-clients/README.md](../test/fixtures/compatibility-clients/README.md).
 Those hashes identify only the named adapter files; they do not imply that other
-application code is identical. Compatibility checks do not launch Electron or
+application code is identical. Bundled adapter tests do not launch Electron or
 validate desktop installers. See [validation](ENHANCED_VALIDATION.md) for the
 current public-source gate.
 
-The 1.1.0 security update preserves the database format, embedding model and
-existing vector dimension. It does not require reimporting archives or changing
-client data stores. The original Enhanced 1.0.0 release remains available.
+The 1.2.0 correctness update retains the 1.1.0 dependencies, database format,
+embedding model and existing vector dimension. It does not require reimporting
+archives, rebuilding indexes or changing client data stores. The original
+Enhanced 1.0.0 and 1.1.0 releases remain available.
+
+## Shared-store writes
+
+Server, MCP, importer and search processes use shared operating-system locks for
+complete storage mutations. Node's built-in SQLite provides only the lock
+coordination; conversation and vector storage remains LanceDB, and the collection
+registry retains its existing JSON format. Lock sidecars contain no conversation
+records. The operating-system locks release automatically on process termination.
+The sidecar files remain and must never be deleted while a writer might still be
+running.
+
+Upgrade all processes that share a writable store together, stopping older
+processes first. Older releases do not acquire these locks. HTTP clients continue
+using the same routes and need no corresponding application update. The locking
+contract targets local filesystems with working operating-system file locks;
+placing the database on a network filesystem is not a tested deployment mode.
+
+Lock acquisition waits asynchronously and fails explicitly after 30 seconds of
+contention; it never continues without ownership. A failed acquisition can be
+retried after the other write completes. Malformed or unreadable collection JSON
+is now reported as an error and preserved for recovery rather than treated as an
+empty registry.
 
 ## Stable identity
 

@@ -113,3 +113,6 @@ export const dataPath = (key: DataKey): string => {
   const entry = LAYOUT[key];
   return resolve(dataDir(), ...(useRepoLayout() ? entry.repo : entry.user));
 };
+
+/** Shared upload location for ingestion and collection cleanup, including explicit overrides. */
+export const uploadsPath = (): string => resolve(process.env.UPLOADS_DIR || dataPath('uploads'));

@@ -13,6 +13,7 @@
 import { spawnSync } from 'node:child_process';
 import { readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { availableParallelism } from 'node:os';
 
 const [, , directoryArg, ...extraArgs] = process.argv;
 
@@ -47,7 +48,16 @@ const run = async () => {
 
   const result = spawnSync(
     process.execPath,
-    ['--import', 'tsx', '--test', ...extraArgs, ...testFiles],
+    [
+      '--import',
+      'tsx',
+      '--test',
+      // Individual storage regressions already launch concurrent native workers.
+      // Bound file-level fan-out so their children can start within test deadlines.
+      `--test-concurrency=${Math.max(1, Math.min(4, availableParallelism() - 1))}`,
+      ...extraArgs,
+      ...testFiles,
+    ],
     { stdio: 'inherit' },
   );
 

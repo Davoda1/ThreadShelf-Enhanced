@@ -53,6 +53,7 @@ src/                Server + core logic (TypeScript, ESM, run via tsx)
   ingest.ts         Parse -> chunk -> embed -> store pipeline
   watch.ts          Watch-folder mode (fs.watch + debounced re-ingest)
   store.ts          LanceDB access
+  interprocess-lock.ts  SQLite-backed operating-system locks for shared mutations
   validation.ts     Turn/types + input validation
   routes/           HTTP routes (health, search, thread, collections, files, ingest, insights)
     local-api.ts           OpenAI/Anthropic-compatible `/v1` router (key, on/off, unload, relay)
@@ -198,6 +199,14 @@ stored thread -> generation registry -> llama.cpp (local) OR OpenRouter (externa
   before committing (retry on change). Keep collection then thread-table lock
   ordering; never queue saved turn snapshots for a later retry. LanceDB is opened
   with `readConsistencyInterval: 0` so processes see each other's commits.
+- Collection and thread-table mutations use `interprocess-lock.ts`. SQLite is
+  only an operating-system lock coordinator; archive tables remain LanceDB.
+  Keep collection-before-thread lock ordering and the short thread lock around
+  the entire read-modify-write, including legacy normalization/migration. Never
+  embed or acquire the manual collection registry lock while holding the thread
+  lock. Sidecars under the database's `.threadshelf-locks` directory and beside
+  the collection registry must not be unlinked while any writer may use them.
+  All writer processes must use 1.2.0 or later to participate in these locks.
 - Rename updates only the title column; appends build turns from the current row
   inside the thread-table lock.
 - Local API model ids use file names, folder prefixes for duplicate names, and
@@ -253,7 +262,9 @@ Three layers, all runnable offline:
 Test commands must be shell-independent on Windows and Linux and work on the
 minimum supported Node.js version. Do not rely on shell glob expansion in npm
 scripts; enumerate matching files in JavaScript and pass them as explicit
-arguments. Tests for `Intl` date/time output must not assume a locale-specific
+arguments. The runner caps file-level concurrency at four because storage tests
+also spawn concurrent native workers; an explicit `--test-concurrency` argument
+can override that cap. Tests for `Intl` date/time output must not assume a locale-specific
 field order, punctuation, prefix relationship, or time zone. Compare against an
 equivalently configured formatter or inspect `formatToParts()`; set an explicit
 locale or time zone only when that behavior is what the test is meant to verify.
@@ -332,7 +343,7 @@ build output. Keep archive contents reproducible and verify their checksums.
 Tags use `v<package.json version>`; `.github/workflows/publish.yml` runs reusable
 Linux and Windows CI, including dependency security checks, before creating a release
 with exactly the two source assets. Keep previously published version tags and
-assets intact; 1.1.0 is a separate release from 1.0.0.
+assets intact; 1.2.0 is a separate release from 1.0.0 and 1.1.0.
 Only its release job has repository write permission.
 
 Run `python3 test/source-release.test.py` for packaging regressions (`python` on
@@ -376,7 +387,7 @@ conventions.
 
 ## Enhanced fork conventions
 
-ThreadShelf Enhanced 1.1.0 is based on upstream v1.3.0, with Node 24+ required
+ThreadShelf Enhanced 1.2.0 is based on upstream v1.3.0, with Node 24+ required
 for lossless JSON numeric tokens. Distribution is source ZIP/TAR.GZ only. The
 package is private. The source release workflow validates tagged source through
 reusable CI before publishing the two source archives; it never publishes to npm.

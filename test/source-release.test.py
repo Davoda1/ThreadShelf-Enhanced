@@ -227,7 +227,9 @@ class SourceReleaseTests(unittest.TestCase):
                 self.package(output_name='rejected-' + str(index), success=False)
 
     def test_committed_generated_archives_databases_and_keys_are_rejected(self):
-        for index, path in enumerate(('backup.zip', 'model.onnx', 'archive.sqlite3', 'server.key')):
+        for index, path in enumerate(('backup.zip', 'model.onnx', 'archive.sqlite3', 'server.key',
+                                      'registry.lock.sqlite-journal', 'registry.lock.sqlite-wal',
+                                      'registry.lock.sqlite-shm')):
             with self.subTest(path=path):
                 self.git('reset', '--hard', '--quiet', self.base_commit)
                 self.write(path, b'Synthetic forbidden bytes.\n')

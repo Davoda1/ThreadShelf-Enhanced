@@ -1,49 +1,94 @@
-# Enhanced 1.1.0 validation
+# Enhanced 1.2.0 validation
 
 Validation uses synthetic conversations and isolated stores. No live archive or
 credentials are needed for the public-source checks.
 
-**Local release candidate validation: 2026-10-21, Enhanced 1.1.0.** The complete
-local gate passed after a fresh locked dependency installation. The original
-`v1.0.0` tag and assets remain unchanged; `v1.1.0` identifies this separate release.
-Hosted Linux and Windows checks are required before either release asset can be
-published. Their results are recorded in the repository's
+**Local release candidate validation: 2026-10-22, Enhanced 1.2.0.** The complete
+local gate passed after a fresh locked dependency installation. This release
+preserves existing database, identity, embedding and API contracts. The previous
+version commits, tags and assets remain separate and unchanged. Required hosted
+Linux and Windows checks run before publication; their results are recorded in
 [Actions history](https://github.com/Davoda1/ThreadShelf-Enhanced/actions).
 
 ## Reproducible checks
 
-| Check | Command or scope | Local 1.1.0 result |
+| Check | Command or scope | Local 1.2.0 result |
 | --- | --- | --- |
-| Dependency security | Application lockfile, all and production; renderer-build lockfile; 83 bundled package versions and both asset hashes | Passed; zero advisory findings in all four scopes |
-| Repository hygiene | `npm run check:repo`; public source privacy review and retained license verification | Passed |
-| Lint and server TypeScript | `npm run lint`; `npx tsc --noEmit` | Passed |
-| Unit and regression tests | `npm test` | 598 passed; one native-Windows-only case skipped on Linux |
+| Dependency security | Application lockfile, all and production; renderer-build lockfile; bundled inventory and asset hashes | Passed; zero advisory findings in all four scopes |
+| Repository hygiene, lint and server TypeScript | `npm run check:repo`; `npm run lint`; `npx tsc --noEmit` | Passed |
+| Unit and regression tests | `npm test` | 627 passed; one native-Windows-only case skipped on Linux |
 | HTTP API and MCP integration | `npm run test:e2e` | 30 passed |
 | Client TypeScript and production build | `npm run build:client` | Passed |
 | Chromium browser regressions | `npm run test:playwright` | 88 passed |
-| Compiled server | `npm run build:server`; isolated health and collection API smoke | Passed |
-| Launcher | Actual terminal Ctrl+C, project-root and environment-override launches, `;` and `&&` continuation | Passed; exact marker, status zero, children reaped |
+| Compiled server | `npm run build:server`; isolated HTTP smoke from unrelated working directory | Passed; 24 concurrent collection registrations retained and upload deletion used the configured root |
 | Source packaging regressions | `python3 test/source-release.test.py` | 12 passed; committed archives are audited again by Linux and Windows CI |
-| Renderer reproduction | Clean locked source rebuild and component inventory verification | Byte-identical Mermaid; 79 Mermaid package versions verified |
-| Existing archive compatibility | Synthetic 1.0.0-to-1.1.0 LanceDB handoff with real embeddings | Stored rows, identities, source bytes, vectors and search ordering unchanged |
+| Enhanced upgrade | Synthetic 1.1.0-to-1.2.0 LanceDB handoff with real embeddings | Existing schemas, rows, identities, source bytes, vectors, API responses and search ordering unchanged |
+| Original ThreadShelf upgrade | Synthetic 1.3.0-to-Enhanced-1.2.0 handoff with real embeddings | Original fields, vectors, source bytes and registry retained; existing additive raw-source columns supported |
 
-The synthetic upgrade rehearsal retained six rows across three threads and
-compared three 384-dimensional query vectors with a maximum component difference
-of zero. The model and database format are unchanged; this update does not require
-reimporting archives or rebuilding the index. The renderer regressions exercise
-15 diagram families offline and the patched KaTeX mathematical-label path.
+`npm run check` includes security, hygiene, lint, server TypeScript, unit tests,
+HTTP/MCP integration, client build and Chromium regressions. Advisory results are
+limited to the public advisory data available at the time of the run. The gate
+fails if that service cannot supply a reliable result.
 
-`npm run check` includes dependency security, repository hygiene, lint, server
-TypeScript, unit tests, HTTP/MCP integration, the client build and browser
-regressions. Security checking requires access to the current public advisory
-service and fails when a reliable audit response is unavailable. A clean result
-is limited to the advisory data available at the time of that run.
+### Bug-fix and upgrade validation
 
-Browser tests require the Playwright Chromium installation. Embedding tests may
-download the model on their first run; the functional tests can use a previously
-prepared model cache. Integration stores must remain isolated from user data.
-Native Windows setup/core checks and source packaging are required GitHub jobs;
-release publication waits for all required jobs to succeed on the version tag.
+The new regressions cover concurrent appends across independent processes,
+rename/append interleavings, schema initialization and legacy normalization, reads during embedding,
+process death and lock recovery, cancellation and timeout, nested lock scopes,
+queued sibling operations, expired asynchronous contexts, legacy-to-primary
+migration races, and the lookup window between legacy and primary storage.
+Collection tests cover concurrent registry registration and removal, corrupt
+registry preservation, atomic replacement, overridden upload paths, and failure
+ordering when a database cannot be deleted. SQLite lock sidecars and their
+journal/WAL companions are excluded from source archives.
+
+The upgrade rehearsals each start with four conversations and 11 indexed chunks.
+They compare persisted data and search results before exercising rename, append,
+reimport and native-chat continuation. Enhanced 1.1.0 retains its exact schema;
+original ThreadShelf 1.3.0 retains every original field and vector while the
+existing migration adds empty `rawJson` and `sourceIdentityJson` columns. No
+embedding-model or dependency change is included in 1.2.0. All processes writing
+the same store must upgrade together because older writers do not use the new
+interprocess locks.
+
+### Public desktop compatibility
+
+Additional external checks used unmodified public Local Suite 1.0.0 applications
+at commit `1be2ceb8cd5fec04fc852861fc0f3173dc0d3155`. These app sources remain in
+their own repository and are not server dependencies or release contents.
+Reader's core suite passed 519 tests with four conditional skips; Analytics passed
+316; Alternative passed 21. Production application sources were unchanged.
+
+Native Linux Electron tests exercised all three applications against an isolated
+compiled Enhanced server with 65 synthetic conversations. Reader browsed and
+searched across page boundaries, displayed full conversations, imported 35 into
+its real compressed local archive, and reopened the archive and appearance
+settings after restart. Analytics captured that archive, rendered all 35
+conversations and 175 records, reopened its owned capture after restart, and left
+every Reader profile file byte-identical. Alternative passed 11 checks covering
+connection, pagination, rich thread rendering, navigation, pins/history, in-thread
+find, clipboard/export, retained settings and reading position, small-window
+layout and visible errors. No renderer errors were recorded. A separate real-embedding pipeline also
+passed both 7z and ZIP storage profiles through Reader and Analytics, including
+committed journal replay, exact source identity and read-only archive access.
+
+These native checks used a virtual X display and the apps' pinned Electron
+versions. The root-only test host required `--no-sandbox` and a test-only
+single-instance override; production source and configured context isolation,
+renderer sandbox settings and disabled Node integration were verified unchanged.
+This is evidence for the tested source applications, not desktop installer or
+native Windows desktop certification. No live user database was opened.
+
+### Historical 1.1.0 baseline
+
+The 2026-10-21 local 1.1.0 gate passed 598 unit tests (one Windows-only skip),
+30 HTTP/MCP tests, 88 Chromium tests and 12 packaging regressions, with zero
+advisory findings in four scopes. A synthetic 1.0.0-to-1.1.0 rehearsal preserved
+six rows across three threads and three 384-dimensional query vectors exactly.
+A clean renderer rebuild reproduced Mermaid byte-for-byte and verified its
+79-package inventory. Launcher terminal Ctrl+C checks verified status zero,
+child cleanup and subsequent shell continuation. Those are historical results;
+the 1.2.0 gate above records the current run.
 
 ### Historical 1.0.0 baseline
 
@@ -97,12 +142,13 @@ Setup pins Node 24.22.1 and npm 12.2.1. Linux x64 is the primary verification
 platform. Windows PowerShell setup and ARM64 runtime selection are included;
 native Windows is a separate required GitHub CI job. Native ARM64 and native Windows renderer-source reproduction were not
 executed in this local gate. Full dependency installation is repeated by both
-platform setup jobs; 1.1.0 requires a fresh locked dependency installation before
+platform setup jobs; 1.2.0 requires a fresh locked dependency installation before
 its release gate. The dependency advisory service is required for security
 validation even when functional tests can use cached models.
-Desktop Electron windows and installers are outside this gate. Local Analytics
-consumes Reader-published archives; the server API adapter checks do not validate
-that separate archive pipeline.
+Native Linux Electron windows and the Reader-to-Analytics archive pipeline were
+additionally checked against unmodified public Local Suite sources, as described
+above. Desktop installers, native Windows desktop windows and ARM64 desktop
+execution were not exercised locally.
 
 Known import limits include duplicate conversations when a ZIP contains both
 `conversations.json` and `chat.html`, image companions excluded by browser folder

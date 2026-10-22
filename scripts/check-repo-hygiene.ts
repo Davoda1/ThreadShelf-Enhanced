@@ -21,7 +21,7 @@ const violations: string[] = [];
 const forbiddenDirectories =
   /(^|\/)(DO_NOT_COMMIT|personal|private|exports|node_modules|\.local|\.cache|\.home|\.config|\.npm-cache|\.npm-global|\.lancedb[^/]*|\.uploads[^/]*|\.threadshelf[^/]*|\.tmp-[^/]+|\.playwright-mcp|test-results|playwright-report)(\/|$)/i;
 const forbiddenExtensions =
-  /\.(?:zip|7z|tar|gz|gguf|onnx|lance|txn|manifest|db|sqlite3?|pem|key|p12|log)$/i;
+  /\.(?:zip|7z|tar|gz|gguf|onnx|lance|txn|manifest|db|sqlite3?|sqlite-(?:journal|wal|shm)|pem|key|p12|log)$/i;
 const allowedJson = [
   /^(?:package|package-lock|tsconfig|tsconfig\.build|vite\.config)\.json$/i,
   /^client\/(?:package|tsconfig)\.json$/i,

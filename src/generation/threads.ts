@@ -7,6 +7,7 @@ import {
   StoredThreadWriteError,
   updateStoredThread,
   updateStoredThreadFromCurrent,
+  withStoredThreadWriteLock,
   renameStoredThread,
   indexStoredFile,
   type StoredThreadRow,
@@ -163,21 +164,46 @@ const indexWithStatus = async (target: {
   }
 };
 
-const migrateLegacyChat = async (row: StoredThreadRow): Promise<ThreadShelfChat> => {
+interface LoadedPrimaryChat {
+  readonly chat: ThreadShelfChat;
+  readonly needsIndex: boolean;
+}
+
+// Call only while holding the shared thread-store lock. Legacy provenance repair
+// is a read-modify-write operation just like appending a generated answer.
+const loadPrimaryChatLocked = async (
+  id: string,
+  sourceFile: string,
+): Promise<LoadedPrimaryChat | undefined> => {
+  const rows = await getStoredThreads(THREADSHELF_CHAT_COLLECTION, sourceFile);
+  const row = rows.find((candidate) => candidate.conversationKey === id);
+  if (!row) return undefined;
   const chat = toChat(row);
+  const needsIndex = parseTurns(row).some((turn) => turn.createdInThreadShelf !== true);
+  if (needsIndex) await updateChat(chat);
+  return { chat, needsIndex };
+};
+
+const migrateLegacyChat = async (id: string): Promise<ThreadShelfChat> => {
+  const sourceFile = sourceFileForId(id);
+  // Registry access and model work stay outside the shared archive lock.
   await addManualCollection(THREADSHELF_CHAT_COLLECTION);
-  await insertChat(chat);
-  await replaceThreadsForFile(
-    LEGACY_THREADSHELF_CHAT_COLLECTION,
-    row.sourceFile,
-    'threadshelf',
-    [],
-  );
-  await indexWithStatus({
-    collection: THREADSHELF_CHAT_COLLECTION,
-    sourceFile: row.sourceFile,
+  const loaded = await withStoredThreadWriteLock(async () => {
+    // Another process may already have migrated and extended this conversation.
+    // Never replace that primary row with an earlier legacy snapshot.
+    const current = await loadPrimaryChatLocked(id, sourceFile);
+    if (current) return current;
+    const rows = await getStoredThreads(LEGACY_THREADSHELF_CHAT_COLLECTION, sourceFile);
+    const legacy = rows.find((candidate) => candidate.conversationKey === id);
+    if (!legacy) throw new ThreadShelfChatNotFoundError();
+    const chat = toChat(legacy);
+    await insertChat(chat);
+    await replaceThreadsForFile(LEGACY_THREADSHELF_CHAT_COLLECTION, sourceFile, 'threadshelf', []);
+    return { chat, needsIndex: true };
   });
-  return chat;
+  if (loaded.needsIndex)
+    await indexWithStatus({ collection: THREADSHELF_CHAT_COLLECTION, sourceFile });
+  return loaded.chat;
 };
 
 // This title is persisted, so truncating here discards the text permanently.
@@ -253,24 +279,27 @@ export const deleteThreadShelfChat = async (value: unknown): Promise<void> => {
 export const getThreadShelfChat = async (value: unknown): Promise<ThreadShelfChat> => {
   const id = assertThreadShelfChatId(value);
   const sourceFile = sourceFileForId(id);
-  const rows = await getStoredThreads(THREADSHELF_CHAT_COLLECTION, sourceFile);
-  const row = rows.find((candidate) => candidate.conversationKey === id);
-  if (row) {
-    const chat = toChat(row);
-    if (parseTurns(row).some((turn) => turn.createdInThreadShelf !== true)) {
-      await updateChat(chat);
+  const loaded = await withStoredThreadWriteLock(async () => {
+    const primary = await loadPrimaryChatLocked(id, sourceFile);
+    if (primary) return primary;
+    // Check both locations under the same lock: a concurrent migration must
+    // not move the row between our two lookups and manufacture a not-found.
+    const legacyRows = await getStoredThreads(LEGACY_THREADSHELF_CHAT_COLLECTION, sourceFile);
+    if (!legacyRows.some((candidate) => candidate.conversationKey === id))
+      throw new ThreadShelfChatNotFoundError();
+    return undefined;
+  });
+  if (loaded) {
+    if (loaded.needsIndex) {
       await indexWithStatus({
         collection: THREADSHELF_CHAT_COLLECTION,
         sourceFile,
       });
     }
-    return chat;
+    return loaded.chat;
   }
 
-  const legacyRows = await getStoredThreads(LEGACY_THREADSHELF_CHAT_COLLECTION, sourceFile);
-  const legacy = legacyRows.find((candidate) => candidate.conversationKey === id);
-  if (!legacy) throw new ThreadShelfChatNotFoundError();
-  return migrateLegacyChat(legacy);
+  return migrateLegacyChat(id);
 };
 
 export const listThreadShelfChats = async (): Promise<ThreadShelfChatSummary[]> => {

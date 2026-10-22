@@ -1,5 +1,39 @@
 # Changelog
 
+## ThreadShelf Enhanced 1.2.0 — 2026-10-22
+
+Correctness release addressing the three independently reproduced storage and
+path-handling defects. Previous version tags, commits and release assets remain
+unchanged.
+
+### Fixed
+
+- Serialize complete conversation mutations across server, MCP and CLI processes
+  sharing a local store. Operating-system locks are released when a process exits;
+  failed, cancelled or timed-out acquisition never proceeds without a lock.
+- Protect legacy chat normalization and migration against concurrent appends,
+  including rechecking an existing primary conversation before migration.
+- Serialize collection-registry read-modify-write operations within and between
+  processes, then publish synced JSON through an atomic rename. Preserve corrupt
+  or unreadable registries and report the failure instead of replacing them with
+  an apparently empty registry.
+- Resolve the uploads directory consistently for ingestion and collection
+  deletion, including custom data directories, explicit overrides and launches
+  from an unrelated working directory.
+- Propagate collection database deletion failures before uploaded originals are
+  removed; a genuinely absent empty collection remains deletable.
+
+### Validation and compatibility
+
+Add deterministic multiprocess, process-termination, registry-publication,
+custom-path and legacy-chat regression tests. Existing LanceDB tables, collection
+JSON, API contracts, conversation identities and embedding vectors retain their
+formats. No reimport or index rebuild is required. All concurrent writers must
+be upgraded together; older processes do not participate in the new locks.
+
+See [validation](docs/ENHANCED_VALIDATION.md) and the
+[compatibility contract](docs/ENHANCED_COMPATIBILITY.md) for tested scope.
+
 ## ThreadShelf Enhanced 1.1.0 — 2026-10-21
 
 Security maintenance release. The original Enhanced 1.0.0 tag and release assets
