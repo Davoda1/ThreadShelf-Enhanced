@@ -10,6 +10,18 @@ Import, search, read and continue AI conversations on your own machine. ThreadSh
 
 [Installation](#installation) · [Configuration](#configuration) · [Import support](#import-support-and-known-limits) · [Compatibility](docs/ENHANCED_COMPATIBILITY.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
+## Interface
+
+The web interface in light and dark themes, using synthetic demo conversations. [View all eight full-resolution screenshots](docs/extras/README.md).
+
+**Dark theme — a structured conversation with headings, a table and a quotation.**
+
+![ThreadShelf Enhanced dark conversation reader with a formatted comparison table](docs/extras/01-reader-dark.png)
+
+**Light theme — a Mermaid diagram rendered within the conversation.**
+
+![ThreadShelf Enhanced light conversation reader with a rendered archive workflow diagram](docs/extras/04-diagram-light.png)
+
 ## What Enhanced adds
 
 - Rich Markdown, tables, highlighted code, mathematics, diagrams, citations and supported ChatGPT rich content, with bundled rendering libraries and readable fallbacks.

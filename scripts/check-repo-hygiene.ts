@@ -30,7 +30,7 @@ const allowedJson = [
   /^test\/fixture\.json$/i,
   /^test\/fixtures\/.+\.json$/i,
 ];
-const allowedImages = /^docs\/assets\/.+\.(?:png|gif|jpe?g|webp)$/i;
+const allowedImages = /^docs\/(?:assets\/.+\.(?:png|gif|jpe?g|webp)|extras\/[a-z0-9-]+\.png)$/i;
 
 for (const rawPath of files) {
   const path = rawPath.replace(/\\/g, '/');
@@ -59,7 +59,7 @@ for (const rawPath of files) {
     violations.push(`${path}: JSON outside the synthetic/config allowlist`);
   }
   if (/\.(?:png|gif|jpe?g|webp)$/i.test(path) && !allowedImages.test(path)) {
-    violations.push(`${path}: image outside docs/assets`);
+    violations.push(`${path}: image outside approved documentation paths`);
   }
 }
 
