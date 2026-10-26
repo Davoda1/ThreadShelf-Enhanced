@@ -85,6 +85,7 @@ jobs:
                    'Independent fork based on [ThreadShelf v1.3.0](https://github.com/ChrystianSchutz/ThreadShelf/tree/v1.3.0), with upstream history and license retained.', '',
                    '- Bounded import staging and atomic archive/index publication, with memory-pressure monitoring.',
                    '- Persistent background import jobs, progress, cancellation and retry after upload acceptance.',
+                   '- Finished-job history clearing, completed progress at 100%, and a Manage uploads dialog for uploaded-file cleanup.',
                    '- Coordinated server/indexer ownership and safe collection replacement; unrelated files are skipped.',
                    '- Six interface languages and animated per-role rich-rendering switches that preserve basic Markdown when off.',
                    '- Inline click/automatic image loading and an optional server-only image cache partitioned by collection.',

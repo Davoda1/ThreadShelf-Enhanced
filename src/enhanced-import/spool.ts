@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { lstat, mkdir, mkdtemp, open, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, open, readFile, rename, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { dataPath } from '../paths.js';
 import type { EnhancedConversation, EnhancedImportNotice } from './index.js';
@@ -136,9 +136,11 @@ export const createSpoolWriter = async (filename: string, signal?: AbortSignal) 
         recordHash: hash.digest('hex'),
       };
       const checkpointPartial = filename + '.checkpoint.partial';
-      await writeFile(checkpointPartial, JSON.stringify(value), { mode: 0o600 });
-      const checkpointFile = await open(checkpointPartial, 'r');
+      // Windows requires a writable handle for FlushFileBuffers. Keep the
+      // write and sync on one handle, then close it before atomic publication.
+      const checkpointFile = await open(checkpointPartial, 'w', 0o600);
       try {
+        await checkpointFile.writeFile(JSON.stringify(value), 'utf8');
         await checkpointFile.sync();
       } finally {
         await checkpointFile.close();

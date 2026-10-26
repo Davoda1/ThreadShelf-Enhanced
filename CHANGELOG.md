@@ -9,6 +9,7 @@
 - Reuse embeddings only when content and the loaded model/runtime identity match. Preserve conversation identities, original raw content and local continuations.
 - Skip unrelated, unsupported and empty auxiliary files with diagnostics. Include supported image companions in browser folder uploads.
 - Persist accepted import jobs, progress, cancellation, retry and checked input snapshots. Browser disconnection after acceptance no longer cancels processing.
+- Fix import checkpoint flushing on Windows by writing and syncing through the same writable file handle before publication.
 - Allow individual or collection/all finished-job history removal, including completed, failed and cancelled records, while protecting queued, running, paused and interrupted jobs. Removal leaves imported conversations and published source files intact.
 - Record successful completion at 100% and display older completed jobs at 100% even when their last progress event stopped below completion.
 - Add a **Manage uploads** dialog on Add data with per-collection file paths, sizes, selected-file deletion and collection-wide cleanup. Protect imports that still need those files; retain indexed conversations while making the possible loss of original media and source fallbacks explicit.

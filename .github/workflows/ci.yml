@@ -244,7 +244,7 @@ jobs:
       - name: Unit and regression tests
         timeout-minutes: 5
         run: |
-          & "$env:THREADSHELF_CI_RUNTIME/npm.cmd" test
+          & "$env:THREADSHELF_CI_RUNTIME/npm.cmd" test -- --test-reporter=tap
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Smoke-test the compiled server

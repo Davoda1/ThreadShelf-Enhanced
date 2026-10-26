@@ -5,9 +5,9 @@ stores. They do not require live archives, credentials or separately supplied
 application source trees.
 
 **Local public-source validation passed on 2026-10-26.** The complete
-`npm run check` finished successfully after the final import-history and upload
-management changes. These are local candidate results; the required hosted
-commit/tag checks remain separate gates. See
+`npm run check` finished successfully after the import history, upload management
+and Windows checkpoint fixes. These are local candidate results; the required
+hosted commit/tag checks remain separate gates. See
 [Actions history](https://github.com/Davoda1/ThreadShelf-Enhanced/actions) for
 their exact outcomes. A successful check for an older commit is not evidence
 for a newer candidate.
@@ -15,9 +15,9 @@ for a newer candidate.
 | Local check | Result |
 | --- | --- |
 | Dependency security | Zero reported findings in all four audit scopes; both bundled asset hashes verified |
-| Source hygiene | 488 candidate files checked successfully |
+| Source hygiene | 489 candidate files checked successfully |
 | Lint, server/client TypeScript and client production build | Passed |
-| Unit/regression tests | 721 passed; one native Windows-only test skipped on Linux; 722 total |
+| Unit/regression tests | 723 passed; one native Windows-only test skipped on Linux; 724 total |
 | HTTP API and MCP integration | 37 passed |
 | Browser regressions | 107 passed |
 | Compiled server and isolated health/API/UI/shutdown smoke | Passed, including uploaded-file endpoints |
@@ -61,6 +61,8 @@ consult the workflow runs for the exact platform and tag outcomes.
 
 - Bounded normalization/spooling, large-record safety, mixed supported and
   unsupported files, image companions and lossless provider/source identities.
+- Durable checkpoint writes through writable flush handles, including Windows
+  requirements, and prevention of reusable completion after a checkpoint flush fails.
 - Generation publication, cancellation and staging failure; old published reads
   during preparation; retained local continuations; embedding reuse tied to
   verified model/runtime identity; retirement protected by reader leases.
