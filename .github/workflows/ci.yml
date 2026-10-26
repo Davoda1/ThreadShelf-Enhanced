@@ -94,9 +94,13 @@ jobs:
           path: .threadshelf/model-cache
           key: ${{ runner.os }}-embeddings-paraphrase-multilingual-minilm-l12-v2
 
-      - name: Install Playwright Chromium
+      - name: Install Chromium system dependencies
+        timeout-minutes: 10
+        run: npx playwright install-deps chromium
+
+      - name: Install pinned Playwright Chromium
         timeout-minutes: 5
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       # These named steps preserve every gate in npm run check and expose failures.
       - name: Repository hygiene

@@ -5,15 +5,40 @@ import { mkdtemp, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stopChildProcess } from './shared/helpers.js';
+
+const fixtures = new WeakMap();
+const temporaryRoot = async (t, prefix) => {
+  const root = await mkdtemp(join(tmpdir(), prefix));
+  const fixture = { children: [], paths: [root] };
+  fixtures.set(t, fixture);
+  t.after(async () => {
+    // Windows keeps SQLite sidecars locked until their owning workers exit.
+    // A failed earlier after-hook also skips later hooks, so own cleanup here.
+    const stopped = await Promise.allSettled(
+      fixture.children.map((child) => stopChildProcess(child)),
+    );
+    const failures = stopped.filter((result) => result.status === 'rejected');
+    if (failures.length)
+      throw new AggregateError(
+        failures.map((result) => result.reason),
+        'Coordinator workers failed to stop',
+      );
+    for (const path of fixture.paths.reverse()) await rm(path, { recursive: true, force: true });
+    fixtures.delete(t);
+  });
+  return root;
+};
 
 const workerPath = fileURLToPath(
   new URL('./shared/indexing-coordinator-worker.js', import.meta.url),
 );
-const worker = (root, mode, collection = 'alpha') => {
+const worker = (t, root, mode, collection = 'alpha') => {
   const child = spawn(process.execPath, ['--import', 'tsx', workerPath, mode, collection], {
     env: { ...process.env, LANCEDB_PATH: root },
     stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
   });
+  fixtures.get(t).children.push(child);
   let errors = '';
   child.stderr.on('data', (value) => {
     errors += String(value);
@@ -39,114 +64,106 @@ const worker = (root, mode, collection = 'alpha') => {
     child,
     message,
     exit,
-    stop: async () => {
-      if (child.exitCode === null) child.kill('SIGKILL');
-      await exit;
-    },
+    stop: () => stopChildProcess(child),
   };
 };
 
-test('one server and one indexer are enforced across processes, with release after termination', async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'threadshelf-coordinator-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
-  const first = worker(root, 'server');
-  t.after(first.stop);
-  assert.equal((await first.message).state, 'owned');
-  const duplicate = worker(root, 'server');
-  t.after(duplicate.stop);
-  assert.match((await duplicate.message).message, /already running/);
-  assert.equal((await duplicate.exit).code, 17);
+test(
+  'one server and one indexer are enforced across processes, with release after termination',
+  { timeout: 30_000 },
+  async (t) => {
+    const root = await temporaryRoot(t, 'threadshelf-coordinator-');
+    const first = worker(t, root, 'server');
+    assert.equal((await first.message).state, 'owned');
+    const duplicate = worker(t, root, 'server');
+    assert.match((await duplicate.message).message, /already running/);
+    assert.equal((await duplicate.exit).code, 17);
 
-  const importer = worker(root, 'index');
-  t.after(importer.stop);
-  assert.equal((await importer.message).state, 'owned');
-  const secondImporter = worker(root, 'index', 'another');
-  t.after(secondImporter.stop);
-  assert.equal((await secondImporter.message).code, 'INDEXING_BUSY');
-  await importer.stop();
-  const replacement = worker(root, 'nested');
-  t.after(replacement.stop);
-  assert.equal((await replacement.message).state, 'written');
-  assert.equal((await replacement.exit).code, 0);
-});
+    const importer = worker(t, root, 'index');
+    assert.equal((await importer.message).state, 'owned');
+    const secondImporter = worker(t, root, 'index', 'another');
+    assert.equal((await secondImporter.message).code, 'INDEXING_BUSY');
+    await importer.stop();
+    const replacement = worker(t, root, 'nested');
+    assert.equal((await replacement.message).state, 'written');
+    assert.equal((await replacement.exit).code, 0);
+  },
+);
 
-test('clear reservation rejects same-collection writes but leaves other collections writable', async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'threadshelf-clear-reservation-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
-  const owner = worker(root, 'clear');
-  t.after(owner.stop);
-  assert.equal((await owner.message).state, 'owned');
-  const blocked = worker(root, 'write');
-  t.after(blocked.stop);
-  assert.equal((await blocked.message).code, 'COLLECTION_BUSY');
-  const independent = worker(root, 'write', 'beta');
-  t.after(independent.stop);
-  assert.equal((await independent.message).state, 'written');
-  assert.equal((await independent.exit).code, 0);
-  await owner.stop();
-  const recovered = worker(root, 'write');
-  t.after(recovered.stop);
-  assert.equal((await recovered.message).state, 'written');
-});
+test(
+  'clear reservation rejects same-collection writes but leaves other collections writable',
+  { timeout: 30_000 },
+  async (t) => {
+    const root = await temporaryRoot(t, 'threadshelf-clear-reservation-');
+    const owner = worker(t, root, 'clear');
+    assert.equal((await owner.message).state, 'owned');
+    const blocked = worker(t, root, 'write');
+    assert.equal((await blocked.message).code, 'COLLECTION_BUSY');
+    const independent = worker(t, root, 'write', 'beta');
+    assert.equal((await independent.message).state, 'written');
+    assert.equal((await independent.exit).code, 0);
+    await owner.stop();
+    const recovered = worker(t, root, 'write');
+    assert.equal((await recovered.message).state, 'written');
+  },
+);
 
 test(
   'server guard canonicalizes a symlinked database location',
-  { skip: process.platform === 'win32' },
+  { skip: process.platform === 'win32', timeout: 30_000 },
   async (t) => {
-    const root = await mkdtemp(join(tmpdir(), 'threadshelf-server-alias-'));
+    const root = await temporaryRoot(t, 'threadshelf-server-alias-');
     const alias = `${root}-alias`;
-    t.after(async () => {
-      await rm(alias, { force: true });
-      await rm(root, { recursive: true, force: true });
-    });
+    fixtures.get(t).paths.push(alias);
     await symlink(root, alias, 'dir');
-    const owner = worker(root, 'server');
-    t.after(owner.stop);
+    const owner = worker(t, root, 'server');
     assert.equal((await owner.message).state, 'owned');
-    const duplicate = worker(alias, 'server');
-    t.after(duplicate.stop);
+    const duplicate = worker(t, alias, 'server');
     assert.equal((await duplicate.message).state, 'rejected');
   },
 );
 
-test('ordinary mutation guards coexist so existing write locks can serialize concurrent edits', async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'threadshelf-shared-guard-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
-  const owner = worker(root, 'hold-write');
-  t.after(owner.stop);
-  assert.equal((await owner.message).state, 'owned');
-  const other = worker(root, 'write');
-  t.after(other.stop);
-  assert.equal((await other.message).state, 'written');
-  assert.equal((await other.exit).code, 0);
-});
+test(
+  'ordinary mutation guards coexist so existing write locks can serialize concurrent edits',
+  { timeout: 30_000 },
+  async (t) => {
+    const root = await temporaryRoot(t, 'threadshelf-shared-guard-');
+    const owner = worker(t, root, 'hold-write');
+    assert.equal((await owner.message).state, 'owned');
+    const other = worker(t, root, 'write');
+    assert.equal((await other.message).state, 'written');
+    assert.equal((await other.exit).code, 0);
+  },
+);
 
-test('cancellation interrupts a clear job waiting for an existing mutation', async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'threadshelf-clear-cancel-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
-  const owner = worker(root, 'hold-write');
-  t.after(owner.stop);
-  assert.equal((await owner.message).state, 'owned');
-  const started = Date.now();
-  const waiting = worker(root, 'clear-cancel');
-  t.after(waiting.stop);
-  assert.equal((await waiting.message).state, 'rejected');
-  assert.ok(
-    Date.now() - started < 5000,
-    'Cancellation must not wait for the 30-second lock timeout',
-  );
-});
+test(
+  'cancellation interrupts a clear job waiting for an existing mutation',
+  { timeout: 30_000 },
+  async (t) => {
+    const root = await temporaryRoot(t, 'threadshelf-clear-cancel-');
+    const owner = worker(t, root, 'hold-write');
+    assert.equal((await owner.message).state, 'owned');
+    const started = Date.now();
+    const waiting = worker(t, root, 'clear-cancel');
+    assert.equal((await waiting.message).state, 'rejected');
+    assert.ok(
+      Date.now() - started < 5000,
+      'Cancellation must not wait for the 30-second lock timeout',
+    );
+  },
+);
 
-test('a detached callback cannot reuse an expired clear reservation', async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'threadshelf-expired-clear-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
-  const stale = worker(root, 'expired-clear');
-  t.after(stale.stop);
-  assert.equal((await stale.message).state, 'released');
-  const next = worker(root, 'clear');
-  t.after(next.stop);
-  assert.equal((await next.message).state, 'owned');
-  const reply = new Promise((resolve) => stale.child.once('message', resolve));
-  stale.child.send('continue');
-  assert.equal((await reply).code, 'COLLECTION_BUSY');
-});
+test(
+  'a detached callback cannot reuse an expired clear reservation',
+  { timeout: 30_000 },
+  async (t) => {
+    const root = await temporaryRoot(t, 'threadshelf-expired-clear-');
+    const stale = worker(t, root, 'expired-clear');
+    assert.equal((await stale.message).state, 'released');
+    const next = worker(t, root, 'clear');
+    assert.equal((await next.message).state, 'owned');
+    const reply = new Promise((resolve) => stale.child.once('message', resolve));
+    stale.child.send('continue');
+    assert.equal((await reply).code, 'COLLECTION_BUSY');
+  },
+);
