@@ -83,7 +83,7 @@
     "@lancedb/lancedb": "^0.29.0",
     "@zip.js/zip.js": "2.24.0",
     "express": "^5.2.1",
-    "multer": "^2.4.0",
+    "multer": "^2.5.0",
     "parse5": "8.0.1"
   },
   "devDependencies": {
