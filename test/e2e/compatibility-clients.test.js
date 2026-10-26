@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { connect } from '@lancedb/lancedb';
+import { DatabaseSync } from 'node:sqlite';
 import {
   ThreadShelfClient,
   ServerSearchPager,
@@ -89,7 +90,7 @@ describe('Released Local client HTTP adapter compatibility', () => {
     await ctx?.stop();
   });
 
-  it('runs the exact shared private/public adapter bytes', async () => {
+  it('runs the exact released public adapter bytes', async () => {
     for (const [file, expected] of [
       ['reader/server.mjs', '5884a4f03d437a31a773b371da31e08d09431dcf'],
       ['alternative/server.cjs', '6f1f5cc2d4da2312045db5358c86c7e9165c2045'],
@@ -98,19 +99,30 @@ describe('Released Local client HTTP adapter compatibility', () => {
         new URL(`../fixtures/compatibility-clients/${file}`, import.meta.url),
       );
       const hash = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
-      assert.equal(hash, expected, `${file} must match the public v1.0.0 and private adapter`);
+      assert.equal(hash, expected, `${file} must match the pinned public release adapter`);
     }
   });
 
   it('uses real 384-dimensional model embeddings in the native store', async () => {
     const db = await connect(join(ctx.tempRoot, '.lancedb'));
-    const rows = await (
-      await db.openTable(collection)
-    )
-      .query()
-      .select(['vector'])
-      .limit(1)
-      .toArray();
+    const publications = new DatabaseSync(
+      join(ctx.tempRoot, '.lancedb', '.threadshelf-publication.sqlite'),
+      { readOnly: true },
+    );
+    let physical;
+    try {
+      physical = publications
+        .prepare('SELECT indexTable FROM publications WHERE collection=?')
+        .get(collection)?.indexTable;
+    } finally {
+      publications.close();
+    }
+    assert.equal(
+      typeof physical,
+      'string',
+      'The logical collection must have a published vector generation',
+    );
+    const rows = await (await db.openTable(physical)).query().select(['vector']).limit(1).toArray();
     const vector = Array.from(rows[0].vector);
     assert.equal(vector.length, 384);
     assert.ok(vector.every(Number.isFinite));

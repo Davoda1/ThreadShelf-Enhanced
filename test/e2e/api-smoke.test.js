@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { connect } from '@lancedb/lancedb';
 import { createMixedFixtureFolder, ingestViaNdjson, startApiServer } from './helpers.js';
 
@@ -34,8 +35,30 @@ describe('API E2E smoke', () => {
         assert.strictEqual(ingestResult.conversations, 6);
         assert.strictEqual(ingestResult.errors.length, 0);
         assert.ok(ingestResult.ingested >= 8);
-        const schema = await (await database.openTable('e2e_fixture')).schema();
+        const publicationDb = new DatabaseSync(
+          join(ctx.tempRoot, '.lancedb', '.threadshelf-publication.sqlite'),
+          { readOnly: true },
+        );
+        let publication;
+        try {
+          publication = publicationDb
+            .prepare('SELECT generation,indexTable FROM publications WHERE collection=?')
+            .get('e2e_fixture');
+        } finally {
+          publicationDb.close();
+        }
+        assert.ok(publication?.generation && publication.indexTable);
+        const publishedIndex = await database.openTable(publication.indexTable);
+        const schema = await publishedIndex.schema();
         assert.ok(schema.fields.some((field) => field.name === 'provider'));
+        assert.strictEqual(await publishedIndex.countRows(), ingestResult.ingested);
+        assert.strictEqual(await publishedIndex.countRows("id='legacy-row'"), 0);
+        assert.strictEqual(
+          await (
+            await database.openTable('__threads')
+          ).countRows(`collection='e2e_fixture' AND importGeneration='${publication.generation}'`),
+          6,
+        );
 
         const statsRes = await fetch(`${ctx.baseUrl}/api/collections/e2e_fixture/stats`);
         assert.strictEqual(statsRes.ok, true);

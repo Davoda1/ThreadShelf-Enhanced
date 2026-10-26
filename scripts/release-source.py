@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build reproducible ZIP and TAR.GZ source archives from a committed Git tree.
+"""Build reproducible source ZIP/TAR.GZ and SHA256SUM.txt from a committed tree.
 
 Usage: python3 scripts/release-source.py --output-dir release [--ref HEAD]
 Uncommitted files, local configuration and runtime data are never collected.
@@ -30,12 +30,14 @@ def main():
     commit = git('rev-parse', '--verify', '--end-of-options', args.ref + '^{commit}').decode().strip()
     entries = git('ls-tree', '-rz', '--full-tree', commit).split(b'\0')
     paths = {}
+    object_ids = {}
     forbidden_roots = {
-        'personal', 'private', 'exports', 'DO_NOT_COMMIT', 'node_modules',
+        'personal', 'private', 'exports', 'do_not_commit', 'node_modules',
         '.local', '.cache', '.config', '.home', '.npm-cache', '.npm-global',
         '.tmp', 'dist', 'public', 'release', 'test-results', 'playwright-report',
+        'sha256sum.txt',
     }
-    forbidden_anywhere = {'personal', 'private', 'exports', 'DO_NOT_COMMIT',
+    forbidden_anywhere = {'personal', 'private', 'exports', 'do_not_commit',
                           'node_modules', '.local', '.cache', '.home', '.npm-cache',
                           '.npm-global', 'test-results', 'playwright-report'}
     forbidden_suffixes = ('.zip', '.7z', '.tar', '.gz', '.db', '.sqlite', '.sqlite3',
@@ -45,21 +47,23 @@ def main():
         if not entry:
             continue
         metadata, raw_path = entry.split(b'\t', 1)
-        mode, kind, _oid = metadata.decode().split()
+        mode, kind, oid = metadata.decode().split()
         path = raw_path.decode('utf-8')
         parts = PurePosixPath(path).parts
+        lower_parts = tuple(part.lower() for part in parts)
         if (not parts or path.startswith('/') or '\\' in path or '..' in parts
-                or any(ord(c) < 32 for c in path)
-                or parts[0] in forbidden_roots
-                or any(p in forbidden_anywhere for p in parts)
-                or any(p.startswith(('.threadshelf', '.lancedb', '.uploads', '.migration-stage-')) for p in parts)
-                or '.collections.json' in parts
-                or any((p == '.env' or p.startswith('.env.')) and path != '.env.example' for p in parts)
+                or ':' in path or any(ord(c) < 32 for c in path)
+                or lower_parts[0] in forbidden_roots
+                or any(p in forbidden_anywhere for p in lower_parts)
+                or any(p.startswith(('.threadshelf', '.lancedb', '.uploads', '.migration-stage-', '.tmp-')) for p in lower_parts)
+                or '.collections.json' in lower_parts
+                or any((p == '.env' or p.startswith('.env.')) and path != '.env.example' for p in lower_parts)
                 or path.lower().endswith(forbidden_suffixes)):
             raise SystemExit(f'Refusing private, generated or unsafe release path: {path}')
         if kind != 'blob' or mode not in ('100644', '100755'):
             raise SystemExit(f'Refusing non-regular source entry: {path} ({mode})')
         paths[path] = int(mode, 8)
+        object_ids[path] = oid
 
     required = {'package.json', 'package-lock.json', 'README.md', 'LICENSE',
                 'THIRD_PARTY_NOTICES.md', '.env.example', 'threadshelf-enhanced',
@@ -73,13 +77,27 @@ def main():
                 contents[member.name] = archive.extractfile(member).read()
     if contents.keys() != paths.keys():
         raise SystemExit('Git archive contents differ from the reviewed tree (check export attributes).')
+    object_format = git('rev-parse', '--show-object-format').decode().strip()
+    for path, content in contents.items():
+        digest = hashlib.new(object_format)
+        digest.update(f'blob {len(content)}\0'.encode('ascii'))
+        digest.update(content)
+        if digest.hexdigest() != object_ids[path]:
+            raise SystemExit(f'Git archive changed committed source bytes: {path} (check export-subst attributes).')
     version = json.loads(contents['package.json'])['version']
     if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?', version):
         raise SystemExit('Invalid release version')
     timestamp = int(git('show', '-s', '--format=%ct', commit))
     zip_date = datetime.datetime.fromtimestamp(max(timestamp, 315532800), datetime.timezone.utc).timetuple()[:6]
     prefix = f'ThreadShelf-Enhanced-{version}-Source'
+    destinations = [args.output / (prefix + extension) for extension in ('.zip', '.tar.gz')]
+    checksum_path = args.output / 'SHA256SUM.txt'
+    if any(parent.is_symlink() for parent in (args.output, *args.output.parents)):
+        raise SystemExit('Refusing a symlinked release output directory.')
+    if any(path.is_symlink() for path in (*destinations, checksum_path)):
+        raise SystemExit('Refusing a symlinked release output file.')
     args.output.mkdir(parents=True, exist_ok=True)
+    checksums = {}
     for extension in ('zip', 'tar.gz'):
         destination = args.output / f'{prefix}.{extension}'
         if extension == 'zip':
@@ -99,9 +117,14 @@ def main():
                         info.mtime = timestamp
                         info.mode = paths[path] & 0o777
                         archive.addfile(info, io.BytesIO(content))
+        digest = hashlib.sha256(destination.read_bytes()).hexdigest()
+        checksums[destination.name] = digest
         print(json.dumps({'file': str(destination.resolve()), 'commit': commit,
                           'files': len(paths), 'bytes': destination.stat().st_size,
-                          'sha256': hashlib.sha256(destination.read_bytes()).hexdigest()}))
+                          'sha256': digest}))
+    checksum_path.write_bytes(''.join(
+        f'{checksums[name]}  {name}\n' for name in sorted(checksums)
+    ).encode('ascii'))
 
 
 if __name__ == '__main__':

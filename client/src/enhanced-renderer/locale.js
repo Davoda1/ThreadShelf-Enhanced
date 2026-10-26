@@ -123,11 +123,153 @@ const japanese = Object.freeze({
   "That turn is no longer available.": "この発言は利用できなくなりました。",
   "Equation rendering failed": "数式を描画できませんでした"
 });
-export function setRendererLocale(locale) { language = locale || 'en'; }
+const russian = Object.freeze({
+  "Share of total (calculated)": "Доля от общего значения (расчётная)",
+  "Use arrow keys to inspect values; Escape dismisses. Exact values are available below.": "Используйте клавиши со стрелками для просмотра значений; Escape закрывает подсказку. Точные значения приведены ниже.",
+  "Chart": "Диаграмма",
+  "Exact values": "Точные значения",
+  "Category": "Категория",
+  "Series": "Ряд",
+  "Value": "Значение",
+  "X": "X",
+  "Y": "Y",
+  "Chart shown as saved data": "Диаграмма показана в виде сохранённых данных",
+  "Saved chart data": "Сохранённые данные диаграммы",
+  "Archived illustration": "Сохранённая иллюстрация",
+  "Chart exceeds display limits": "Диаграмма превышает ограничения отображения",
+  "Image unavailable offline": "Изображение недоступно без сети",
+  "Image unavailable": "Изображение недоступно",
+  "Source unavailable": "Источник недоступен",
+  "Archived suggestion": "Сохранённое предложение",
+  "Archived map locations": "Сохранённые места на карте",
+  "Original rich source": "Исходный текст расширенного содержимого",
+  "Copy": "Копировать",
+  "Copy code block to clipboard": "Копировать блок кода в буфер обмена",
+  "Repaired": "Исправленный",
+  "Original": "Исходный",
+  "Showing repaired Mermaid; click to show original": "Показана исправленная диаграмма Mermaid; нажмите для просмотра исходной",
+  "Showing repaired version; click to show original": "Показана исправленная версия; нажмите для просмотра исходной",
+  "Showing original Mermaid; click to show repaired": "Показана исходная диаграмма Mermaid; нажмите для просмотра исправленной",
+  "Showing original version; click to show repaired": "Показана исходная версия; нажмите для просмотра исправленной",
+  "Copy displayed Mermaid source to clipboard": "Копировать отображаемый код Mermaid в буфер обмена",
+  "Mermaid diagram": "Диаграмма Mermaid",
+  "Rendering diagram…": "Построение диаграммы…",
+  "Mermaid source": "Код Mermaid",
+  "Could not render this Mermaid diagram": "Не удалось построить эту диаграмму Mermaid",
+  "Collapse prompt": "Свернуть запрос",
+  "Show full prompt": "Показать запрос полностью",
+  "Collapse reasoning": "Свернуть рассуждение",
+  "Expand reasoning": "Развернуть рассуждение",
+  "Compact messages are disabled": "Компактный режим сообщений отключён",
+  "Copy message": "Копировать сообщение",
+  "Copied": "Скопировано",
+  "Empty": "Пусто",
+  "Failed": "Ошибка",
+  "Assistant": "Ассистент",
+  "User": "Пользователь",
+  "Reasoning": "Рассуждение",
+  "System": "Система",
+  "Tool": "Инструмент",
+  "No messages found": "Сообщения не найдены",
+  "Conversation navigation": "Навигация по беседе",
+  "Conversation navigator": "Навигатор беседы",
+  "Prompts and responses": "Запросы и ответы",
+  "Conversation outline": "Содержание беседы",
+  "Prompt": "Запрос",
+  "Response": "Ответ",
+  "Opening response": "Первый ответ",
+  "(Empty message)": "(Пустое сообщение)",
+  "Bookmark": "Закладка",
+  "Bookmarked": "В закладках",
+  "Remove bookmark": "Удалить закладку",
+  "Bookmark this message": "Добавить сообщение в закладки",
+  "Saved turn is no longer available. Resumed at the nearest available turn.": "Сохранённое сообщение больше недоступно. Чтение продолжено с ближайшего доступного сообщения.",
+  "Resumed your saved reading position.": "Чтение продолжено с сохранённого места.",
+  "Returned to the saved reading position.": "Возврат к сохранённому месту чтения.",
+  "Reading data could not be saved.": "Не удалось сохранить данные чтения.",
+  "That turn is no longer available.": "Это сообщение больше недоступно.",
+  "Equation rendering failed": "Не удалось отобразить формулу"
+});
+const extra = Object.freeze({
+  "Saved image attachments": [
+    "Mentett képmellékletek",
+    "Gespeicherte Bildanhänge",
+    "Images jointes enregistrées",
+    "保存された添付画像",
+    "Сохранённые вложенные изображения"
+  ],
+  "Saved attachment": [
+    "Mentett melléklet",
+    "Gespeicherter Anhang",
+    "Pièce jointe enregistrée",
+    "保存された添付ファイル",
+    "Сохранённое вложение"
+  ],
+  "Scrollable table": [
+    "Görgethető táblázat",
+    "Scrollbare Tabelle",
+    "Tableau défilant",
+    "スクロール可能な表",
+    "Прокручиваемая таблица"
+  ],
+  "Copy failed": [
+    "A másolás sikertelen",
+    "Kopieren fehlgeschlagen",
+    "Échec de la copie",
+    "コピーできませんでした",
+    "Не удалось скопировать"
+  ],
+  "Load image": [
+    "Kép betöltése",
+    "Bild laden",
+    "Charger l’image",
+    "画像を読み込む",
+    "Загрузить изображение"
+  ],
+  "Load external image": [
+    "Külső kép betöltése",
+    "Externes Bild laden",
+    "Charger l’image externe",
+    "外部画像を読み込む",
+    "Загрузить внешнее изображение"
+  ],
+  "Loading image…": [
+    "Kép betöltése…",
+    "Bild wird geladen…",
+    "Chargement de l’image…",
+    "画像を読み込み中…",
+    "Загрузка изображения…"
+  ],
+  "The image could not be loaded.": [
+    "A kép nem tölthető be.",
+    "Das Bild konnte nicht geladen werden.",
+    "L’image n’a pas pu être chargée.",
+    "画像を読み込めませんでした。",
+    "Не удалось загрузить изображение."
+  ],
+  "Retry image": [
+    "Kép újrapróbálása",
+    "Bild erneut laden",
+    "Réessayer l’image",
+    "画像を再読み込み",
+    "Повторить загрузку"
+  ],
+  "Archived image": [
+    "Archivált kép",
+    "Archiviertes Bild",
+    "Image archivée",
+    "保存された画像",
+    "Сохранённое изображение"
+  ]
+});
+export function setRendererLocale(locale) { language = ['en', 'hu', 'de', 'fr', 'ja', 'ru'].includes(locale) ? locale : 'en'; }
 export function tr(text) {
+  const extraIndex = ['hu', 'de', 'fr', 'ja', 'ru'].indexOf(language);
+  if (extraIndex >= 0 && extra[text]) return extra[text][extraIndex];
   if (language === 'ja') return japanese[text] ?? text;
+  if (language === 'ru') return russian[text] ?? text;
   const i = ['hu', 'de', 'fr'].indexOf(language);
   if (i >= 0 && rows[text]) return rows[text][i];
   return text;
 }
-export const readerLocaleCoverage = Object.keys(rows);
+export const readerLocaleCoverage = [...Object.keys(rows), ...Object.keys(extra)];

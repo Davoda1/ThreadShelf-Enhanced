@@ -10,6 +10,7 @@ export interface NativeRecord {
 }
 export interface ImportProgress {
   phase: string;
+  code?: 'empty' | 'unsupported';
   sourceFile?: string;
   message?: string;
   bytes?: number;
@@ -19,6 +20,8 @@ export interface NativeOptions {
   signal?: AbortSignal;
   limits?: Partial<typeof IMPORT_LIMITS>;
   onProgress?: (event: ImportProgress) => void;
+  checkpoint?: () => Promise<void>;
+  beforeWholeDocument?: (bytes: number) => Promise<void>;
 }
 export const IMPORT_LIMITS: {
   fileBytes: number;
@@ -41,7 +44,10 @@ export function normalizeDocument(
   sourceFile?: string,
   options?: NativeOptions,
 ): NativeRecord[];
+export function isClearlyUnsupportedExportPrefix(prefix: Buffer, filename: string): boolean;
 export function importPaths(
   paths: string[],
   options?: NativeOptions,
-): AsyncGenerator<NativeRecord | { error: string; sourceFile: string }>;
+): AsyncGenerator<
+  NativeRecord | { error: string; sourceFile: string; kind?: 'unsupported' | 'invalid' }
+>;

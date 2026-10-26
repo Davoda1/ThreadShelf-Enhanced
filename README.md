@@ -1,14 +1,14 @@
 # ThreadShelf Enhanced
 
 [![CI](https://github.com/Davoda1/ThreadShelf-Enhanced/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Davoda1/ThreadShelf-Enhanced/actions/workflows/ci.yml)
-[![Version 1.2.0](https://img.shields.io/badge/version-1.2.0-blue)](https://github.com/Davoda1/ThreadShelf-Enhanced/releases)
+[![Version 1.3.0](https://img.shields.io/badge/version-1.3.0-blue)](https://github.com/Davoda1/ThreadShelf-Enhanced/releases)
 [![MIT license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Node 24+](https://img.shields.io/badge/Node.js-24%2B-43853d)](#installation)
 [![Source distribution](https://img.shields.io/badge/distribution-source_ZIP_%2F_TAR.GZ-6f42c1)](https://github.com/Davoda1/ThreadShelf-Enhanced/releases)
 
 Import, search, read and continue AI conversations on your own machine. ThreadShelf Enhanced adds richer rendering, broader export support and responsive layouts to [ThreadShelf v1.3.0](https://github.com/ChrystianSchutz/ThreadShelf/tree/v1.3.0), while preserving its API routes, storage identities and light/dark interface.
 
-[Installation](#installation) · [Configuration](#configuration) · [Import support](#import-support-and-known-limits) · [Compatibility](docs/ENHANCED_COMPATIBILITY.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+[Installation](#installation) · [Configuration](#configuration) · [Import support](#import-support-and-known-limits) · [Background jobs](docs/IMPORT-JOBS.md) · [Compatibility](docs/ENHANCED_COMPATIBILITY.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
 ## Interface
 
@@ -26,26 +26,30 @@ The web interface in light and dark themes, using synthetic demo conversations. 
 
 - Rich Markdown, tables, highlighted code, mathematics, diagrams, citations and supported ChatGPT rich content, with bundled rendering libraries and readable fallbacks.
 - Native and converted JSON, HTML and ZIP imports, with original conversation data and per-message metadata retained alongside normalized turns.
-- Checked local image attachments and explicit controls for loading remote images.
-- A bounded application layout, scrollable sidebar and responsive dialogs for small or short windows.
+- Inline click-to-load or automatic images, six compact/wide placeholder states and an optional server-only image cache with independent per-collection clearing.
+- Independent animated rich-rendering switches for user prompts, thinking and responses. Turning rich rendering off keeps basic Markdown visible.
+- English, Hungarian, German, Japanese, French and Russian interface settings.
+- A bounded application layout, scrollable sidebar, responsive dialogs and deferred expensive rendering with stable reading position.
 - Integrated Reader pagination for compatible [ThreadShelf Local Suite](https://github.com/Davoda1/ThreadShelf-Local-Suite) clients. No separate pagination patch is needed.
 - Project-local Node/npm setup and a Linux launcher for repeated starts and folder indexing.
 
 Search embeddings and storage run locally. First setup and model use require network downloads. OpenRouter generation is an optional external service: using it sends selected conversation content to OpenRouter and its provider. See [security and privacy](SECURITY.md).
 
-## Correctness fixes in 1.2.0
+## Scalable imports and background jobs in 1.3.0
 
-Version **1.2.0** fixes lost thread updates between concurrent processes, lost collection registrations during concurrent creation, and collection deletion using the wrong uploads directory. Shared operating-system locks protect complete mutations; collection registry updates are published atomically. Ingestion and deletion now use the same upload-path resolver.
+Version **1.3.0** replaces whole-folder allocations and oversized fingerprint strings with streaming normalization, bounded disk staging and batched storage. Matching archive and search-index generations are published together, and unchanged content can reuse verified embeddings.
 
-The existing API, stored conversation identities, embedding model and database format are preserved. No archive reimport or index rebuild is required. Stop older server, MCP, importer and watcher processes before upgrading: every process writing to the same store must use 1.2.0 to participate in the new locking protocol. The **1.0.0** and **1.1.0** tags and releases remain available.
+Accepted imports run as persistent server jobs. Keep the tab open until file transfer and server acceptance finish; afterward, parsing and indexing continue without a connected browser. Return to **Add data** to inspect progress, skipped files, errors, cancellation or retry. Unsupported files are skipped without blocking valid conversations in the same folder or ZIP.
 
-The dependency-security gates introduced in 1.1.0 remain required, including separate checks for bundled browser components and their asset hashes.
+A single coordinator protects web, CLI, watcher and recovery work. Only one index operation and one HTTP server use a database at a time. Replacement imports reserve their collection against other writes while its published data remains readable. Memory monitoring accounts for process/native allocations and effective host/container limits; batches shrink, wait or fail safely under sustained pressure.
 
-See the [changelog](CHANGELOG.md) for the changes and [validation record](docs/ENHANCED_VALIDATION.md) for test results and platform scope.
+The existing API, stored identities, embedding model and vector dimensions remain compatible. **Upgrade every process sharing a writable store to 1.3.0 together.** Publication metadata changes the internal storage layout: retain a stopped backup, and never open a 1.3.0-written store with an older server. Prior release tags and assets remain available.
+
+See [import jobs and resource limits](docs/IMPORT-JOBS.md), the [changelog](CHANGELOG.md) and [validation record](docs/ENHANCED_VALIDATION.md) for behavior, recovery and test scope.
 
 ## Installation
 
-Download a source **ZIP** or **TAR.GZ** from [Releases](https://github.com/Davoda1/ThreadShelf-Enhanced/releases), or clone the repository's `master` branch. Extract into a writable directory and run setup there. Enhanced is distributed as source; it is not published to npm.
+Download the **1.3.0** [source ZIP](https://github.com/Davoda1/ThreadShelf-Enhanced/releases/download/v1.3.0/ThreadShelf-Enhanced-1.3.0-Source.zip) or [source TAR.GZ](https://github.com/Davoda1/ThreadShelf-Enhanced/releases/download/v1.3.0/ThreadShelf-Enhanced-1.3.0-Source.tar.gz), with the consolidated [SHA256SUM.txt](https://github.com/Davoda1/ThreadShelf-Enhanced/releases/download/v1.3.0/SHA256SUM.txt). [All releases](https://github.com/Davoda1/ThreadShelf-Enhanced/releases) remain available. You can also clone the repository's `master` branch. Extract into a writable directory and run setup there. Enhanced is distributed as source; it is not published to npm.
 
 The setup scripts download official **Node 24.22.1 LTS**, verify its SHA-256 against the official checksum list, install **npm 12.2.1** into the project-local runtime, install locked dependencies and build the application. They do not change your global Node installation or shell profile. Administrator access is not required.
 
@@ -70,6 +74,20 @@ The launcher resolves its project directory from its own location, including whe
 | `./threadshelf-enhanced --check-runtime` | Check the selected runtime |
 | `./threadshelf-enhanced --index /path/to/exports archive` | Import a server-local folder into the `archive` collection |
 | `./threadshelf-enhanced --index /path/to/exports archive --clear` | Replace that collection from the folder |
+
+The optional interactive importer provides a review screen, readiness checks,
+resource controls and explicit source-copy choices:
+
+```bash
+bash manual-importer.sh
+bash manual-importer.sh --help
+```
+
+Its default JavaScript old-space ceiling is 4096 MiB, with startup headroom
+checks and configurable `--heap-mb`/`--reserve-mb`. Its non-interactive mode and
+`--health`/`--dry-run` inspection modes are documented in its help. It uses the
+same coordinated server import pipeline. The public launcher does not require
+tmux or GNU Screen.
 
 Use `--clear` only when you intend to replace the collection. An older Linux distribution may need a newer system libc to run official Node binaries; setup checks the runtime before replacing an existing installation.
 
@@ -118,6 +136,8 @@ Setup preserves an existing `.env` and copies `.env.example` when it is absent. 
 | `ALLOWED_HOSTS` | Comma-separated request hostnames/IP addresses, without schemes or ports |
 | `THREADSHELF_DATA_DIR` | Override the common data directory |
 | `LANCEDB_PATH`, `UPLOADS_DIR`, `COLLECTIONS_PATH` | Override individual storage locations |
+| `THREADSHELF_MEMORY_RESERVE_MB`, `THREADSHELF_PROCESS_MEMORY_MB` | Override the memory governor's headroom and process RSS budgets |
+| `THREADSHELF_IMAGE_CACHE_PATH` | Optional separate location for disposable image-cache data |
 | `OPENROUTER_API_KEY`, `HF_TOKEN`, `GITHUB_TOKEN` | Optional credentials for the corresponding integrations |
 
 Host checks do not provide authentication. Remote access requires an appropriate network boundary or authenticated reverse proxy. Keep `.env`, uploaded exports, databases and model files out of source control. The [upstream manual](docs/UPSTREAM_README.md) explains inherited generation, MCP, search and configuration features; its npm publishing and installation instructions apply to upstream ThreadShelf.
@@ -127,16 +147,21 @@ Host checks do not provide authentication. Remote access requires an appropriate
 The adapters support ChatGPT, Claude, Google AI Studio, OpenRouter, selected LM Studio formats, Grok, Meta AI, Gemini/Takeout, Venice, normalized ThreadShelf conversations and supported converted exports. JSON and embedded HTML data are parsed without executing export scripts, and original input files are never rewritten.
 
 - **Duplicate export representations:** a ZIP containing both `conversations.json` and `chat.html` imports both and can create duplicate conversations. Keep one conversation representation per import.
-- **Images in browser folder uploads:** the browser's folder selection filters out image companions. To retain supported local images, use a server-local folder or a ZIP containing one conversation JSON representation and its image companions.
+- **Local image companions:** folder uploads include supported image files. Keep companion paths intact; a server-local folder or ZIP with one conversation representation and its image companions also preserves supported local media.
 - **Venice:** native unencrypted version 4 backups are supported; encrypted backups are unsupported.
 - **JSONL:** newline-delimited JSON is unsupported. Use a supported JSON document, HTML export or ZIP.
-- **Resource limits:** large imports still require memory for normalized conversations. Images and archives have explicit size and safety limits. Unknown export layouts and rich widgets may remain readable source or placeholders.
+- **Skipped files versus failed exports:** unrelated, unsupported and empty auxiliary files are skipped. A recognized but malformed export, failed preparation or no valid conversations prevents destructive collection replacement.
+- **Resource limits:** bounded staging removes the whole-folder memory requirement. Individual records, whole-document formats, images and archives still have explicit safety limits, and replacement imports need free disk space. Unknown rich widgets may remain readable source or placeholders.
 
 See the [compatibility contract](docs/ENHANCED_COMPATIBILITY.md) and [import adapter notes](src/enhanced-import/vendor/README.md) for exact behavior and limits.
 
 ## Existing deployments and clients
 
-Back up `.lancedb`, `.uploads`, `.collections.json`, `.threadshelf` and `.env`, or their configured external locations, before moving a deployment. Validate the new source in a separate directory against a backup first. Preserve the server URL and configured source paths when client bookmarks or thread identities depend on them.
+Stop all server, MCP, importer and watcher processes first. Back up the complete `.lancedb`, `.uploads`, `.collections.json`, `.threadshelf` and `.env`, or their configured external locations. The complete database includes its publication/job metadata and SQLite sidecars; do not copy selected LanceDB tables alone.
+
+For a fresh directory, run setup without starting the server, then copy the stopped data and configuration into their corresponding locations. Preserve relative layouts and inspect absolute paths, custom data roots and symlinks before removing the old installation. Do not copy old dependencies, local Node binaries or generated builds over the fresh source. Keep the old copy until stored threads, search, media, generation settings and client connections are verified.
+
+All processes sharing the new store must run 1.3.0. Opening old data does not require reimporting exports, although pending index work may recover at startup. Once the new server writes generation metadata, rollback means restoring the stopped backup, not starting an older binary against the changed store. Preserve the server URL and source paths when bookmarks or thread identities depend on them.
 
 Enhanced adds metadata columns while preserving existing normalized turns and identity keys. Compatible Local Suite clients keep their own archive formats; Enhanced does not migrate their databases. Do not install the older Reader pagination patch over Enhanced. The [compatibility matrix](docs/ENHANCED_COMPATIBILITY.md) distinguishes server API checks from desktop and archive behavior.
 

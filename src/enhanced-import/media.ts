@@ -133,6 +133,7 @@ export const createMediaResolver = async (
     if (!target || total >= MAX_TOTAL_BYTES) return undefined;
     const cacheKey = `${memberSource}\0${source}`;
     if (cache.has(cacheKey)) return cache.get(cacheKey) ?? undefined;
+    if (cache.size >= 512) cache.delete(cache.keys().next().value!);
     cache.set(cacheKey, null);
     let bytes: Uint8Array | undefined;
     if (/\.zip$/i.test(sourcePath)) {

@@ -1,7 +1,12 @@
 #!/usr/bin/env tsx
 import { stat } from 'fs/promises';
 import { basename, resolve } from 'path';
-import { ingestFolder } from './ingest.js';
+import {
+  createFolderImportJob,
+  waitForImportJob,
+  cancelImportJob,
+  startImportJobs,
+} from './import-jobs.js';
 import { invocation } from './paths.js';
 import { watchFolder } from './watch.js';
 import { normalizeCollectionName } from './validation.js';
@@ -56,21 +61,49 @@ try {
 const startedAt = Date.now();
 const resolvedFolder = resolve(folder);
 let lastLoggedFile = '';
+let lastPhase = '';
+let currentJobId: string | undefined;
+let interrupted = false;
+const stopJobs = startImportJobs();
+const interruptImport = () => {
+  interrupted = true;
+  if (currentJobId) void cancelImportJob(currentJobId);
+};
+process.on('SIGINT', interruptImport);
+process.on('SIGTERM', interruptImport);
 
 try {
-  const result = await ingestFolder(collection, resolvedFolder, {
+  const accepted = await createFolderImportJob({
+    collection,
+    folderPath: resolvedFolder,
     clearFirst,
-    onProgress: (event) => {
+  });
+  currentJobId = accepted.id;
+  if (interrupted) await cancelImportJob(accepted.id);
+  console.error(`[ingest] job=${accepted.id} collection=${collection} folder=${resolvedFolder}`);
+  const job = await waitForImportJob(accepted.id, {
+    onProgress: (current) => {
+      const event = current.progress;
+      if (!event) return;
       const fileLabel = event.currentFile ? basename(event.currentFile) : '';
       if (fileLabel && fileLabel !== lastLoggedFile) {
         lastLoggedFile = fileLabel;
         console.error(`[ingest] ${event.processedFiles}/${event.totalFiles} ${fileLabel}`);
       }
-      if (event.status === 'starting') {
-        console.error(`[ingest] collection=${collection} folder=${resolvedFolder}`);
+      if (event.phase && event.phase !== lastPhase) {
+        lastPhase = event.phase;
+        console.error(`[ingest] ${event.phase}`);
       }
     },
   });
+  currentJobId = undefined;
+  if (job.state === 'cancelled') {
+    console.error('[ingest] cancelled; completed data remains protected.');
+    await stopJobs();
+    process.exit(0);
+  }
+  if (!job.result) throw new Error(job.error || `Import ${job.state}`);
+  const result = job.result;
   await recoverPendingIndexes({ collection });
 
   console.error(
@@ -78,7 +111,8 @@ try {
   );
   console.log(JSON.stringify({ collection, ...result }, null, 2));
 
-  if (!watchMode) {
+  if (!watchMode || interrupted) {
+    await stopJobs();
     process.exit(result.errors.length > 0 ? 2 : 0);
   }
 
@@ -109,11 +143,13 @@ try {
     stopRecovery();
     console.error('[watch] stopping…');
     await watcher.close();
+    await stopJobs();
     process.exit(0);
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 } catch (e) {
+  await stopJobs();
   console.error(`[ingest] failed: ${(e as Error).message}`);
   process.exit(1);
 }

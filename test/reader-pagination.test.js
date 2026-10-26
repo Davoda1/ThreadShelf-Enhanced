@@ -1,3 +1,4 @@
+import { closeStoragePublication } from '../src/storage-publication.js';
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -75,6 +76,7 @@ before(async () => {
 });
 after(async () => {
   await new Promise((resolve) => server.close(resolve));
+  closeStoragePublication();
   await rm(temp, { recursive: true, force: true });
 });
 

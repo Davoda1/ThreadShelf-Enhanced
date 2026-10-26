@@ -1,3 +1,4 @@
+import { t, useI18n } from '../i18n';
 import { useToastStore } from '../toast';
 import { Icons } from '../icons';
 
@@ -8,6 +9,7 @@ const ICON_FOR = {
 } as const;
 
 export function Toaster() {
+  useI18n();
   const toasts = useToastStore((s) => s.toasts);
   const dismissToast = useToastStore((s) => s.dismissToast);
 
@@ -15,16 +17,16 @@ export function Toaster() {
 
   return (
     <div className="toaster" role="status" aria-live="polite">
-      {toasts.map((t) => (
+      {toasts.map((item) => (
         <button
-          key={t.id}
+          key={item.id}
           className="toast"
-          data-type={t.type}
-          onClick={() => dismissToast(t.id)}
-          title="Dismiss"
+          data-type={item.type}
+          onClick={() => dismissToast(item.id)}
+          title={t('Dismiss')}
         >
-          <span className="toast-ico">{ICON_FOR[t.type]}</span>
-          <span className="toast-text">{t.text}</span>
+          <span className="toast-ico">{ICON_FOR[item.type]}</span>
+          <span className="toast-text">{t(item.text)}</span>
         </button>
       ))}
     </div>

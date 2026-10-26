@@ -1,3 +1,4 @@
+import { t, useI18n } from '../i18n';
 import { useState, useCallback } from 'react';
 import { Icons } from '../icons';
 import { copyText } from '../utils';
@@ -15,6 +16,7 @@ const MCP_CONFIG = `{
 }`;
 
 export function McpView() {
+  useI18n();
   const [copied, setCopied] = useState('');
 
   const copy = useCallback((key: string, text: string) => {
@@ -26,24 +28,27 @@ export function McpView() {
   return (
     <div className="view">
       <div className="section-h">
-        <h2>MCP server</h2>
+        <h2>{t('MCP server')}</h2>
         <span className="desc">
-          Expose your local archive to Claude Desktop, Cursor, and other MCP clients over stdio.
+          {t(
+            'Expose your local archive to Claude Desktop, Cursor, and other MCP clients over stdio.',
+          )}
         </span>
       </div>
 
       <div className="banner info">
         <span className="ico">{Icons.info}</span>
         <div className="grow">
-          MCP runs over stdio against your local LanceDB — no port, no auth surface. Stop the
-          process to revoke access.
+          {t(
+            'MCP runs over stdio against your local LanceDB — no port, no auth surface. Stop the process to revoke access.',
+          )}
         </div>
       </div>
 
       <div className="panel">
         <div className="panel-head">
-          <h3>Start the server</h3>
-          <span className="sub">run from project root</span>
+          <h3>{t('Start the server')}</h3>
+          <span className="sub">{t('run from project root')}</span>
         </div>
         <div className="panel-body">
           <pre
@@ -64,7 +69,7 @@ export function McpView() {
               style={{ position: 'absolute', top: 6, right: 6 }}
               onClick={() => copy('cmd', MCP_COMMAND)}
             >
-              {copied === 'cmd' ? 'copied' : 'copy'}
+              {t(copied === 'cmd' ? 'copied' : 'copy')}
             </button>
           </pre>
         </div>
@@ -72,8 +77,8 @@ export function McpView() {
 
       <div className="panel">
         <div className="panel-head">
-          <h3>Claude Desktop config</h3>
-          <span className="sub">Settings → MCP → Edit config</span>
+          <h3>{t('Claude Desktop config')}</h3>
+          <span className="sub">{t('Settings → MCP → Edit config')}</span>
         </div>
         <div className="panel-body">
           <pre
@@ -94,7 +99,7 @@ export function McpView() {
               style={{ position: 'absolute', top: 6, right: 6 }}
               onClick={() => copy('cfg', MCP_CONFIG)}
             >
-              {copied === 'cfg' ? 'copied' : 'copy'}
+              {t(copied === 'cfg' ? 'copied' : 'copy')}
             </button>
           </pre>
         </div>

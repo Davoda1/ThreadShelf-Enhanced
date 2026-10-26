@@ -31,8 +31,8 @@ Runtime and resource checks:
                         Otherwise use THREADSHELF_NODE_VERSION if set, one
                         installed .local Node runtime, then Node on PATH.
                         Multiple local runtimes require an explicit selection.
-  --heap-mb N           V8 old-space allowance in MiB (default: 8192).
-  --reserve-mb N        Required additional available memory in MiB
+  --heap-mb N           V8 old-space allowance in MiB (default: 4096).
+  --reserve-mb N        Required available memory beyond startup work in MiB
                         (default: greater of 2048 and 25% of heap).
   --min-free-disk-mb N  Minimum free space on the database filesystem (1024).
   --max-age-days N      Reject older/future-dated selected files; 0 disables
@@ -173,7 +173,7 @@ const readline = require('node:readline/promises');
 const MIB = 1048576;
 const root = fs.realpathSync(process.argv[1]);
 const cwd = process.cwd();
-const opt = { collection:'chatgpt', clear:false, heap:8192, reserve:null, disk:1024,
+const opt = { collection:'chatgpt', clear:false, heap:4096, reserve:null, disk:1024,
   age:0, yes:false, health:false, dry:false, replace:false, session:false, color:'auto', interactive:false, nonInteractive:false };
 const flags = new Map([
   ['--import-dir','input'], ['--collection','collection'], ['--source-json','source'],
@@ -267,12 +267,22 @@ function canonicalFuture(file) {
 }
 function inside(a,b) { const r=path.relative(a,b); return r==='' || (!r.startsWith('..'+path.sep) && r!=='..' && !path.isAbsolute(r)); }
 function freeDisk(dir) { const s=fs.statfsSync(nearestDir(dir),{bigint:true}); return Number(s.bavail*s.bsize); }
+function availableMemoryMiB() {
+  const monitor=path.join(root,'dist/src/memory-governor.js');
+  // Reuse the server's effective host/container and reclaimable-cache probe.
+  // Older installations without this module retain the Node fallback.
+  const bytes=fs.existsSync(monitor)
+    ? require(monitor).systemMemory().availableBytes
+    : process.availableMemory();
+  return Math.floor(bytes/MIB);
+}
 function checkMemory() {
-  const available=Math.floor(process.availableMemory()/MIB);
-  const needed=opt.heap+opt.reserve;
+  const available=availableMemoryMiB();
+  const startup=fs.existsSync(path.join(root,'dist/src/memory-governor.js')) ? Math.min(opt.heap,1024) : opt.heap;
+  const needed=startup+opt.reserve;
   if(!Number.isFinite(available) || available<=0) throw new Error('Cannot determine available RAM.');
-  if(available<needed) throw new Error(`${available} MiB available; heap ${opt.heap} + reserve ${opt.reserve} requires ${needed} MiB. Free RAM or reduce --heap-mb.`);
-  return `${available} MiB available; ${opt.heap} MiB heap + ${opt.reserve} MiB reserve`;
+  if(available<needed) throw new Error(`${available} MiB available; startup ${startup} + reserve ${opt.reserve} requires ${needed} MiB. Free RAM or review --reserve-mb.`);
+  return `${available} MiB available; ${opt.heap} MiB old-space ceiling; ${startup} MiB startup + ${opt.reserve} MiB reserve`;
 }
 function runCheck(label,fn) { try { const detail=fn(); out('PASS',label,detail || ''); } catch(e) { out('FAIL',label,e.message); } }
 let env, db, registry, entry, baseOptions;
@@ -601,7 +611,7 @@ async function operation() {
   const session=process.env.TMUX?'tmux':process.env.STY?'GNU Screen':null;
   out(session?'PASS':opt.session?'FAIL':'WARN','Terminal session',session || 'No tmux/Screen detected; keep the terminal/session alive.');
   out('INFO','Freshness',opt.age?`maximum ${opt.age} day(s)`:'disabled; archived exports allowed');
-  out('WARN','Resource estimates','RAM/disk checks are snapshots; native/model allocations and staged replacement can exceed the heap.');
+  out('WARN','Resource estimates','RAM/disk checks are snapshots; the server memory governor monitors imports. Native allocations and disk staging need headroom.');
   if(failures) { out('INFO','Readiness',`${failures} failed check(s), ${warnings} warning(s); no import or copy performed.`); return 1; }
   out('PASS','Readiness',`${warnings} warning(s); all required checks passed`);
   out('INFO','Command',`cd ${quote(root)} && ${command().map(quote).join(' ')}`);
@@ -684,7 +694,7 @@ async function wizard() {
     }
   }
   async function heap() {
-    out('INFO','Current memory',`${Math.floor(process.availableMemory()/MIB)} MiB available; the heap needs additional reserve.`);
+    out('INFO','Current memory',`${availableMemoryMiB()} MiB available; startup work needs additional reserve; the heap ceiling is not reserved.`);
     await editNumber('heap','Heap allowance in MiB',512,1048576);
     if(reserveAuto)opt.reserve=Math.max(2048,Math.ceil(opt.heap/4));
   }
@@ -776,7 +786,7 @@ async function wizard() {
       const tagged=(key,value)=>safe(value)+(given(key)?'  [flag]':'');
       const settings=[['1  Folder',tagged('input',opt.input)],['2  Collection',tagged('collection',opt.collection)],
         ['3  Action',tagged('clear',opt.clear?'Replace collection (--clear)':'Update collection (keep unrelated records)')],
-        ['4  Heap',tagged('heap',`${opt.heap} MiB; reserve ${opt.reserve} MiB; available ${Math.floor(process.availableMemory()/MIB)} MiB`)],
+        ['4  Heap',tagged('heap',`${opt.heap} MiB; reserve ${opt.reserve} MiB; available ${availableMemoryMiB()} MiB`)],
         ['5  Source copy',tagged('source',opt.source || 'None - import the folder as it is')],
         ['6  Advanced',`freshness ${opt.age?opt.age+' days':'off'}; disk minimum ${opt.disk} MiB; session ${opt.session?'required':'optional'}`],
         ['   Configuration',tagged('envFile',opt.envFile || 'root .env / defaults')],

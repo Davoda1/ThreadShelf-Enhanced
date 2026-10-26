@@ -21,6 +21,7 @@ const environment = (overrides = {}) => {
     'HF_HOME',
     'TMUX',
     'STY',
+    'NODE_OPTIONS',
   ])
     delete env[key];
   return { ...env, ...overrides };
@@ -60,7 +61,7 @@ test('launcher help and version work before installation', linux, () => {
   assert.equal(help.status, 0, help.stderr);
   assert.match(help.stdout, /--index FOLDER COLLECTION/);
   assert.match(help.stdout, /THREADSHELF_ENHANCED_DIR/);
-  assert.equal(run(launcher, ['--version'], overrides).stdout.trim(), 'threadshelf-enhanced 1.2.0');
+  assert.equal(run(launcher, ['--version'], overrides).stdout.trim(), 'threadshelf-enhanced 1.3.0');
 });
 
 test(
@@ -89,6 +90,25 @@ test('launcher follows relative symlinks from an unrelated working directory', l
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Enhanced runtime\/build ready:/);
   assert.doesNotMatch(result.stdout, /server-started/);
+});
+
+test('launcher isolates the runtime probe while preserving importer preloads', linux, async (t) => {
+  const { root, installed, temporary } = await installation(t);
+  const marker = join(root, 'preload-ran.json');
+  await writeFile(
+    join(root, 'preload.cjs'),
+    `require('node:fs').appendFileSync(${JSON.stringify(marker)}, 'ran\\n');`,
+  );
+  const options = { NODE_OPTIONS: '--require ./preload.cjs' };
+  const checked = run(installed, ['--check-runtime'], options, temporary);
+  assert.equal(checked.status, 0, checked.stderr);
+  await assert.rejects(readFile(marker), { code: 'ENOENT' });
+  const source = join(temporary, 'synthetic exports');
+  await mkdir(source);
+  const imported = run(installed, ['--index', source, 'sample'], options, temporary);
+  assert.equal(imported.status, 0, imported.stderr);
+  assert.deepEqual(JSON.parse(imported.stdout.trim().split('\n').at(-1)).args, [source, 'sample']);
+  assert.equal(await readFile(marker, 'utf8'), 'ran\n');
 });
 
 test('launcher accepts a manually selected installation and runtime version', linux, async (t) => {

@@ -52,7 +52,15 @@ src/                Server + core logic (TypeScript, ESM, run via tsx)
   model-label.ts    Portable model labels (strip private local filesystem prefixes)
   ingest.ts         Parse -> chunk -> embed -> store pipeline
   watch.ts          Watch-folder mode (fs.watch + debounced re-ingest)
-  store.ts          LanceDB access
+  store.ts          LanceDB access and bounded generation publication
+  import-jobs.ts    Persistent accepted imports, progress, retry and recovery
+  upload-storage.ts       Bounded uploaded-file listing and coordinated cleanup
+  indexing-coordinator.ts  Shared server/indexer and collection reservations
+  import-storage-stage.ts  Bounded disk staging and replay for imports
+  storage-publication.ts   Atomic active archive/index generation manifest
+  storage-read-leases.ts   Reader leases protecting retired generations
+  memory-governor.ts       Effective host/container and process memory budgets
+  image-cache.ts           Optional separate per-collection image cache
   interprocess-lock.ts  SQLite-backed operating-system locks for shared mutations
   validation.ts     Turn/types + input validation
   routes/           HTTP routes (health, search, thread, collections, files, ingest, insights)
@@ -168,8 +176,9 @@ stored thread -> generation registry -> llama.cpp (local) OR OpenRouter (externa
 
 - A **Turn** is one of `{ user }`, `{ thinking }`, or `{ ai }` (+ optional
   `model`, `createdAt`). See `src/validation.ts`.
-- A **collection** is a LanceDB table (think folder/project: `chatgpt`,
-  `work_2026`). Table names starting with `__` are internal — `__threads`
+- A **collection** is a logical archive/index namespace (think folder/project:
+  `chatgpt`, `work_2026`). Published index tables may have internal generation
+  names. Table names starting with `__` are internal — `__threads`
   stores normalized turns per `(collection, sourceFile, conversationKey)` so
   thread view and `/api/files` survive moved/rewritten/deleted source files.
 - A **thread** is the full source conversation reconstructed around a search
@@ -186,7 +195,10 @@ stored thread -> generation registry -> llama.cpp (local) OR OpenRouter (externa
   `createdInThreadShelf: true`. It has no fake export file. Completed exchanges
   and imported-thread continuations are persisted by `src/generation/threads.ts`
   and only their ThreadShelf-authored chunks are refreshed in semantic search.
-- Archive replacements use a single LanceDB merge commit. `__threads.indexPending`
+- Import replacements stage bounded archive/index generations and publish them
+  together through a durable metadata transaction. All reads and writes select
+  the active generation; reader leases protect in-flight snapshots during
+  retirement. Saved-edit `__threads.indexPending`
   is a durable index job, committed with the turns (`local`, `all`, `delete`, or
   collection-wide `reset`; empty means indexed; `invalid` marks an undecodable
   row whose raw data is retained). The HTTP server, MCP server and `ingest`/`search`
@@ -199,14 +211,17 @@ stored thread -> generation registry -> llama.cpp (local) OR OpenRouter (externa
   before committing (retry on change). Keep collection then thread-table lock
   ordering; never queue saved turn snapshots for a later retry. LanceDB is opened
   with `readConsistencyInterval: 0` so processes see each other's commits.
-- Collection and thread-table mutations use `interprocess-lock.ts`. SQLite is
-  only an operating-system lock coordinator; archive tables remain LanceDB.
+- Collection and thread-table mutations use `interprocess-lock.ts`. SQLite
+  also stores durable import-job/publication metadata and temporary staging
+  records; published conversations and vectors remain in LanceDB.
   Keep collection-before-thread lock ordering and the short thread lock around
   the entire read-modify-write, including legacy normalization/migration. Never
   embed or acquire the manual collection registry lock while holding the thread
   lock. Sidecars under the database's `.threadshelf-locks` directory and beside
   the collection registry must not be unlinked while any writer may use them.
-  All writer processes must use 1.2.0 or later to participate in these locks.
+  All processes sharing a writable store must use 1.3.0 to participate in the
+  current job reservations and publication protocol. Copy the whole stopped
+  database, including sidecars, and never downgrade a 1.3.0-written store.
 - Rename updates only the title column; appends build turns from the current row
   inside the thread-table lock.
 - Local API model ids use file names, folder prefixes for duplicate names, and
@@ -218,10 +233,36 @@ stored thread -> generation registry -> llama.cpp (local) OR OpenRouter (externa
 - Reimport preserves ThreadShelf-authored continuations, including branches whose
   conversation keys disappear. A rewritten positional key preserves the old
   branch separately. Exports that parse to zero conversations are skipped and
-  never delete archived rows. `clearFirst` stages the entire folder and its
-  embeddings before committing; invalid, empty or failed files and pre-commit
-  cancellation leave the old collection intact and return
-  `replacementSkipped: true`. This staging uses memory proportional to the folder.
+  never delete archived rows on their own. `clearFirst` prepares the complete
+  replacement in bounded disk staging. Unsupported files and empty auxiliary
+  exports are skipped without vetoing valid input. Recognized corruption,
+  failed preparation, zero valid conversations or pre-publication cancellation
+  preserve the previous collection and report `replacementSkipped: true`.
+- Accepted imports persist in `import-jobs.ts`. Browser disconnection detaches
+  observation; explicit cancellation stops processing. Transfer must finish
+  before a tab can close safely. CLI/watch/recovery share one index coordinator.
+  Only one HTTP server may own a canonical database. Collection mutations must
+  honor active/interrupted clear reservations, and deletion must coordinate
+  acceptance, claim and cancellation so queued work cannot recreate a collection.
+- Finished-job history removal deletes only terminal jobs and their disposable
+  retry inputs; preserve imported conversations and published source assets.
+  Completed jobs persist and display 100% progress. Uploaded-file cleanup is a
+  separate action in `upload-storage.ts`: serialize it with input acceptance and
+  retry, check source dependencies across collections, and protect active
+  indexing. Never follow symlinks, remove transfer staging or touch protected
+  database/configuration/runtime/model/cache paths. Keep traversal bounded.
+- `memory-governor.ts` checks effective host/container headroom, RSS and heap at
+  bounded batch boundaries. Account for reclaimable clean page cache separately
+  from dirty/mapped/shared memory. Memory pressure must pause or fail explicitly,
+  not silently publish a partial replacement.
+- External image bytes belong only in `image-cache.ts`, outside archive storage.
+  Public HTTP(S) destinations and redirects are checked, DNS is pinned and image
+  signatures/sizes bounded. Disable or purge must invalidate in-flight writes.
+  Cache settings and per-collection clearing never mutate archived conversations.
+- Locale catalogs translate interface strings, never conversation text, model
+  names, paths or identifiers. Per-role rich-rendering switches preserve basic
+  Markdown when off; visibility is independent. Deferred rendering must retain
+  copy/export source and stable scroll position.
 - Supported providers live in `src/parser.ts` (`detectProvider`): `google-ai-studio`,
   `anthropic`, `openai`, `openrouter`, `lm-studio`, `grok`. Adding a provider = add a detector + a
   `build…Conversations` function + a fixture + tests.
@@ -303,7 +344,7 @@ locale or time zone only when that behavior is what the test is meant to verify.
 
 ## External network surfaces
 
-The optional generation integrations use these external services:
+Optional features and model setup contact these external services:
 
 1. **OpenRouter** — the only surface that sends conversation text off-device.
 2. **GitHub Releases** (`ggml-org/llama.cpp`) — release metadata; archives only
@@ -315,12 +356,16 @@ The optional generation integrations use these external services:
    needs no token; `HF_TOKEN` is only required for *gated* repositories, which
    are detected up front and marked in the UI. Every file is verified against the
    LFS `oid` (its SHA-256) before it is moved into place.
+4. **External image hosts** — only when an image is loaded by click or the
+   automatic-loading setting. The server validates public HTTP(S) destinations,
+   pins DNS and checks redirects/bytes; it does not forward browser credentials,
+   cookies or referrers. Optional cached bytes are separate from the archive.
 
 Model downloads land in `downloadDirectory` (default `.threadshelf/models`,
 override `THREADSHELF_MODELS_PATH`), which is always part of
 `effectiveModelDirectories` so discovery finds them without extra configuration.
 
-Two rules hold for every route that streams a long download:
+Two rules hold for every route that streams a model/runtime download:
 
 - Wrap it in `abortOnDisconnect` (`src/routes/stream-abort.ts`). Listening only
   to `req`'s `aborted` is not enough — a browser cancelling a `fetch` fires
@@ -342,8 +387,8 @@ and must exclude `.env`, user archives, databases, local runtimes, credentials a
 build output. Keep archive contents reproducible and verify their checksums.
 Tags use `v<package.json version>`; `.github/workflows/publish.yml` runs reusable
 Linux and Windows CI, including dependency security checks, before creating a release
-with exactly the two source assets. Keep previously published version tags and
-assets intact; 1.2.0 is a separate release from 1.0.0 and 1.1.0.
+with the two source archives and one consolidated `SHA256SUM.txt`. Keep previously
+published version tags and assets intact; 1.3.0 is a separate release.
 Only its release job has repository write permission.
 
 Run `python3 test/source-release.test.py` for packaging regressions (`python` on
@@ -387,10 +432,11 @@ conventions.
 
 ## Enhanced fork conventions
 
-ThreadShelf Enhanced 1.2.0 is based on upstream v1.3.0, with Node 24+ required
+ThreadShelf Enhanced 1.3.0 is based on upstream v1.3.0, with Node 24+ required
 for lossless JSON numeric tokens. Distribution is source ZIP/TAR.GZ only. The
 package is private. The source release workflow validates tagged source through
-reusable CI before publishing the two source archives; it never publishes to npm.
+reusable CI before publishing the source archives and consolidated checksums;
+it never publishes to npm.
 Use setup-threadshelf.sh (Linux) or setup-threadshelf.ps1 (Windows) to install a
 checksum-verified, project-local Node 24.22.1 LTS runtime and npm 12.2.1. Existing
 .env files are preserved. Version overrides are --node-version / --npm-version
@@ -411,13 +457,23 @@ its filtering aligned with `routes/local-origin.ts` and HOST binding rules.
 
 Test upgrades and migrations only with synthetic temporary stores. Do not publish
 user configuration or run tests against a live store. Public compatibility is
-scoped to the released Local Suite v1.0.0 HTTP adapter fixtures and documented
-contracts; do not require separately supplied application source trees. Preserve
+scoped to released Local Suite HTTP adapter fixtures with recorded provenance
+and documented contracts; do not require separately supplied application source trees. Preserve
 the attribution to ThreadShelf Local Reader by davoda1 without asserting that
 all adapted components are byte-identical to a public release.
 
 Document current import limits: a ZIP with both `conversations.json` and
-`chat.html` can create duplicates; browser folder uploads exclude image
-companions; encrypted Venice backups and JSONL are unsupported. Server-local
-folders or ZIPs with one conversation JSON representation and image companions
-are the supported path for local media.
+`chat.html` can create duplicates; encrypted Venice backups and JSONL are
+unsupported. Browser folder uploads retain supported image companions; preserve
+relative paths or use a server-local folder/ZIP with one conversation representation.
+Individual records and whole-document formats still have safety limits, and
+replacement imports need staging disk space. Search returns an explicit bounded
+error for an extreme pending/invalid index backlog; see `docs/IMPORT-JOBS.md`.
+
+The public interactive `manual-importer.sh` remains a separate optional wrapper
+with configurable input, collection, heap/reserve and source-copy settings.
+Its default old-space ceiling is 4096 MiB; the startup check uses bounded work
+headroom plus a reserve and the compiled governor's probe when available.
+Do not add machine-specific launchers, migration scripts or configuration to the
+public edition. Preserve existing public screenshots and importer demonstrations;
+new screenshots must use synthetic content without identifying paths or hosts.

@@ -1,4 +1,9 @@
 import { useState, useRef, useMemo, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { createFolderJob, createUploadJob, useImportJobs } from '../import-jobs';
+import { ImportJobsPanel } from './ImportJobsPanel';
+import { UploadStorageModal } from './UploadStorageModal';
+import { t, useI18n, formatNumber } from '../i18n';
 import type { FilePreview, IngestProgress, IngestStreamEvent, StatusMessage } from '../types';
 import { Icons } from '../icons';
 import { api } from '../api';
@@ -10,14 +15,29 @@ function formatProgressStep(event: IngestStreamEvent): string {
   const done = event.processedFiles || 0;
   const phase = (event.phase || '').toLowerCase();
 
-  if (phase === 'uploading') return `Uploading ${done} / ${total} files`;
-  if (phase === 'reading') return `Reading ${done} / ${total} files`;
+  if (phase === 'uploading')
+    return t('Uploading {done} / {total} files', {
+      done: formatNumber(done),
+      total: formatNumber(total),
+    });
+  if (phase === 'reading')
+    return t('Reading {done} / {total} files', {
+      done: formatNumber(done),
+      total: formatNumber(total),
+    });
   if (phase === 'embedding')
     return event.embeddingTotal !== undefined
-      ? `Embedding ${event.embeddingDone ?? 0} / ${event.embeddingTotal} chunks`
-      : `Embedding ${done} / ${total} files`;
-  if (event.status === 'starting') return `Starting 0 / ${total} files`;
-  return `${done} / ${total} files`;
+      ? t('Embedding {done} / {total} chunks', {
+          done: formatNumber(event.embeddingDone ?? 0),
+          total: formatNumber(event.embeddingTotal),
+        })
+      : t('Embedding {done} / {total} files', {
+          done: formatNumber(done),
+          total: formatNumber(total),
+        });
+  if (event.status === 'starting')
+    return t('Starting 0 / {total} files', { total: formatNumber(total) });
+  return t('{done} / {total} files', { done: formatNumber(done), total: formatNumber(total) });
 }
 
 function progressFromEvent(event: IngestStreamEvent): IngestProgress {
@@ -25,7 +45,10 @@ function progressFromEvent(event: IngestStreamEvent): IngestProgress {
   const done = event.processedFiles || 0;
 
   return {
-    pct: Math.round(event.progressPercent ?? (done / total) * 100),
+    pct:
+      event.status === 'completed'
+        ? 100
+        : Math.max(0, Math.min(100, Math.round(event.progressPercent ?? (done / total) * 100))),
     step: formatProgressStep(event),
     chunks: event.totalChunks,
     time: event.elapsedMs,
@@ -36,14 +59,24 @@ function progressFromEvent(event: IngestStreamEvent): IngestProgress {
 function formatCompletedMessage(event: IngestStreamEvent): string {
   const result = event.result;
   if (result?.replacementSkipped)
-    return 'Nothing was saved. The existing collection was kept because the folder contains empty or invalid exports, or no conversations. Fix the exports and retry.';
+    return t(
+      'The existing collection was kept because a recognized export failed or no valid conversations were found. Review the diagnostics and retry.',
+    );
   const fileCount = result?.files?.length ?? 0;
   const conversations = result?.conversations ?? fileCount;
   const errorCount = result?.errors?.length ?? 0;
 
-  const summary = `Indexed ${conversations} conversations as ${result?.ingested ?? 0} chunks from ${fileCount} files in ${fmtTime(result?.elapsedMs ?? 0)}.`;
+  const summary = t(
+    'Indexed {conversations} conversations as {chunks} chunks from {files} files in {time}.',
+    {
+      conversations: formatNumber(conversations),
+      chunks: formatNumber(result?.ingested ?? 0),
+      files: formatNumber(fileCount),
+      time: fmtTime(result?.elapsedMs ?? 0),
+    },
+  );
   return errorCount
-    ? `${summary} ${errorCount} file${errorCount === 1 ? '' : 's'} failed.`
+    ? `${summary} ${t('Failed files: {count}.', { count: formatNumber(errorCount) })}`
     : summary;
 }
 
@@ -116,6 +149,10 @@ const filesFromEntry = async (entry: DragFileSystemEntry, prefix = ''): Promise<
 };
 
 export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
+  useI18n();
+  const queryClient = useQueryClient();
+  const jobs = useImportJobs();
+  const [submittedId, setSubmittedId] = useState('');
   const [dragging, setDragging] = useState(false);
   const [path, setPath] = useState('');
   const [uploadFiles, setUploadFiles] = useState<RelativeFile[] | null>(null);
@@ -127,6 +164,7 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
   const [statusMsg, setStatusMsg] = useState<StatusMessage | null>(null);
   const [preview, setPreview] = useState<FilePreview[] | null>(null);
   const [newCollOpen, setNewCollOpen] = useState(false);
+  const [uploadsOpen, setUploadsOpen] = useState(false);
   const [copied, setCopied] = useState('');
   const pickerRef = useRef<HTMLInputElement>(null);
   const filesPickerRef = useRef<HTMLInputElement>(null);
@@ -140,7 +178,10 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
       setCopied(file);
       setTimeout(() => setCopied(''), 2500);
     } catch {
-      setStatusMsg({ type: 'err', text: `Could not copy script — open scripts/${file} manually.` });
+      setStatusMsg({
+        type: 'err',
+        text: t('Could not copy script — open scripts/{value0} manually.', { value0: file }),
+      });
     }
   }, []);
 
@@ -157,7 +198,11 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
     const first = relativePathOf(files[0]!).replace(/\\/g, '/');
     const folder = first.includes('/') ? first.split('/')[0] : null;
     const sup = files.filter((f) => isPotentialExport(relativePathOf(f)));
-    setPickedLabel(`${sup.length} export files${folder ? ` from "${folder}"` : ' selected'}`);
+    setPickedLabel(
+      folder
+        ? t('{count} export files from {folder}', { count: formatNumber(sup.length), folder })
+        : t('{count} export files selected', { count: formatNumber(sup.length) }),
+    );
     setPreview(
       files.map((f) => {
         const relPath = relativePathOf(f);
@@ -231,76 +276,104 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
   const doIndex = useCallback(async () => {
     const useUpload = uploadFiles && supported.length > 0;
     let coll = targetColl;
-
     if (useUpload && coll === 'chunks') {
       const first = relativePathOf(uploadFiles[0]!).replace(/\\/g, '/');
-      // Individual file selections have no directory name to use as a collection.
       if (first.includes('/')) coll = first.split('/').filter(Boolean)[0] ?? coll;
     }
-
     if (!useUpload && !path.trim()) {
-      setStatusMsg({ type: 'err', text: 'Choose a folder or enter a path.' });
+      setStatusMsg({ type: 'err', text: t('Choose a folder or enter a path.') });
       return;
     }
-
     setRunning(true);
-    setProgress({ pct: 0, step: 'Starting…' });
+    setSubmittedId('');
+    setProgress({
+      pct: 0,
+      step: t(
+        useUpload
+          ? 'Uploading files. Keep this tab open until the server confirms receipt.'
+          : 'Submitting import job…',
+      ),
+    });
     setStatusMsg(null);
     const controller = new AbortController();
     indexingController.current = controller;
-
-    const onProgress = (event: IngestStreamEvent) => {
-      if (event.status === 'completed') {
-        setStatusMsg({
-          type: event.result?.errors?.length || event.result?.replacementSkipped ? 'err' : 'info',
-          text: formatCompletedMessage(event),
-        });
-        return;
-      }
-      if (event.status === 'error') {
-        setStatusMsg({ type: 'err', text: `Error: ${event.error ?? 'Unknown'}` });
-        return;
-      }
-
-      setProgress(progressFromEvent(event));
-    };
-
     try {
-      if (useUpload) {
-        await api.ingestUploadProgress(supported, coll, clearFirst, onProgress, controller.signal);
-      } else {
-        await api.ingestPathProgress(path, coll, clearFirst, onProgress, controller.signal);
-      }
+      // Include local image companions while unrelated documents remain previewed as skipped.
+      const files = useUpload
+        ? uploadFiles.filter(
+            (file) =>
+              isPotentialExport(relativePathOf(file)) ||
+              /\.(?:png|jpe?g|gif|webp)$/i.test(file.name),
+          )
+        : [];
+      const accepted = useUpload
+        ? await createUploadJob(files, coll, clearFirst, controller.signal)
+        : await createFolderJob(path, coll, clearFirst, controller.signal);
+      setSubmittedId(accepted.job.id);
+      setStatusMsg({
+        type: 'info',
+        text: t('Files received. You can close this tab; processing continues on the server.'),
+      });
+      await queryClient.invalidateQueries({ queryKey: ['import-jobs'] });
     } catch (e) {
-      if (controller.signal.aborted) {
-        setStatusMsg({ type: 'info', text: 'Indexing stopped. Completed files remain indexed.' });
-      } else {
-        setStatusMsg({ type: 'err', text: `Error: ${e instanceof Error ? e.message : 'Unknown'}` });
-      }
+      setStatusMsg({
+        type: controller.signal.aborted ? 'info' : 'err',
+        text: controller.signal.aborted
+          ? t('Transfer stopped. Check the job list before submitting again.')
+          : e instanceof Error
+            ? e.message
+            : t('Unknown error'),
+      });
     } finally {
       if (indexingController.current === controller) indexingController.current = null;
       setRunning(false);
       setProgress(null);
       void onRefresh();
     }
-  }, [uploadFiles, supported, targetColl, path, clearFirst, onRefresh]);
+  }, [uploadFiles, supported, targetColl, path, clearFirst, onRefresh, queryClient]);
+
+  const submitted = jobs.data?.jobs.find((job) => job.id === submittedId);
+  const displayedProgress = running
+    ? progress
+    : submitted &&
+        ['queued', 'running', 'paused', 'interrupted'].includes(submitted.state) &&
+        submitted.progress
+      ? progressFromEvent(submitted.progress)
+      : null;
+  const displayedStatus =
+    submitted && ['completed', 'failed', 'cancelled'].includes(submitted.state)
+      ? {
+          type: submitted.state === 'completed' ? 'info' : 'err',
+          text:
+            submitted.error ||
+            (submitted.state === 'cancelled'
+              ? t('Import cancelled.')
+              : formatCompletedMessage({ status: 'completed', result: submitted.result })),
+        }
+      : statusMsg;
 
   const realCollections = collections.filter((c) => c !== 'all');
 
   return (
     <div className="view">
-      <div className="section-h">
-        <h2>Index a folder</h2>
+      <div className="section-h indexing-heading">
+        <h2>{t('Index a folder')}</h2>
         <span className="desc">
-          Local parse → chunk → embed → write to LanceDB. Your chat data stays on this machine.
+          {t(
+            'Local parse → chunk → embed → write to LanceDB. Your chat data stays on this machine.',
+          )}
         </span>
+        <button className="btn sm manage-uploads-button" onClick={() => setUploadsOpen(true)}>
+          {t('Manage uploads')}
+        </button>
       </div>
 
       <details className="panel export-guides" style={{ marginBottom: 16 }}>
         <summary
           style={{ cursor: 'pointer', padding: '12px 14px', fontWeight: 500, listStyle: 'revert' }}
         >
-          {Icons.info} Where to get your data (export guides)
+          {Icons.info}
+          {t(' Where to get your data (export guides)')}
         </summary>
         <div
           style={{
@@ -312,15 +385,18 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
           }}
         >
           <div>
-            <b style={{ color: 'var(--text-1)' }}>OpenRouter</b> — no built-in export. Run a
-            browser-console script, then index the downloaded folder:
+            <b style={{ color: 'var(--text-1)' }}>{t('OpenRouter')}</b>
+            {t(
+              ' — no built-in export. Run a browser-console script, then index the downloaded folder:',
+            )}
             <ol style={{ margin: '6px 0', paddingLeft: 20, lineHeight: 1.7 }}>
-              <li>Open openrouter.ai signed in, with your chat list visible.</li>
+              <li>{t('Open openrouter.ai signed in, with your chat list visible.')}</li>
               <li>
-                Open DevTools → Console (<kbd>F12</kbd>).
+                {t('Open DevTools → Console (')}
+                <kbd>F12</kbd>).
               </li>
-              <li>Copy a script below, paste into the console, press Enter.</li>
-              <li>Allow “multiple downloads” if asked; then index the folder here.</li>
+              <li>{t('Copy a script below, paste into the console, press Enter.')}</li>
+              <li>{t('Allow “multiple downloads” if asked; then index the folder here.')}</li>
             </ol>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button
@@ -329,8 +405,8 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
               >
                 {Icons.copy}{' '}
                 {copied === 'openrouter-export-all.js'
-                  ? 'Copied!'
-                  : 'Copy “export all chats” script'}
+                  ? t('Copied!')
+                  : t('Copy “export all chats” script')}
               </button>
               <button
                 className="btn sm"
@@ -338,37 +414,43 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
               >
                 {Icons.copy}{' '}
                 {copied === 'openrouter-export-browser.js'
-                  ? 'Copied!'
-                  : 'Copy “single chat” script'}
+                  ? t('Copied!')
+                  : t('Copy “single chat” script')}
               </button>
             </div>
           </div>
 
           <div>
-            <b style={{ color: 'var(--text-1)' }}>LM Studio</b> — point at its local conversation
-            folder (paste into “paste path” below):
+            <b style={{ color: 'var(--text-1)' }}>{t('LM Studio')}</b>
+            {t(' — point at its local conversation folder (paste into “paste path” below):')}
             <ul style={{ margin: '6px 0', paddingLeft: 20, lineHeight: 1.8 }}>
               <li>
-                Windows: <code>%USERPROFILE%\.lmstudio\conversations\</code>
+                {t('Windows: ')}
+                <code>%USERPROFILE%\.lmstudio\conversations\</code>
               </li>
               <li>
-                macOS / Linux: <code>~/.lmstudio/conversations/</code>
+                {t('macOS / Linux: ')}
+                <code>~/.lmstudio/conversations/</code>
               </li>
               <li>
-                Older builds: <code>~/.cache/lm-studio/conversations/</code>
+                {t('Older builds: ')}
+                <code>~/.cache/lm-studio/conversations/</code>
               </li>
             </ul>
           </div>
 
           <div>
-            <b style={{ color: 'var(--text-1)' }}>Google AI Studio</b> — download your Google Drive
-            “Google AI Studio” folder, unzip it, and index that folder (files may have no extension
-            — that’s fine). Text chats and Imagen prompt histories are supported.
+            <b style={{ color: 'var(--text-1)' }}>{t('Google AI Studio')}</b>
+            {t(
+              ' — download your Google Drive “Google AI Studio” folder, unzip it, and index that folder (files may have no extension — that’s fine). Text chats and Imagen prompt histories are supported.',
+            )}
           </div>
 
           <div>
-            <b style={{ color: 'var(--text-1)' }}>ChatGPT / Claude</b> — use the app’s official data
-            export, then index the <code>conversations.json</code> it produces.
+            <b style={{ color: 'var(--text-1)' }}>{t('ChatGPT / Claude')}</b>
+            {t(' — use the app’s official data export, then index the ')}
+            <code>conversations.json</code>
+            {t(' it produces.')}
           </div>
         </div>
       </details>
@@ -388,12 +470,11 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
         }}
       >
         <div className="ico-big">{Icons.folder}</div>
-        <h3>Drop export files or a folder here</h3>
+        <h3>{t('Drop export files or a folder here')}</h3>
         <p>
-          Import JSON, HTML, ZIP archives, or folders from ChatGPT/OpenAI, Claude/Anthropic, Google
-          AI Studio, Gemini Takeout, OpenRouter, LM Studio, Grok, Meta, and Venice. ThreadShelf
-          Local Reader and ChatGPT Export Processor formats are supported. Subfolders are included;
-          account metadata files are skipped automatically.
+          {t(
+            'Import JSON, HTML, ZIP archives, or folders from ChatGPT/OpenAI, Claude/Anthropic, Google AI Studio, Gemini Takeout, OpenRouter, LM Studio, Grok, Meta, and Venice. ThreadShelf Local Reader and ChatGPT Export Processor formats are supported. Subfolders are included; account metadata files are skipped automatically.',
+          )}
         </p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <input
@@ -421,10 +502,12 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
             onChange={onPickFolder}
           />
           <button className="btn primary" onClick={() => pickerRef.current?.click()}>
-            {Icons.folder} Choose folder
+            {Icons.folder}
+            {t(' Choose folder')}
           </button>
           <button className="btn" onClick={() => filesPickerRef.current?.click()}>
-            {Icons.plus} Choose files
+            {Icons.plus}
+            {t(' Choose files')}
           </button>
           {pickedLabel && (
             <span
@@ -436,22 +519,25 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
             </span>
           )}
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text-3)', margin: '4px 0' }}>or paste path</div>
+        <div style={{ fontSize: 11, color: 'var(--text-3)', margin: '4px 0' }}>
+          {t('or paste path')}
+        </div>
         <div className="path-input">
           <input
             type="text"
             value={path}
             onChange={(e) => setPath(e.target.value)}
-            placeholder="/absolute/path/to/exports"
+            placeholder={t('/absolute/path/to/exports')}
           />
           <button className="btn" onClick={onUsePath} disabled={!path}>
-            {Icons.arrowRight} Use path
+            {Icons.arrowRight}
+            {t(' Use path')}
           </button>
         </div>
       </div>
 
       <div className="ingest-options">
-        <label style={{ color: 'var(--text-3)' }}>Target collection</label>
+        <label style={{ color: 'var(--text-3)' }}>{t('Target collection')}</label>
         <select
           id="targetCollectionSelect"
           value={targetColl}
@@ -469,9 +555,10 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
           id="newCollectionBtnIndexing"
           className="btn sm"
           onClick={() => setNewCollOpen(true)}
-          title="Create a new collection"
+          title={t('Create a new collection')}
         >
-          {Icons.plus} New
+          {Icons.plus}
+          {t(' New')}
         </button>
         <label>
           <input
@@ -479,10 +566,10 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
             checked={clearFirst}
             onChange={(e) => setClearFirst(e.target.checked)}
           />{' '}
-          Clear collection first
+          {t('Clear collection first')}
         </label>
         <button id="ingestBtn" className="btn primary" onClick={doIndex} disabled={running}>
-          {Icons.zap} {running ? 'Indexing…' : 'Index folder'}
+          {Icons.zap} {running ? t('Uploading…') : t('Index folder')}
         </button>
         {running && (
           <button
@@ -490,7 +577,7 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
             className="btn danger"
             onClick={() => indexingController.current?.abort()}
           >
-            Stop indexing
+            {t('Cancel transfer')}
           </button>
         )}
       </div>
@@ -498,10 +585,11 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
       {preview && preview.length > 0 && (
         <div className="panel">
           <div className="panel-head">
-            <h3>Ingest preview</h3>
+            <h3>{t('Ingest preview')}</h3>
             <span className="sub">
-              {preview.filter((f) => f.ok).length} ok · {preview.filter((f) => !f.ok).length}{' '}
-              skipped
+              {preview.filter((f) => f.ok).length}
+              {t(' ok · ')}
+              {preview.filter((f) => !f.ok).length} {t('skipped')}
             </span>
           </div>
           <div style={{ maxHeight: 260, overflow: 'auto' }}>
@@ -519,43 +607,48 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
                 >
                   {f.name}
                 </span>
-                <span className="ingest-preview-note">{f.note || (f.ok ? '' : 'skipped')}</span>
+                <span className="ingest-preview-note">{t(f.note || (f.ok ? '' : 'skipped'))}</span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {progress && (
+      {displayedProgress && (
         <div className="progress-panel">
           <div className="progress-head">
             <span className="step">
-              <b>{progress.step}</b>
+              <b>{displayedProgress.step}</b>
             </span>
-            <span className="pct">{progress.pct}%</span>
+            <span className="pct">{formatNumber(displayedProgress.pct)}%</span>
           </div>
           <div className="progress-bar-new">
-            <i style={{ width: `${progress.pct}%` }} />
+            <i style={{ width: `${formatNumber(displayedProgress.pct)}%` }} />
           </div>
-          {progress.chunks != null && (
+          {displayedProgress.chunks != null && (
             <div className="progress-details-new">
-              Chunks: <strong>{progress.chunks.toLocaleString()}</strong>
+              {t('Chunks: ')}
+              <strong>{formatNumber(displayedProgress.chunks)}</strong>
               <span style={{ color: 'var(--text-4)' }}>·</span>
-              Time: <strong>{fmtTime(progress.time ?? 0)}</strong>
+              {t('Time: ')}
+              <strong>{fmtTime(displayedProgress.time ?? 0)}</strong>
             </div>
           )}
-          {progress.file && (
-            <div className="progress-file">{progress.file.replace(/^.*[\\/]/, '')}</div>
+          {displayedProgress.file && (
+            <div className="progress-file">{displayedProgress.file.replace(/^.*[\\/]/, '')}</div>
           )}
         </div>
       )}
 
-      {statusMsg && (
-        <div id="ingestStatus" className={`banner ${statusMsg.type}`}>
-          <span className="ico">{statusMsg.type === 'err' ? Icons.warn : Icons.check}</span>
-          <div className="grow">{statusMsg.text}</div>
+      {displayedStatus && (
+        <div id="ingestStatus" className={`banner ${displayedStatus.type}`}>
+          <span className="ico">{displayedStatus.type === 'err' ? Icons.warn : Icons.check}</span>
+          <div className="grow">{displayedStatus.text}</div>
         </div>
       )}
+
+      <ImportJobsPanel onRefresh={onRefresh} />
+      {uploadsOpen && <UploadStorageModal onClose={() => setUploadsOpen(false)} />}
 
       {newCollOpen && (
         <NewCollectionModal

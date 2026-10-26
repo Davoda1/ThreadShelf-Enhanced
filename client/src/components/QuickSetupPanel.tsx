@@ -1,3 +1,4 @@
+import { t, useI18n } from '../i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, QuickSetupPlanChangedError } from '../api';
 import type { QuickSetupPlan } from '../types';
@@ -9,11 +10,36 @@ interface QuickSetupPanelProps {
 }
 
 const VARIANTS = [
-  { value: '', label: 'Detect automatically' },
-  { value: 'cpu', label: 'CPU (most compatible)' },
-  { value: 'cuda', label: 'NVIDIA CUDA' },
-  { value: 'vulkan', label: 'Vulkan (AMD / Intel)' },
-  { value: 'rocm', label: 'AMD ROCm' },
+  {
+    value: '',
+    get label() {
+      return t('Detect automatically');
+    },
+  },
+  {
+    value: 'cpu',
+    get label() {
+      return t('CPU (most compatible)');
+    },
+  },
+  {
+    value: 'cuda',
+    get label() {
+      return t('NVIDIA CUDA');
+    },
+  },
+  {
+    value: 'vulkan',
+    get label() {
+      return t('Vulkan (AMD / Intel)');
+    },
+  },
+  {
+    value: 'rocm',
+    get label() {
+      return t('AMD ROCm');
+    },
+  },
 ] as const;
 
 const shortHash = (hash: string | undefined): string =>
@@ -25,6 +51,7 @@ const shortHash = (hash: string | undefined): string =>
  * whole plan, so the consent is single but still informed.
  */
 export function QuickSetupPanel({ onCompleted }: QuickSetupPanelProps) {
+  useI18n();
   const [variant, setVariant] = useState('');
   const [plan, setPlan] = useState<QuickSetupPlan | null>(null);
   const [loading, setLoading] = useState(true);
@@ -82,15 +109,15 @@ export function QuickSetupPanel({ onCompleted }: QuickSetupPanelProps) {
         },
         (event) => {
           if (event.type === 'progress') {
-            const where = event.step === 'runtime' ? 'llama.cpp' : 'Model';
-            setStatus(`${where}: ${event.phase ?? ''}${event.file ? ` · ${event.file}` : ''}`);
+            const where = event.step === 'runtime' ? 'llama.cpp' : t('Model');
+            setStatus(`${where}: ${t(event.phase ?? '')}${event.file ? ` · ${event.file}` : ''}`);
             setPercent(event.percent ?? 0);
           }
           if (event.type === 'done') setStatus('Finished.');
         },
         controller.signal,
       );
-      toast.success('Local generation is ready.');
+      toast.success(t('Local generation is ready.'));
       onCompleted?.();
       recheck();
     } catch (cause) {
@@ -102,7 +129,7 @@ export function QuickSetupPanel({ onCompleted }: QuickSetupPanelProps) {
         toast.error(cause.message);
         return;
       }
-      toast.error(cause instanceof Error ? cause.message : 'Setup failed.');
+      toast.error(cause instanceof Error ? cause.message : t('Setup failed.'));
     } finally {
       setRunning(false);
       abortRef.current = null;
@@ -115,12 +142,12 @@ export function QuickSetupPanel({ onCompleted }: QuickSetupPanelProps) {
   return (
     <div className="panel generation-panel">
       <div className="panel-head">
-        <h3>Set up local generation</h3>
-        <span className="sub">one screen · one confirmation</span>
+        <h3>{t('Set up local generation')}</h3>
+        <span className="sub">{t('one screen · one confirmation')}</span>
       </div>
       <div className="panel-body quick-setup">
         <label className="quick-setup-variant">
-          <span>Accelerator</span>
+          <span>{t('Accelerator')}</span>
           <select
             value={variant}
             onChange={(event) => setVariant(event.target.value)}
@@ -134,40 +161,42 @@ export function QuickSetupPanel({ onCompleted }: QuickSetupPanelProps) {
           </select>
         </label>
 
-        {loading && <p className="catalog-empty">Checking your hardware and the latest release…</p>}
-        {error && <p className="catalog-error">{error}</p>}
+        {loading && (
+          <p className="catalog-empty">{t('Checking your hardware and the latest release…')}</p>
+        )}
+        {error && <p className="catalog-error">{t(error)}</p>}
 
         {plan && (
           <>
             <p className="quick-setup-detected">
-              Detected:{' '}
+              {t('Detected:')}{' '}
               <b>
-                {plan.hardware.devices[0]?.name ?? 'no accelerator'}
+                {plan.hardware.devices[0]?.name ?? t('no accelerator')}
                 {plan.hardware.devices[0] ? ` · ${fmtBytes(plan.hardware.modelBudgetBytes)}` : ''}
               </b>{' '}
-              → llama.cpp <b>{plan.runtime.variant}</b> build
+              {t('→ llama.cpp ')}
+              <b>{plan.runtime.variant}</b>
+              {t(' build')}
             </p>
 
             <ol className="quick-setup-steps">
               <li data-action={plan.runtime.action}>
                 <span className="quick-setup-step-title">
-                  llama.cpp {plan.runtime.tag} ({plan.runtime.variant})
-                  {plan.runtime.action === 'reuse' && <em>already installed</em>}
+                  {t('llama.cpp ')}
+                  {plan.runtime.tag} ({plan.runtime.variant})
+                  {plan.runtime.action === 'reuse' && <em>{t('already installed')}</em>}
                 </span>
                 {plan.runtime.action === 'install' && (
                   <span className="quick-setup-step-meta" title={plan.runtime.url}>
-                    {plan.runtime.url} · {fmtBytes(plan.runtime.sizeBytes)} · sha256{' '}
-                    {shortHash(plan.runtime.sha256)}
+                    {plan.runtime.url} · {fmtBytes(plan.runtime.sizeBytes)}
+                    {t(' · sha256')} {shortHash(plan.runtime.sha256)}
                   </span>
                 )}
                 {plan.runtime.companions.map((companion) => (
-                  <span
-                    className="quick-setup-step-meta"
-                    key={companion.url}
-                    title={companion.url}
-                  >
-                    runtime companion · {fmtBytes(companion.sizeBytes)} · sha256{' '}
-                    {shortHash(companion.sha256)}
+                  <span className="quick-setup-step-meta" key={companion.url} title={companion.url}>
+                    {t('runtime companion · ')}
+                    {fmtBytes(companion.sizeBytes)}
+                    {t(' · sha256')} {shortHash(companion.sha256)}
                   </span>
                 ))}
               </li>
@@ -178,32 +207,37 @@ export function QuickSetupPanel({ onCompleted }: QuickSetupPanelProps) {
                     {plan.model.repoId} · {plan.model.quant}
                     <em>
                       {plan.model.action === 'reuse'
-                        ? 'already downloaded'
+                        ? t('already downloaded')
                         : fmtBytes(plan.model.totalBytes)}
                     </em>
                   </span>
                   <span className="quick-setup-step-meta">
-                    {plan.model.files.length} file{plan.model.files.length === 1 ? '' : 's'} ·
-                    sha256 {shortHash(plan.model.files[0]?.sha256)}
+                    {plan.model.files.length}
+                    {t(' file')}
+                    {plan.model.files.length === 1 ? '' : t('s')}
+                    {t(' · sha256 ')}
+                    {shortHash(plan.model.files[0]?.sha256)}
                     {plan.model.license ? ` · ${plan.model.license}` : ''}
                   </span>
                 </li>
               ) : (
                 <li data-action="none">
                   <span className="quick-setup-step-title">
-                    No model selected automatically
-                    <em>pick one in the model browser</em>
+                    {t('No model selected automatically')}
+                    <em>{t('pick one in the model browser')}</em>
                   </span>
                 </li>
               )}
             </ol>
 
             <p className="quick-setup-destination">
-              Destination: <code>{plan.runtime.destination}</code>
+              {t('Destination: ')}
+              <code>{plan.runtime.destination}</code>
               {plan.model && (
                 <>
                   {' '}
-                  and <code>{plan.model.directory}</code>
+                  {t('and ')}
+                  <code>{plan.model.directory}</code>
                 </>
               )}
             </p>
@@ -219,7 +253,7 @@ export function QuickSetupPanel({ onCompleted }: QuickSetupPanelProps) {
                 <div className="catalog-progress-track">
                   <div className="catalog-progress-fill" style={{ width: `${percent}%` }} />
                 </div>
-                <span>{status}</span>
+                <span>{t(status)}</span>
               </div>
             )}
 
@@ -230,21 +264,23 @@ export function QuickSetupPanel({ onCompleted }: QuickSetupPanelProps) {
                 disabled={running || nothingToDo}
               >
                 {running
-                  ? 'Working…'
+                  ? t('Working…')
                   : nothingToDo
-                    ? 'Everything is already installed'
-                    : `Download and install${
-                        plan.totalDownloadBytes ? ` · ${fmtBytes(plan.totalDownloadBytes)}` : ''
-                      }`}
+                    ? t('Everything is already installed')
+                    : t('Download and install{value0}', {
+                        value0: plan.totalDownloadBytes
+                          ? ` · ${fmtBytes(plan.totalDownloadBytes)}`
+                          : '',
+                      })}
               </button>
               {running && (
                 <button className="btn ghost" onClick={() => abortRef.current?.abort()}>
-                  Cancel
+                  {t('Cancel')}
                 </button>
               )}
               {!running && (
                 <button className="btn ghost" onClick={recheck}>
-                  Re-check
+                  {t('Re-check')}
                 </button>
               )}
             </div>

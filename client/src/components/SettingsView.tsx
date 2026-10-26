@@ -1,3 +1,7 @@
+import { useCollectionLock } from '../import-jobs';
+import { Link } from '@tanstack/react-router';
+import { useUIStore } from '../store';
+import { t, useI18n } from '../i18n';
 import { useCallback } from 'react';
 import type { CollectionStats } from '../types';
 import { Icons } from '../icons';
@@ -10,16 +14,27 @@ interface DangerRowProps {
   readonly desc: string;
   readonly btn: string;
   readonly onClick: () => void;
+  readonly disabled?: boolean;
 }
 
-function DangerRow({ title, desc, btn, onClick }: DangerRowProps) {
+function DangerRow({ title, desc, btn, onClick, disabled }: DangerRowProps) {
+  useI18n();
   return (
     <div className="danger-row">
       <div>
         <div className="title">{title}</div>
         <div className="desc">{desc}</div>
       </div>
-      <button className="btn danger" onClick={onClick}>
+      <button
+        className="btn danger"
+        onClick={onClick}
+        disabled={disabled}
+        title={
+          disabled
+            ? t('Collection replacement in progress. Changes are temporarily blocked.')
+            : undefined
+        }
+      >
         {Icons.trash} {btn}
       </button>
     </div>
@@ -34,6 +49,8 @@ interface SettingsViewProps {
 }
 
 export function SettingsView({ activeColl, stats, onRefresh, onDeleted }: SettingsViewProps) {
+  useI18n();
+  const collectionLock = useCollectionLock(activeColl);
   const isAll = activeColl === 'all' || activeColl === '__all__';
   const { data: filesData } = useFilesQuery(activeColl, !isAll);
   const files = filesData ? [...new Set(filesData.files.map((f) => f.sourceFile))] : null;
@@ -42,60 +59,70 @@ export function SettingsView({ activeColl, stats, onRefresh, onDeleted }: Settin
   const deleteMutation = useDeleteCollectionMutation();
 
   const doClear = useCallback(async () => {
+    if (collectionLock) {
+      toast.info(t('Collection replacement in progress. Changes are temporarily blocked.'));
+      return;
+    }
     if (activeColl === 'threadshelf_conversations') {
-      toast.error('ThreadShelf conversations are managed from the Chat page.');
+      toast.error(t('ThreadShelf conversations are managed from the Chat page.'));
       return;
     }
     const ok = await confirmDialog({
-      title: `Clear indexed data for "${collLabel(activeColl)}"?`,
+      title: t('Clear indexed data for "{value0}"?', { value0: collLabel(activeColl) }),
       message: 'All vectors are dropped, but the collection itself is kept.',
-      confirmLabel: 'Clear data',
+      confirmLabel: t('Clear data'),
       danger: true,
     });
     if (!ok) return;
     try {
       await clearMutation.mutateAsync(activeColl);
       void onRefresh();
-      toast.success(`Cleared "${collLabel(activeColl)}".`);
+      toast.success(t('Cleared "{value0}".', { value0: collLabel(activeColl) }));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Unknown error');
+      toast.error(e instanceof Error ? e.message : t('Unknown error'));
     }
-  }, [activeColl, onRefresh, clearMutation]);
+  }, [activeColl, onRefresh, clearMutation, collectionLock]);
 
   const doDelete = useCallback(async () => {
+    if (collectionLock) {
+      toast.info(t('Collection replacement in progress. Changes are temporarily blocked.'));
+      return;
+    }
     if (activeColl === 'chunks' || activeColl === 'threadshelf_conversations') {
-      toast.error('Cannot delete the default collection.');
+      toast.error(t('Cannot delete the default collection.'));
       return;
     }
     const ok = await confirmDialog({
-      title: `Delete collection "${collLabel(activeColl)}"?`,
+      title: t('Delete collection "{value0}"?', { value0: collLabel(activeColl) }),
       message:
         'The index and copies previously uploaded through ThreadShelf are deleted. Files in the original folder you selected remain untouched.',
-      confirmLabel: 'Delete',
+      confirmLabel: t('Delete'),
       danger: true,
     });
     if (!ok) return;
     try {
       await deleteMutation.mutateAsync(activeColl);
       await onRefresh();
-      toast.success(`Deleted "${collLabel(activeColl)}".`);
+      toast.success(t('Deleted "{value0}".', { value0: collLabel(activeColl) }));
       onDeleted();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Unknown error');
+      toast.error(e instanceof Error ? e.message : t('Unknown error'));
     }
-  }, [activeColl, onRefresh, onDeleted, deleteMutation]);
+  }, [activeColl, onRefresh, onDeleted, deleteMutation, collectionLock]);
 
   if (isAll) {
     return (
       <div className="view">
         <div className="section-h">
-          <h2>Collection settings</h2>
-          <span className="desc">Pick a collection from the sidebar to manage it.</span>
+          <h2>{t('Collection settings')}</h2>
+          <span className="desc">{t('Pick a collection from the sidebar to manage it.')}</span>
         </div>
         <div className="banner info">
           <span className="ico">{Icons.info}</span>
           <div className="grow">
-            Destructive actions are disabled while <b>All collections</b> is selected.
+            {t('Destructive actions are disabled while ')}
+            <b>{t('All collections')}</b>
+            {t(' is selected.')}
           </div>
         </div>
       </div>
@@ -114,30 +141,40 @@ export function SettingsView({ activeColl, stats, onRefresh, onDeleted }: Settin
             {collLabel(activeColl)}
           </span>
         </h2>
-        <span className="desc">Local LanceDB table</span>
+        <span className="desc">{t('Local LanceDB table')}</span>
       </div>
 
+      {collectionLock && (
+        <div className="banner info" role="status">
+          <span>{t('Collection replacement in progress. Changes are temporarily blocked.')}</span>
+          <Link to="/indexing">{t('View import progress')}</Link>
+        </div>
+      )}
       <div className="panel" style={{ padding: 0 }}>
         <div className="stat-grid">
           <div className="stat">
-            <span className="k">files</span>
-            <span className="v">{(st?.files ?? 0).toLocaleString()}</span>
-            <span className="d">source exports</span>
+            <span className="k">{t('files')}</span>
+            <span className="v">
+              {(st?.files ?? 0).toLocaleString(useUIStore.getState().locale)}
+            </span>
+            <span className="d">{t('source exports')}</span>
           </div>
           <div className="stat">
-            <span className="k">chunks</span>
-            <span className="v">{(st?.chunks ?? 0).toLocaleString()}</span>
-            <span className="d">indexed vectors</span>
+            <span className="k">{t('chunks')}</span>
+            <span className="v">
+              {(st?.chunks ?? 0).toLocaleString(useUIStore.getState().locale)}
+            </span>
+            <span className="d">{t('indexed vectors')}</span>
           </div>
           <div className="stat">
-            <span className="k">user</span>
-            <span className="v">{roles.user.toLocaleString()}</span>
-            <span className="d">user turns</span>
+            <span className="k">{t('user')}</span>
+            <span className="v">{roles.user.toLocaleString(useUIStore.getState().locale)}</span>
+            <span className="d">{t('user turns')}</span>
           </div>
           <div className="stat">
-            <span className="k">response</span>
-            <span className="v">{roles.ai.toLocaleString()}</span>
-            <span className="d">ai turns</span>
+            <span className="k">{t('response')}</span>
+            <span className="v">{roles.ai.toLocaleString(useUIStore.getState().locale)}</span>
+            <span className="d">{t('ai turns')}</span>
           </div>
         </div>
 
@@ -151,15 +188,18 @@ export function SettingsView({ activeColl, stats, onRefresh, onDeleted }: Settin
             <div className="role-legend">
               <span>
                 <i className="user" />
-                User {roles.user}
+                {t('User ')}
+                {roles.user}
               </span>
               <span>
                 <i className="thinking" />
-                Thinking {roles.thinking}
+                {t('Thinking ')}
+                {roles.thinking}
               </span>
               <span>
                 <i className="ai" />
-                Response {roles.ai}
+                {t('Response ')}
+                {roles.ai}
               </span>
             </div>
           </div>
@@ -168,12 +208,17 @@ export function SettingsView({ activeColl, stats, onRefresh, onDeleted }: Settin
 
       <div className="panel">
         <div className="panel-head">
-          <h3>Indexed files</h3>
-          <span className="sub">{st?.files ?? 0} files</span>
+          <h3>{t('Indexed files')}</h3>
+          <span className="sub">
+            {st?.files ?? 0}
+            {t(' files')}
+          </span>
         </div>
         <div className="file-list">
-          {files === null && <div className="file-list-empty">Loading…</div>}
-          {files && files.length === 0 && <div className="file-list-empty">No indexed files.</div>}
+          {files === null && <div className="file-list-empty">{t('Loading…')}</div>}
+          {files && files.length === 0 && (
+            <div className="file-list-empty">{t('No indexed files.')}</div>
+          )}
           {files?.map((f, i) => {
             const short = String(f).replace(/\\/g, '/').split('/').pop();
             return (
@@ -190,28 +235,37 @@ export function SettingsView({ activeColl, stats, onRefresh, onDeleted }: Settin
 
       <div className="panel">
         <div className="panel-head">
-          <h3>Danger zone</h3>
-          <span className="sub">destructive, irreversible</span>
+          <h3>{t('Danger zone')}</h3>
+          <span className="sub">{t('destructive, irreversible')}</span>
         </div>
         <div className="panel-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {activeColl === 'threadshelf_conversations' ? (
             <p className="muted">
-              This protected collection is maintained automatically from chats created or continued
-              in ThreadShelf.
+              {t(
+                'This protected collection is maintained automatically from chats created or continued in ThreadShelf.',
+              )}
             </p>
           ) : (
             <>
               <DangerRow
-                title="Clear indexed data"
-                desc="Drop all vectors but keep the collection itself."
-                btn="Clear data"
+                title={t('Clear indexed data')}
+                desc={t('Drop all vectors but keep the collection itself.')}
+                btn={t('Clear data')}
                 onClick={doClear}
+                disabled={
+                  Boolean(collectionLock) || clearMutation.isPending || deleteMutation.isPending
+                }
               />
               <DangerRow
-                title="Delete collection"
-                desc="Delete the index and ThreadShelf upload copies. Files in your original folder stay untouched."
-                btn="Delete"
+                title={t('Delete collection')}
+                desc={t(
+                  'Delete the index and ThreadShelf upload copies. Files in your original folder stay untouched.',
+                )}
+                btn={t('Delete')}
                 onClick={doDelete}
+                disabled={
+                  Boolean(collectionLock) || clearMutation.isPending || deleteMutation.isPending
+                }
               />
             </>
           )}

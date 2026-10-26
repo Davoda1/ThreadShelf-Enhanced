@@ -1,3 +1,4 @@
+import { closeStoragePublication } from '../src/storage-publication.js';
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -12,7 +13,10 @@ process.env.THREADSHELF_DATA_DIR = root;
 process.env.LANCEDB_PATH = join(root, 'db');
 process.env.COLLECTIONS_PATH = join(root, 'collections.json');
 const store = await import('../src/store.ts');
-after(() => rm(root, { recursive: true, force: true }));
+after(async () => {
+  closeStoragePublication();
+  await rm(root, { recursive: true, force: true });
+});
 
 const launch = (mode, id) => {
   const child = spawn(

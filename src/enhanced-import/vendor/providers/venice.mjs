@@ -127,7 +127,7 @@ async function jsonMember(entry, password, limits, signal) {
 /** Complete ZIP containers may each carry a subset of the numbered DB chunks.
  * Files are random-accessed; media is never read, extracted, or discarded.
  */
-export async function loadBackup(paths, { password, limits = LIMITS, signal } = {}) {
+export async function loadBackup(paths, { password, limits = LIMITS, signal, beforeWholeDocument } = {}) {
   const { ZipReader, Reader, Uint8ArrayReader } = await import('@zip.js/zip.js');
   class FileReader extends Reader {
     constructor(handle, size) { super(); this.handle = handle; this.size = size; }
@@ -189,6 +189,7 @@ export async function loadBackup(paths, { password, limits = LIMITS, signal } = 
           if (chunks.has(index)) throw new Error(`Duplicate database chunk ${index}; select each part only once.`);
           total += entry.uncompressedSize;
           if (total > limits.databaseBytes) throw new Error('Database exceeds the 2 GiB expanded-data safety limit. Use a smaller export.');
+          await beforeWholeDocument?.(total);
           chunks.set(index, await jsonMember(entry, password, limits, signal));
         } else if (!entry.directory && entry.filename !== 'manifest.json') media.add(entry.filename);
       }

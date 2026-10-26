@@ -1,3 +1,4 @@
+import { closeStoragePublication } from '../src/storage-publication.js';
 import { after, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -9,7 +10,10 @@ process.env.COLLECTIONS_PATH = join(root, 'collections.json');
 const { replaceThreadsForFile, updateStoredThreadFromCurrent, getStoredThreads } =
   await import('../src/store.ts');
 const { loadThread } = await import('../src/services/thread.ts');
-after(() => rm(root, { recursive: true, force: true }));
+after(async () => {
+  closeStoragePublication();
+  await rm(root, { recursive: true, force: true });
+});
 it('retains raw conversation and message metadata through storage and continuation', async () => {
   const source = join(root, 'no-longer-present.json');
   const raw = {

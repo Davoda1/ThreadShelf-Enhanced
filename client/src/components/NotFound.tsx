@@ -1,3 +1,4 @@
+import { t, useI18n } from '../i18n';
 import { useNavigate } from '@tanstack/react-router';
 import { useUIStore } from '../store';
 import { Icons } from '../icons';
@@ -9,6 +10,7 @@ import { Topbar } from './Topbar';
  * text with no way back.
  */
 export function NotFound() {
+  useI18n();
   const navigate = useNavigate();
   const activeColl = useUIStore((state) => state.activeColl);
   const setSidebarOpen = useUIStore((state) => state.setSidebarOpen);
@@ -19,10 +21,13 @@ export function NotFound() {
       <div className="main-scroll">
         <div className="view">
           <div className="empty" id="notFound">
-            <h3>That page does not exist.</h3>
+            <h3>{t('That page does not exist.')}</h3>
             <p>
-              The address <code>{window.location.pathname}</code> is not part of ThreadShelf. The
-              link may be from an older version, or a path may have been mistyped.
+              {t('The address ')}
+              <code>{window.location.pathname}</code>
+              {t(
+                ' is not part of ThreadShelf. The link may be from an older version, or a path may have been mistyped.',
+              )}
             </p>
             <div className="examples">
               <button
@@ -35,11 +40,11 @@ export function NotFound() {
                 }
               >
                 {Icons.search}
-                <span>Back to search</span>
+                <span>{t('Back to search')}</span>
               </button>
               <button className="example-chip" onClick={() => void navigate({ to: '/indexing' })}>
                 {Icons.download}
-                <span>Index a folder</span>
+                <span>{t('Index a folder')}</span>
               </button>
             </div>
           </div>

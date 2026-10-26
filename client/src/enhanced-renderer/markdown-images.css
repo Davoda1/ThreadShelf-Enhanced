@@ -1,0 +1,74 @@
+/* Explicit Markdown images stay inside their text/table cell at every shape.
+   Intrinsic ratio is retained; a tall poster cannot create an unbounded row. */
+.enhanced-markdown .reader-markdown-image{
+  display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;
+  box-sizing:border-box;min-width:0;max-width:100%;margin:.35rem 0;
+}
+.enhanced-markdown .reader-markdown-image-content{
+  display:block;flex:none;width:auto;height:auto;max-width:100%;max-height:min(32rem,70vh);
+  object-fit:contain;margin:0;border-radius:6px;
+}
+.enhanced-markdown :is(td,th) .reader-markdown-image{
+  width:144px;max-width:100%;
+}
+.enhanced-markdown :is(td,th) .reader-markdown-image-content{
+  max-width:144px;max-height:min(180px,35vh);
+}
+.enhanced-markdown .reader-image-fallback{
+  position:relative;display:block;box-sizing:border-box;width:100%;max-width:100%;
+  aspect-ratio:16/9;overflow:hidden;border:1px solid var(--border-color);border-radius:12px;
+  background:var(--bg-primary);color:var(--text-secondary);text-align:center;white-space:normal;
+}
+.enhanced-markdown .reader-markdown-image [hidden]{display:none!important}
+.enhanced-markdown .reader-markdown-image:is([data-image-state="deferred"],[data-image-state="failed"],[data-image-state="missing"]){width:min(640px,100%)}
+.enhanced-markdown .reader-markdown-image[data-image-design="compact"]:is([data-image-state="deferred"],[data-image-state="failed"],[data-image-state="missing"]){width:172px}
+.enhanced-markdown [data-image-design="compact"] .reader-image-fallback{aspect-ratio:5/4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:12px 8px}
+.enhanced-markdown [data-image-state="missing"] .reader-image-fallback{border:0;padding:0;display:block}
+.enhanced-markdown [data-image-state="missing"] .rich-image-placeholder{height:100%;max-width:100%}
+.enhanced-markdown .reader-image-load{
+  position:relative;display:block;overflow:hidden;box-sizing:border-box;width:100%;max-width:100%;
+  aspect-ratio:16/9;padding:0;border:1px solid var(--border-color);
+  border-radius:12px;background:var(--bg-primary);color:var(--text-primary);font:inherit;
+  cursor:pointer;white-space:normal;overflow-wrap:anywhere;text-align:center;line-height:1.35;
+}
+.enhanced-markdown .reader-image-load:hover{border-color:var(--text-accent)}
+.enhanced-markdown .reader-image-load:focus-visible{outline:2px solid var(--text-accent);outline-offset:2px}
+.enhanced-markdown .reader-image-load-label{position:absolute;top:calc(50% + 18px);left:12px;right:12px;font-size:13px;line-height:18px;font-weight:600}
+.enhanced-markdown .reader-image-load-description{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.enhanced-markdown .reader-image-load-background{position:absolute;inset:0;width:100%;height:100%}
+.enhanced-markdown .reader-image-load-art{position:absolute;left:50%;top:calc(50% - 38px);transform:translateX(-50%);width:44px;height:46px;fill:none;stroke:var(--text-secondary);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.enhanced-markdown [data-image-design="compact"] .reader-image-load{aspect-ratio:5/4;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:9px;gap:4px}
+.enhanced-markdown [data-image-design="compact"] .reader-image-load-art{position:static;transform:none;width:64px;height:56px;flex:none}
+.enhanced-markdown [data-image-design="compact"] .reader-image-load-label{position:static;font-size:13px;line-height:18px}
+.enhanced-markdown .reader-image-load-frame,.enhanced-markdown .reader-image-load-arrow{stroke:var(--text-accent)}
+.enhanced-markdown .reader-image-load-arrow{stroke-width:2}
+.enhanced-markdown .reader-image-load-terrain{fill:var(--bg-tertiary);stroke:none}
+.enhanced-markdown .reader-image-load-horizon{fill:none;stroke:var(--text-secondary);stroke-width:1.5;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round}
+.enhanced-markdown .reader-image-failure-art{position:absolute;inset:auto;left:50%;top:50%;width:min(224px,calc(100% - 32px));height:50px;transform:translate(-50%,-50%);fill:none;stroke:var(--text-secondary);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.enhanced-markdown .reader-image-failure-copy{position:absolute;top:calc(50% + 33px);left:12px;right:12px}
+.enhanced-markdown .reader-image-failure-label{display:block;font-size:13px;line-height:18px;font-weight:500;overflow-wrap:anywhere}
+.enhanced-markdown .reader-image-failure-detail{display:block;font-size:var(--fs-micro);line-height:16px;margin-top:6px;overflow-wrap:anywhere}
+.enhanced-markdown [data-image-design="compact"] .reader-image-failure-art{position:static;transform:none;width:66px;height:58px;flex:none;stroke-width:1.6}
+.enhanced-markdown [data-image-design="compact"] .reader-image-failure-copy{position:static}
+.enhanced-markdown [data-image-design="compact"] .reader-image-failure-label{font-size:var(--fs-meta);line-height:16px}
+.enhanced-markdown [data-image-design="compact"] .reader-image-failure-detail{display:none}
+.enhanced-markdown .reader-image-accent{stroke:var(--text-accent)}
+.enhanced-markdown .reader-image-cut-under{stroke:var(--bg-primary);stroke-width:7;stroke-linecap:round}
+.enhanced-markdown .reader-image-cut{stroke-width:2}
+.enhanced-markdown .reader-image-connection{stroke-width:1.5;opacity:.55}
+.enhanced-markdown .reader-image-endpoint{stroke-width:1.5;stroke-dasharray:3 4;opacity:.65}
+.enhanced-markdown .reader-image-accent-dot{fill:var(--text-accent);stroke:none}
+.enhanced-markdown .reader-image-loading{display:block;max-width:100%;color:var(--text-secondary);font-size:.8em;padding:.35em .6em}
+@media(forced-colors:active){
+  .enhanced-markdown .reader-image-load,.enhanced-markdown .reader-image-fallback{background:Canvas;color:CanvasText;border-color:ButtonText}
+  .enhanced-markdown .reader-image-load-art,.enhanced-markdown .reader-image-failure-art,.enhanced-markdown .reader-image-load-horizon{stroke:CanvasText}
+  .enhanced-markdown .reader-image-load-frame,.enhanced-markdown .reader-image-load-arrow,.enhanced-markdown .reader-image-accent{stroke:Highlight}
+  .enhanced-markdown .reader-image-load-terrain{fill:Canvas;stroke:CanvasText}
+  .enhanced-markdown .reader-image-cut-under{stroke:Canvas}
+  .enhanced-markdown .reader-image-accent-dot{fill:Highlight}
+}
+.enhanced-markdown .reader-image-load.reader-image-retry { position: static; align-self: flex-end; order: 2; width: auto; aspect-ratio: auto; padding: 4px 9px; margin-top: 6px; border-radius: var(--r-xs); }
+.enhanced-markdown .reader-image-retry :is(svg,.reader-image-load-description) { display: none; }
+.enhanced-markdown .reader-image-retry .reader-image-load-label { position: static; font-size: var(--fs-meta); }
+.enhanced-markdown .reader-markdown-image { position: relative; }
+.enhanced-markdown .reader-markdown-image-content { max-height: min(32rem, 70vh); }

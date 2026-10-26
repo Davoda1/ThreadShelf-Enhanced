@@ -16,6 +16,11 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   use: {
     headless: true,
+    // A locally installed browser is useful in offline/restricted build hosts.
+    // Normal development and CI retain Playwright's pinned browser by default.
+    launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+      ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH }
+      : undefined,
     actionTimeout: 10_000,
     navigationTimeout: 30_000,
     trace: 'retain-on-failure',

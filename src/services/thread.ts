@@ -6,6 +6,7 @@ import { getAllCollections } from './collections.js';
 import { portableModelLabel } from '../model-label.js';
 
 export interface ThreadResult {
+  readonly collection?: string;
   readonly raw?: unknown;
   readonly sourceIdentity?: unknown;
   readonly provider?: string;
@@ -79,7 +80,11 @@ const loadStoredThread = async (
   collection: string,
   conversationKey?: string,
 ): Promise<ThreadResult | null> => {
-  const rows = await getStoredThreads(collection === 'all' ? null : collection, sourceFile);
+  const rows = await getStoredThreads(
+    collection === 'all' ? null : collection,
+    sourceFile,
+    conversationKey,
+  );
   if (!rows.length) return null;
 
   const stored = pickNewestGroup(rows);
@@ -90,6 +95,7 @@ const loadStoredThread = async (
     // back to re-parsing the source file below.
     if (!row) return null;
     return {
+      collection: row.collection,
       sourceFile,
       conversationKey: row.conversationKey,
       title: row.title || undefined,
@@ -105,6 +111,7 @@ const loadStoredThread = async (
   if (stored.length === 1) {
     const row = stored[0]!;
     return {
+      collection: row.collection,
       sourceFile,
       conversationKey: row.conversationKey,
       title: row.title || undefined,
@@ -120,6 +127,7 @@ const loadStoredThread = async (
   // No key against a multi-conversation export: flatten in original file order,
   // mirroring the legacy parseExport behaviour.
   return {
+    collection: stored[0]?.collection,
     sourceFile,
     conversationKey: '',
     createdInThreadShelf: stored.every((row) => row.createdInThreadShelf),
@@ -166,6 +174,7 @@ const loadThreadFromSourceFile = async (
   const turns = sanitizeTurns(selected?.turns || fallback?.turns || []);
 
   return {
+    ...(collection === 'all' ? {} : { collection }),
     sourceFile,
     conversationKey: selected?.key || conversationKey || '',
     title: selected?.title,

@@ -1,3 +1,5 @@
+import { useImportJobs } from '../import-jobs';
+import { t, useI18n } from '../i18n';
 import { useEffect, useCallback } from 'react';
 import { Outlet, useRouter, useMatches } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
@@ -10,12 +12,20 @@ import { Toaster } from '../components/Toaster';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { confirmDialog, toast } from '../toast';
 import { collLabel } from '../utils';
+import { ImportStatusIndicator } from '../components/ImportJobsPanel';
 
 export function RootLayout() {
+  useI18n();
+  const jobs = useImportJobs();
   const router = useRouter();
   const queryClient = useQueryClient();
   const matches = useMatches();
   const isThread = matches.some((m) => m.pathname === '/thread');
+
+  const locale = useUIStore((s) => s.locale);
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
 
   const theme = useUIStore((s) => s.theme);
   const activeColl = useUIStore((s) => s.activeColl);
@@ -41,7 +51,7 @@ export function RootLayout() {
       queryClient.invalidateQueries({ queryKey: ['search'] }),
       queryClient.invalidateQueries({ queryKey: ['thread'] }),
     ]);
-    toast.success('Local index data refreshed.');
+    toast.success(t('Local index data refreshed.'));
   }, [queryClient]);
 
   useEffect(() => {
@@ -50,12 +60,16 @@ export function RootLayout() {
 
   const deleteCollection = useCallback(
     async (name: string) => {
+      if (jobs.data?.jobs.some((job) => job.collection === name && job.collectionLocked)) {
+        toast.info(t('Collection replacement in progress. Changes are temporarily blocked.'));
+        return;
+      }
       if (name === 'chunks' || name === 'threadshelf_conversations') return;
       const ok = await confirmDialog({
-        title: `Delete collection "${collLabel(name)}"?`,
+        title: t('Delete collection "{value0}"?', { value0: collLabel(name) }),
         message:
           'The index and copies previously uploaded through ThreadShelf are deleted. Files in the original folder you selected remain untouched.',
-        confirmLabel: 'Delete',
+        confirmLabel: t('Delete'),
         danger: true,
       });
       if (!ok) return;
@@ -65,12 +79,12 @@ export function RootLayout() {
           setActiveColl('all');
           void router.navigate({ to: '/search/$collection', params: { collection: 'all' } });
         }
-        toast.success(`Deleted collection "${collLabel(name)}".`);
+        toast.success(t('Deleted collection "{value0}".', { value0: collLabel(name) }));
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Unknown error');
+        toast.error(e instanceof Error ? e.message : t('Unknown error'));
       }
     },
-    [activeColl, setActiveColl, deleteMutation, router],
+    [activeColl, setActiveColl, deleteMutation, router, jobs.data],
   );
 
   const navigateTo = useCallback(
@@ -194,11 +208,12 @@ export function RootLayout() {
       <button
         className="sidebar-scrim"
         onClick={closeSidebar}
-        aria-label="Close sidebar"
+        aria-label={t('Close sidebar')}
         tabIndex={sidebarOpen ? 0 : -1}
       />
 
       <div className="main">
+        <ImportStatusIndicator />
         <Outlet />
       </div>
 

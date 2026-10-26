@@ -1,3 +1,4 @@
+import { t, useI18n } from '../i18n';
 import { Icons } from '../icons';
 import { collLabel } from '../utils';
 import { ThemeToggle } from './ThemeToggle';
@@ -12,12 +13,54 @@ interface NavItem {
 }
 
 const NAV_ITEMS: readonly NavItem[] = [
-  { id: '/search', viewKey: 'search', label: 'Search archive', icon: Icons.search },
-  { id: '/chat', viewKey: 'chat', label: 'New chat', icon: Icons.spark },
-  { id: '/insights', viewKey: 'insights', label: 'Insights', icon: Icons.chart },
-  { id: '/indexing', viewKey: 'indexing', label: 'Add data', icon: Icons.download },
-  { id: '/mcp', viewKey: 'mcp', label: 'MCP', icon: Icons.plug },
-  { id: '/settings', viewKey: 'settings', label: 'Settings', icon: Icons.settings },
+  {
+    id: '/search',
+    viewKey: 'search',
+    get label() {
+      return t('Search archive');
+    },
+    icon: Icons.search,
+  },
+  {
+    id: '/chat',
+    viewKey: 'chat',
+    get label() {
+      return t('New chat');
+    },
+    icon: Icons.spark,
+  },
+  {
+    id: '/insights',
+    viewKey: 'insights',
+    get label() {
+      return t('Insights');
+    },
+    icon: Icons.chart,
+  },
+  {
+    id: '/indexing',
+    viewKey: 'indexing',
+    get label() {
+      return t('Add data');
+    },
+    icon: Icons.download,
+  },
+  {
+    id: '/mcp',
+    viewKey: 'mcp',
+    get label() {
+      return t('MCP');
+    },
+    icon: Icons.plug,
+  },
+  {
+    id: '/settings',
+    viewKey: 'settings',
+    get label() {
+      return t('Settings');
+    },
+    icon: Icons.settings,
+  },
 ];
 
 interface SidebarRailProps {
@@ -37,11 +80,12 @@ export function SidebarRail({
   onDeleteCollection,
   collections,
 }: SidebarRailProps) {
+  useI18n();
   return (
     <aside className="sidebar rail">
       <div className="rail-brand">
         <div className="sb-logo" aria-hidden="true" style={{ width: 22, height: 22 }} />
-        <span className="name">ThreadShelf</span>
+        <span className="name">{t('ThreadShelf')}</span>
       </div>
 
       <nav className="rail-nav">
@@ -58,7 +102,7 @@ export function SidebarRail({
         ))}
       </nav>
 
-      <div className="rail-sep-h">Collections</div>
+      <div className="rail-sep-h">{t('Collections')}</div>
 
       <div className="rail-colls">
         <button
@@ -67,7 +111,7 @@ export function SidebarRail({
           onClick={() => setActiveColl('all')}
         >
           <i style={{ background: 'var(--accent)' }} />
-          <span>All collections</span>
+          <span>{t('All collections')}</span>
         </button>
 
         {collections
@@ -85,8 +129,8 @@ export function SidebarRail({
               {c !== 'chunks' && c !== 'threadshelf_conversations' && (
                 <button
                   className="rail-coll-delete"
-                  title={`Delete ${collLabel(c)}`}
-                  aria-label={`Delete ${collLabel(c)}`}
+                  title={t('Delete {value0}', { value0: collLabel(c) })}
+                  aria-label={t('Delete {value0}', { value0: collLabel(c) })}
                   onClick={(e) => {
                     e.stopPropagation();
                     onDeleteCollection(c);

@@ -1,5 +1,6 @@
 @import './rich-layout.css';
 @import './rich-charts.css';
+@import './markdown-images.css';
 
 /* Existing ThreadShelf tokens remain the only theme palette. */
 .enhanced-markdown {
@@ -54,4 +55,10 @@
 .enhanced-markdown .rich-original-source { white-space: pre-wrap; overflow-wrap: anywhere; }
 .enhanced-markdown .rich-size-2xs,.enhanced-markdown .rich-size-xs { font-size: max(var(--fs-meta), .8em); }
 .enhanced-markdown .rich-chart table { min-width: auto; }
+.enhanced-markdown .markdown-deferred-preview { display: block; max-height: 18rem; overflow: hidden; white-space: pre-wrap; }
+.enhanced-markdown[data-render-state=deferred] { min-height: 3rem; }
+/* Keep the browser's scroll anchor on stable turn controls or the conversation
+   footer while a deferred message replaces its preview with formatted content. */
+.enhanced-markdown[data-render-state] { overflow-anchor: none; }
+.enhanced-markdown .chatgpt-math-source { font-style: normal; }
 @media(max-width:480px) { .enhanced-markdown .rich-grid { grid-template-columns: minmax(0,1fr); } }

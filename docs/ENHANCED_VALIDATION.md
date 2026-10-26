@@ -1,164 +1,144 @@
-# Enhanced 1.2.0 validation
+# Enhanced 1.3.0 validation
 
-Validation uses synthetic conversations and isolated stores. No live archive or
-credentials are needed for the public-source checks.
+Required public-source checks use synthetic conversations and isolated temporary
+stores. They do not require live archives, credentials or separately supplied
+application source trees.
 
-**Local release candidate validation: 2026-10-22, Enhanced 1.2.0.** The complete
-local gate passed after a fresh locked dependency installation. This release
-preserves existing database, identity, embedding and API contracts. The previous
-version commits, tags and assets remain separate and unchanged. Required hosted
-Linux and Windows checks run before publication; their results are recorded in
-[Actions history](https://github.com/Davoda1/ThreadShelf-Enhanced/actions).
+**Local public-source validation passed on 2026-10-26.** The complete
+`npm run check` finished successfully after the final import-history and upload
+management changes. These are local candidate results; the required hosted
+commit/tag checks remain separate gates. See
+[Actions history](https://github.com/Davoda1/ThreadShelf-Enhanced/actions) for
+their exact outcomes. A successful check for an older commit is not evidence
+for a newer candidate.
 
-## Reproducible checks
+| Local check | Result |
+| --- | --- |
+| Dependency security | Zero reported findings in all four audit scopes; both bundled asset hashes verified |
+| Source hygiene | 488 candidate files checked successfully |
+| Lint, server/client TypeScript and client production build | Passed |
+| Unit/regression tests | 721 passed; one native Windows-only test skipped on Linux; 722 total |
+| HTTP API and MCP integration | 37 passed |
+| Browser regressions | 107 passed |
+| Compiled server and isolated health/API/UI/shutdown smoke | Passed, including uploaded-file endpoints |
+| Source-packaging regressions | 17 passed |
+| Optional public Reader-to-Analytics integration | Both 7z and ZIP profiles passed |
 
-| Check | Command or scope | Local 1.2.0 result |
-| --- | --- | --- |
-| Dependency security | Application lockfile, all and production; renderer-build lockfile; bundled inventory and asset hashes | Passed; zero advisory findings in all four scopes |
-| Repository hygiene, lint and server TypeScript | `npm run check:repo`; `npm run lint`; `npx tsc --noEmit` | Passed |
-| Unit and regression tests | `npm test` | 633 passed; one native-Windows-only case skipped on Linux |
-| HTTP API and MCP integration | `npm run test:e2e` | 30 passed |
-| Client TypeScript and production build | `npm run build:client` | Passed |
-| Chromium browser regressions | `npm run test:playwright` | 88 passed |
-| Compiled server | `npm run build:server`; isolated HTTP smoke from unrelated working directory | Passed; 24 concurrent collection registrations retained and upload deletion used the configured root |
-| Source packaging regressions | `python3 test/source-release.test.py` | 12 passed; committed archives are audited again by Linux and Windows CI |
-| Enhanced upgrade | Synthetic 1.1.0-to-1.2.0 LanceDB handoff with real embeddings | Existing schemas, rows, identities, source bytes, vectors, API responses and search ordering unchanged |
-| Original ThreadShelf upgrade | Synthetic 1.3.0-to-Enhanced-1.2.0 handoff with real embeddings | Original fields, vectors, source bytes and registry retained; existing additive raw-source columns supported |
+The local browser run used Chrome 156.0.8078.47 through
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`. Normal development and hosted CI retain
+Playwright's pinned Chromium unless that override is explicitly set. The optional
+[Reader-to-Analytics check](../test/compatibility/README.md) used the public
+Local Suite v1.2.0 reference; it does not launch native desktop applications.
 
-`npm run check` includes security, hygiene, lint, server TypeScript, unit tests,
-HTTP/MCP integration, client build and Chromium regressions. Advisory results are
-limited to the public advisory data available at the time of the run. The gate
-fails if that service cannot supply a reliable result.
+## Reproducible gates
 
-### Bug-fix and upgrade validation
+| Gate | Command or scope |
+| --- | --- |
+| Dependency security | `npm run check:security`: application all/production lockfiles, renderer-build lockfile, bundled component inventory and asset hashes |
+| Source hygiene | `npm run check:repo`: tracked/untracked candidates, secrets and private/runtime exclusions |
+| Lint and server TypeScript | `npm run lint`; `npx tsc --noEmit` |
+| Unit/regression tests | `npm test` |
+| HTTP API and MCP integration | `npm run test:e2e` |
+| Client TypeScript and production build | `npm run build:client` |
+| Chromium browser regressions | `npm run test:playwright` |
+| Compiled server | `npm run build:server` and isolated HTTP health/UI smoke |
+| Source packaging | `python3 test/source-release.test.py`; committed ZIP/TAR inventory, byte/mode parity, reproducibility and SHA-256 checks |
 
-The new regressions cover concurrent appends across independent processes,
-rename/append interleavings, schema initialization and legacy normalization, reads during embedding,
-process death and lock recovery, cancellation and timeout, nested lock scopes,
-queued sibling operations, expired asynchronous contexts, legacy-to-primary
-migration races, and the lookup window between legacy and primary storage.
-Collection tests cover concurrent registry registration and removal, corrupt
-registry preservation, atomic replacement, overridden upload paths, and failure
-ordering when a database cannot be deleted. Windows replacement regressions
-inject transient sharing errors, persistent denial and non-retryable errors; they
-verify bounded retry, unchanged old data on failure, temporary-file cleanup and
-subsequent lock acquisition. The real concurrent-reader test remains enabled
-on Windows. SQLite lock sidecars and their
-journal/WAL companions are excluded from source archives.
+`npm run check` executes the security, source hygiene, lint, TypeScript, unit,
+HTTP/MCP, client build and browser gates. Advisory results apply to the available
+public advisory data at run time. An unavailable or malformed advisory response
+fails the security gate; it is not treated as a clean audit.
 
-The upgrade rehearsals each start with four conversations and 11 indexed chunks.
-They compare persisted data and search results before exercising rename, append,
-reimport and native-chat continuation. Enhanced 1.1.0 retains its exact schema;
-original ThreadShelf 1.3.0 retains every original field and vector while the
-existing migration adds empty `rawJson` and `sourceIdentityJson` columns. No
-embedding-model or dependency change is included in 1.2.0. All processes writing
-the same store must upgrade together because older writers do not use the new
-interprocess locks.
+Setup pins Node 24.22.1 and npm 12.2.1. Repository workflows require Linux and
+Windows setup/core checks, with source packaging on both platforms. The release
+workflow must pass the required gates again for the version tag before publishing
+its two source archives and one consolidated `SHA256SUM.txt`, including checks
+of the actual committed archives. Previous releases remain unchanged. Local
+results above do not assert that those hosted or final archive gates have passed;
+consult the workflow runs for the exact platform and tag outcomes.
 
-### Public desktop compatibility
+## Coverage for 1.3.0
 
-Additional external checks used unmodified public Local Suite 1.0.0 applications
-at commit `1be2ceb8cd5fec04fc852861fc0f3173dc0d3155`. These app sources remain in
-their own repository and are not server dependencies or release contents.
-Reader's core suite passed 519 tests with four conditional skips; Analytics passed
-316; Alternative passed 21. Production application sources were unchanged.
+- Bounded normalization/spooling, large-record safety, mixed supported and
+  unsupported files, image companions and lossless provider/source identities.
+- Generation publication, cancellation and staging failure; old published reads
+  during preparation; retained local continuations; embedding reuse tied to
+  verified model/runtime identity; retirement protected by reader leases.
+- Process termination before/after publication, orphan staging cleanup,
+  cross-process cache visibility and durable pending-index recovery.
+- Accepted uploads surviving browser disconnection, checksummed inputs,
+  restart/retry/cancellation, one server/indexer ownership, collection replacement
+  reservations and deletion coordinated with queued imports.
+- Finished-job history removal, active-job protection and completed progress at
+  100%; uploaded-file management with cross-collection input dependencies,
+  bounded traversal and protected storage paths.
+- Effective host/container memory limits, reclaimable cache accounting, bounded
+  pressure handling and cancellation while waiting.
+- Existing Reader/Alternative adapter contracts, collection pagination, filtering,
+  stored threads, raw content, Insights, and keyword/semantic search.
+- Basic/full rendering for each role, animated accessible switches, six interface
+  languages, deferred expensive rendering, source copy/export, scroll anchoring
+  and short/narrow viewport reachability.
+- Inline click/automatic image loading, compact/wide placeholders, no link
+  navigation on load, cache partitions/quota/purge and in-flight invalidation.
+- Image-proxy destination/redirect validation, DNS pinning, response signature and
+  size limits, inert response headers and blocked private destinations.
+- Portable runtime setup, public launcher behavior, source-package exclusions
+  and retained license/provenance checks.
 
-Native Linux Electron tests exercised all three applications against an isolated
-compiled Enhanced server with 65 synthetic conversations. Reader browsed and
-searched across page boundaries, displayed full conversations, imported 35 into
-its real compressed local archive, and reopened the archive and appearance
-settings after restart. Analytics captured that archive, rendered all 35
-conversations and 175 records, reopened its owned capture after restart, and left
-every Reader profile file byte-identical. Alternative passed 11 checks covering
-connection, pagination, rich thread rendering, navigation, pins/history, in-thread
-find, clipboard/export, retained settings and reading position, small-window
-layout and visible errors. No renderer errors were recorded. A separate real-embedding pipeline also
-passed both 7z and ZIP storage profiles through Reader and Analytics, including
-committed journal replay, exact source identity and read-only archive access.
+Existing geometry, visibility and interaction assertions remain part of the
+browser suite. Runtime or storage failures must be reproduced with synthetic
+fixtures; no real conversation payload belongs in source or CI diagnostics.
 
-These native checks used a virtual X display and the apps' pinned Electron
-versions. The root-only test host required `--no-sandbox` and a test-only
-single-instance override; production source and configured context isolation,
-renderer sandbox settings and disabled Node integration were verified unchanged.
-This is evidence for the tested source applications, not desktop installer or
-native Windows desktop certification. No live user database was opened.
+## Opt-in scale checks
 
-### Historical 1.1.0 baseline
+`test/import-storage-stress.js` exercises actual storage with deterministic
+synthetic embeddings, allowing archive/index scaling to be measured separately
+from model inference. `test/snapshot-fingerprint-stress.js` checks incremental
+fingerprinting against the former single-string size limit. These are opt-in
+stress programs, not ordinary unit-test timings or real-export benchmarks.
 
-The 2026-10-21 local 1.1.0 gate passed 598 unit tests (one Windows-only skip),
-30 HTTP/MCP tests, 88 Chromium tests and 12 packaging regressions, with zero
-advisory findings in four scopes. A synthetic 1.0.0-to-1.1.0 rehearsal preserved
-six rows across three threads and three 384-dimensional query vectors exactly.
-A clean renderer rebuild reproduced Mermaid byte-for-byte and verified its
-79-package inventory. Launcher terminal Ctrl+C checks verified status zero,
-child cleanup and subsequent shell continuation. Those are historical results;
-the 1.2.0 gate above records the current run.
+Two fresh public-source storage checks passed with a 512 MiB old-space ceiling:
+4,096 records containing 256 KiB of synthetic raw payload each, and 64 records
+containing 16 MiB each. Both represent 1 GiB of raw payload, exceeding the former
+single-string fingerprint limit. Each check exercised fresh, unchanged-repeat
+and changed-record publication, embedding reuse and reads of the previous
+generation during preparation. These scenarios use deterministic synthetic
+embeddings and do not measure production-model import throughput.
 
-### Historical 1.0.0 baseline
+Example from the source directory:
 
-The previous public-source functional gate passed 586 unit tests (one
-Windows-only test skipped on Linux), 27 HTTP API/MCP tests, 86 Chromium tests,
-and 12 source-packaging regressions. Subsequent dependency auditing found
-advisories in inherited lockfile packages and in the separately inventoried
-browser bundle. Those functional results did not constitute a clean dependency
-security audit. The 1.1.0 gate adds that missing coverage and revalidates behavior
-against the updated dependencies.
+```bash
+node --import tsx --experimental-test-module-mocks --max-old-space-size=512 test/import-storage-stress.js
+```
 
-## Coverage included in the public tree
+The storage program supports `THREADSHELF_STRESS_ROWS` and
+`THREADSHELF_STRESS_ROW_BYTES`. It writes isolated temporary data and removes it
+after completion. A heap ceiling is not a total-process memory limit; report RSS,
+heap usage, record sizes, available system/container memory and embedding scope
+with any published measurements. Production-model integration is tested
+separately from synthetic stress embeddings.
 
-- Released Reader and Alternative HTTP adapter fixtures with recorded public blob
-  hashes, API browsing, stored threads, Insights, keyword/semantic search and
-  Reader pagination.
-- Cursor snapshots, totals, filtering, parameter mismatch and expiration.
-- Rich rendering, math, diagrams, citations, readable fallbacks, local image
-  binding, explicit remote image loading and constrained viewport layouts.
-- Native and converted imports, embedded HTML JSON, ZIP validation, cancellation,
-  unsafe integer preservation, media bounds, traversal rejection, unencrypted
-  Venice backup grouping, legacy identities and recovery behavior.
-- Portable setup and source-distribution checks that can run from public files.
-- Ordinary invalid-upload rejection, canceled-upload cleanup, subsequent successful
-  uploads and continued server health in bounded, isolated test processes.
-- Dependency compatibility checks that retain the embedding model, stored vector
-  dimension, source identities and pre-existing synthetic archive behavior.
-- Test infrastructure regressions for stalled HTTP headers/bodies, health-check
-  deadlines, child shutdown escalation, inherited pipes and Fetch-compatible
-  ephemeral ports. Generation mock cleanup is registered before server startup;
-  a fault-injected startup failure reports its error and exits without hanging.
+## Platform, interoperability and format limits
 
-The public checks do not require separately supplied application source trees.
-Launcher checks also verified actual terminal Ctrl+C handling: cleanup completes,
-the exact `CTRL-C` block prints, and subsequent `;` and `&&` commands run.
-Unexpected exits still fail. Source packaging excludes untracked and dirty
-working-tree content and rejects private paths, nested dependencies and symlinks.
+Linux/Windows server and source checks do not by themselves certify native
+Reader/Alternative desktop installers, every Electron build or ARM64 execution.
+Adapter coverage establishes the documented API/data contract for the recorded
+fixtures; it is not a promise for every future client or undocumented export.
+The [compatibility contract](ENHANCED_COMPATIBILITY.md) identifies the supported
+scope and import limits.
 
-CI exposes separate Linux gates and native Windows setup/core checks, with source
-packaging regressions on both platforms. Stages have explicit deadlines. Failure
-artifacts contain bounded isolated-server logs and browser diagnostics, retained
-for seven days. User configuration and stores are excluded. Source releases run
-these required jobs, including dependency security, again on the version tag
-before publishing either archive. The existing workflow also runs scheduled
-security auditing; application and bundled-dependency findings both block a
-release.
+Bounded processing still needs disk capacity and has per-record/per-format
+safety limits. Another process can exhaust system memory between checks. Remote
+image availability depends on the hosting service and network; controlled image
+fixtures test loader/cache behavior independently. Rich widgets without enough
+source data remain readable source or placeholders.
 
-## Platform and format scope
+## Historical records
 
-Setup pins Node 24.22.1 and npm 12.2.1. Linux x64 is the primary verification
-platform. Windows PowerShell setup and ARM64 runtime selection are included;
-native Windows is a separate required GitHub CI job. Native ARM64 and native Windows renderer-source reproduction were not
-executed in this local gate. Full dependency installation is repeated by both
-platform setup jobs; 1.2.0 requires a fresh locked dependency installation before
-its release gate. The dependency advisory service is required for security
-validation even when functional tests can use cached models.
-Native Linux Electron windows and the Reader-to-Analytics archive pipeline were
-additionally checked against unmodified public Local Suite sources, as described
-above. Desktop installers, native Windows desktop windows and ARM64 desktop
-execution were not exercised locally.
-
-Known import limits include duplicate conversations when a ZIP contains both
-`conversations.json` and `chat.html`, image companions excluded by browser folder
-uploads, unsupported JSONL, and unsupported encrypted Venice backups. See the
-[compatibility contract](ENHANCED_COMPATIBILITY.md) for workarounds and details.
-
-No claim is made that every undocumented widget or future export is supported.
-Unsupported content remains source or a placeholder. Rendering libraries are
-bundled; first setup and model use require network downloads.
+Earlier public validation records remain with their immutable releases:
+[1.2.0](https://github.com/Davoda1/ThreadShelf-Enhanced/blob/v1.2.0/docs/ENHANCED_VALIDATION.md),
+[1.1.0](https://github.com/Davoda1/ThreadShelf-Enhanced/blob/v1.1.0/docs/ENHANCED_VALIDATION.md)
+and [1.0.0](https://github.com/Davoda1/ThreadShelf-Enhanced/blob/v1.0.0/docs/ENHANCED_VALIDATION.md).
+Their test totals, desktop observations and platform limitations describe those
+versions, not fresh 1.3.0 results.

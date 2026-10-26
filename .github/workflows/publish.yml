@@ -21,7 +21,7 @@ jobs:
       contents: read
 
   release:
-    name: Publish source ZIP and TAR.GZ
+    name: Publish source ZIP, TAR.GZ and checksums
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -55,7 +55,7 @@ jobs:
               output.write('value=' + version + '\n')
           PY
 
-      - name: Build the two source archives
+      - name: Build source archives and consolidated checksums
         run: python3 scripts/release-source.py --output release
 
       - name: Verify assets and prepare release notes
@@ -68,23 +68,34 @@ jobs:
           from pathlib import Path
           version = os.environ['RELEASE_VERSION']
           prefix = 'ThreadShelf-Enhanced-' + version + '-Source'
-          expected = {prefix + '.zip', prefix + '.tar.gz'}
+          archive_names = {prefix + '.zip', prefix + '.tar.gz'}
+          expected = archive_names | {'SHA256SUM.txt'}
           assets = sorted(Path('release').iterdir())
           if {path.name for path in assets} != expected or not all(path.is_file() for path in assets):
-              raise SystemExit('Release must contain exactly the source ZIP and TAR.GZ.')
+              raise SystemExit('Release must contain exactly the source ZIP, TAR.GZ and SHA256SUM.txt.')
+          checksum_lines = []
+          for name in sorted(archive_names):
+              with (Path('release') / name).open('rb') as source:
+                  digest = hashlib.file_digest(source, 'sha256').hexdigest()
+              checksum_lines.append(digest + '  ' + name + '\n')
+          checksum_bytes = ''.join(checksum_lines).encode('ascii')
+          if Path('release/SHA256SUM.txt').read_bytes() != checksum_bytes:
+              raise SystemExit('Consolidated source checksums do not match both archives.')
           lines = [f'# ThreadShelf Enhanced {version}', '',
                    'Independent fork based on [ThreadShelf v1.3.0](https://github.com/ChrystianSchutz/ThreadShelf/tree/v1.3.0), with upstream history and license retained.', '',
-                   '- Security-maintained application dependencies and verified offline renderer bundles.',
-                   '- Required dependency audits, upload lifecycle regressions and Linux/Windows validation.',
+                   '- Bounded import staging and atomic archive/index publication, with memory-pressure monitoring.',
+                   '- Persistent background import jobs, progress, cancellation and retry after upload acceptance.',
+                   '- Coordinated server/indexer ownership and safe collection replacement; unrelated files are skipped.',
+                   '- Six interface languages and animated per-role rich-rendering switches that preserve basic Markdown when off.',
+                   '- Inline click/automatic image loading and an optional server-only image cache partitioned by collection.',
                    '- Existing archive APIs, Local Reader compatibility and project-local setup retained.', '',
                    'Extract either source archive and follow README.md. Node 24.22.1 LTS and npm 12.2.1 are installed locally by setup.', '',
+                   'Before upgrading, stop every server, MCP, importer and watcher process and back up the complete data directory. Upgrade all writers together. Do not open a 1.3.0-written store with an older server.', '',
                    'See CHANGELOG.md for changes, THIRD_PARTY_NOTICES.md for retained licenses, and docs/ENHANCED_COMPATIBILITY.md for known limitations.', '',
-                   'This release requires passing dependency security checks and Linux/Windows CI before publication.', '',
+                   'This release requires passing dependency security checks, Linux/Windows CI and bounded-memory storage checks before publication.',
+                   'Use the single SHA256SUM.txt asset to verify both source archives.', '',
                    '## SHA-256', '', '```text']
-          for path in assets:
-              with path.open('rb') as source:
-                  digest = hashlib.file_digest(source, 'sha256').hexdigest()
-              lines.append(digest + '  ' + path.name)
+          lines.extend(line.rstrip('\n') for line in checksum_lines)
           lines.extend(['```', ''])
           (Path(os.environ['RUNNER_TEMP']) / 'threadshelf-release-notes.md').write_text('\n'.join(lines))
           PY
@@ -100,4 +111,4 @@ jobs:
             --verify-tag \
             --title "ThreadShelf Enhanced ${RELEASE_VERSION}" \
             --notes-file "$RUNNER_TEMP/threadshelf-release-notes.md" \
-            "${prefix}.zip" "${prefix}.tar.gz"
+            "${prefix}.zip" "${prefix}.tar.gz" "release/SHA256SUM.txt"

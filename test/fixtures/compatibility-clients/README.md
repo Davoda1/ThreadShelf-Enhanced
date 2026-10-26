@@ -12,6 +12,8 @@ commit `e17d5874342ce0069acba2ed387d46eefbf61f24`:
 | `reader/server.mjs`      | `apps/reader/src/core/server.mjs`  | `5884a4f03d437a31a773b371da31e08d09431dcf` |
 | `alternative/server.cjs` | `apps/alternative/core/server.cjs` | `6f1f5cc2d4da2312045db5358c86c7e9165c2045` |
 
+Both adapter files remain byte-identical in public Suite v1.2.0, commit
+`c1030b0f014332a9b746ed4e2d93cd672bcb2a09` (Reader and Alternative 1.2.0).
 The test verifies these two public adapter blob hashes before exercising the
 clients. This identifies the named adapter files only; it does not establish
 identity of other application code. `reader/state.mjs` contains only the adapter's original URL
@@ -25,4 +27,6 @@ test ingests synthetic ChatGPT conversations through the production embedding mo
 This validates server API interoperability; it does not claim to launch Electron
 or test desktop installers. Analytics reads Local Reader archives rather than the
 server API. These adapter tests do not validate the separate Analytics archive
-pipeline.
+pipeline. The optional [public application compatibility check](../../compatibility/README.md)
+validates the Reader archive-to-Analytics path using separately supplied public
+application modules, including Analytics 1.0.0.

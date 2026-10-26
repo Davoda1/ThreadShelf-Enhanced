@@ -1,7 +1,9 @@
+import { t, useI18n } from '../i18n';
 import { useEffect } from 'react';
 import { useToastStore } from '../toast';
 
 export function ConfirmDialog() {
+  useI18n();
   const confirmState = useToastStore((s) => s.confirmState);
   const resolveConfirm = useToastStore((s) => s.resolveConfirm);
 
@@ -31,21 +33,23 @@ export function ConfirmDialog() {
         onClick={(e) => e.stopPropagation()}
         role="alertdialog"
         aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
+        aria-describedby={message ? 'confirm-dialog-message' : undefined}
       >
         <div className="modal-head">
-          <h3>{title}</h3>
-          {message && <p>{message}</p>}
+          <h3 id="confirm-dialog-title">{t(title)}</h3>
+          {message && <p id="confirm-dialog-message">{t(message)}</p>}
         </div>
         <div className="modal-foot">
           <button className="btn ghost" onClick={() => resolveConfirm(false)}>
-            {cancelLabel ?? 'Cancel'}
+            {t(cancelLabel ?? 'Cancel')}
           </button>
           <button
             className={`btn ${danger ? 'danger' : 'primary'}`}
             onClick={() => resolveConfirm(true)}
             autoFocus
           >
-            {confirmLabel ?? 'Confirm'}
+            {t(confirmLabel ?? 'Confirm')}
           </button>
         </div>
       </div>

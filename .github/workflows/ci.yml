@@ -133,6 +133,19 @@ jobs:
         timeout-minutes: 8
         run: npm run test:e2e
 
+      - name: Bounded-memory import storage stress (4096 small rows)
+        timeout-minutes: 10
+        run: |
+          # Actual storage/publication, deterministic synthetic embeddings.
+          # Real-model behavior is covered separately by readiness and integration.
+          node --import tsx --experimental-test-module-mocks --max-old-space-size=512 test/import-storage-stress.js
+
+      - name: Bounded-memory import storage stress (64 large rows)
+        timeout-minutes: 10
+        run: |
+          THREADSHELF_STRESS_ROWS=64 THREADSHELF_STRESS_ROW_BYTES=16777216 \
+            node --import tsx --experimental-test-module-mocks --max-old-space-size=512 test/import-storage-stress.js
+
       - name: Client TypeScript and production build
         timeout-minutes: 5
         run: npm run build:client
@@ -189,6 +202,12 @@ jobs:
           "npm_config_cache=$(Join-Path $PWD '.local/npm-cache')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "THREADSHELF_TEST_LOG_DIR=$(Join-Path $env:RUNNER_TEMP 'threadshelf-test-logs')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
+      - name: Cache embedding model
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .threadshelf/model-cache
+          key: ${{ runner.os }}-embeddings-paraphrase-multilingual-minilm-l12-v2
+
       - name: Repository hygiene
         timeout-minutes: 2
         run: |
@@ -205,6 +224,21 @@ jobs:
         timeout-minutes: 3
         run: |
           & "$env:THREADSHELF_CI_RUNTIME/node.exe" node_modules/typescript/bin/tsc --noEmit
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Prepare and verify real embeddings
+        timeout-minutes: 5
+        run: |
+          @'
+          import { embedOne } from './src/embedding.ts';
+          console.log('Preparing the real embedding model; download progress follows.');
+          const started = Date.now();
+          const vector = await embedOne('synthetic CI readiness probe');
+          if (vector.length !== 384 || !vector.every(Number.isFinite)) {
+            throw new Error('Embedding readiness check requires 384 finite values.');
+          }
+          console.log(`Real embedding readiness passed in ${Date.now() - started} ms (384 finite values).`);
+          '@ | & "$env:THREADSHELF_CI_RUNTIME/node.exe" --import tsx --input-type=module
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Unit and regression tests
@@ -315,25 +349,44 @@ jobs:
           version = json.loads(Path('package.json').read_text())['version']
           prefix = 'ThreadShelf-Enhanced-' + version + '-Source'
           directory = Path(os.environ['RUNNER_TEMP']) / 'threadshelf-source'
-          expected = {prefix + '.zip', prefix + '.tar.gz'}
+          archive_names = {prefix + '.zip', prefix + '.tar.gz'}
+          expected = archive_names | {'SHA256SUM.txt'}
           assets = sorted(directory.iterdir())
           if {path.name for path in assets} != expected:
-              raise SystemExit('Expected exactly the source ZIP and TAR.GZ.')
+              raise SystemExit('Expected exactly the source ZIP, TAR.GZ and SHA256SUM.txt.')
           with zipfile.ZipFile(directory / (prefix + '.zip')) as archive:
               zip_names = set(archive.namelist())
+              zip_count = len(archive.infolist())
+              if archive.testzip() is not None:
+                  raise SystemExit('Source ZIP failed its CRC integrity check.')
+              zip_entries = {member.filename: (archive.read(member), (member.external_attr >> 16) & 0o777)
+                             for member in archive.infolist()}
           with tarfile.open(directory / (prefix + '.tar.gz')) as archive:
               tar_names = set(archive.getnames())
+              tar_count = len(archive.getmembers())
+              tar_entries = {member.name: (archive.extractfile(member).read(), member.mode)
+                             for member in archive.getmembers() if member.isfile()}
           if zip_names != tar_names:
               raise SystemExit('Source archive file lists differ.')
+          if zip_count != len(zip_names) or tar_count != len(tar_names) or len(tar_entries) != tar_count or zip_entries != tar_entries:
+              raise SystemExit('Source archive bytes, regular files or permissions differ.')
           required = ['README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', '.env.example',
                       'setup-threadshelf.sh', 'setup-threadshelf.ps1', 'threadshelf-enhanced']
           if not all(prefix + '/' + name in zip_names for name in required):
               raise SystemExit('Required source files or notices are missing.')
-          excluded = {'.env', '.git', '.local', 'node_modules', '.lancedb', '.uploads', '.threadshelf'}
+          excluded = {'.env', '.git', '.local', 'node_modules', '.lancedb', '.uploads', '.threadshelf',
+                      'personal', 'private', 'exports', 'do_not_commit'}
           for name in zip_names:
-              parts = name.split('/')[1:]
+              parts = [part.lower() for part in name.split('/')[1:]]
               if any(part in excluded for part in parts):
                   raise SystemExit('An excluded local-data path appears in a source archive.')
+          checksum_lines = []
+          for name in sorted(archive_names):
+              with (directory / name).open('rb') as source:
+                  digest = hashlib.file_digest(source, 'sha256').hexdigest()
+              checksum_lines.append(digest + '  ' + name + '\n')
+          if (directory / 'SHA256SUM.txt').read_bytes() != ''.join(checksum_lines).encode('ascii'):
+              raise SystemExit('Consolidated source checksums do not match both archives.')
           for asset in assets:
               with asset.open('rb') as source:
                   digest = hashlib.file_digest(source, 'sha256').hexdigest()

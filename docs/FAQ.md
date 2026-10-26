@@ -8,7 +8,9 @@ The first embedding model load may download model files through the Transformers
 
 The optional OpenRouter generation provider is the explicit exception: selecting
 **OpenRouter · external** sends the selected user/assistant context and new prompt
-off-device. Local `llama.cpp` generation remains on loopback.
+off-device. Local `llama.cpp` generation remains on loopback. Loading an external
+image also contacts its hosting service through the server image proxy; click-to-load
+is the default, and automatic loading is optional.
 
 ## What problem is this trying to solve?
 
@@ -22,6 +24,7 @@ Do not commit:
 - `.lancedb/`
 - `.uploads/`
 - `.collections.json`
+- `.threadshelf/`, local configuration and resource caches.
 - Logs.
 - Temp folders.
 - Screenshots with private chats.
@@ -30,7 +33,9 @@ See [Security And Privacy](../SECURITY.md).
 
 ## What is a collection?
 
-A collection is a LanceDB table. It is the main boundary for indexed data.
+A collection is a logical namespace for archived conversations and their search
+index. Its physical storage can span published generations; applications should
+use the collection API instead of selecting internal tables directly.
 
 Use collections to separate:
 
@@ -64,6 +69,40 @@ The local embedding model may need to download and initialize. Large exports als
 ## Can I index multiple providers in one folder?
 
 Yes. The parser detects supported formats per file. For real testing, separate collections are easier to debug, but mixed-provider folders are supported.
+
+## Can I close the browser during an import?
+
+Yes, after file transfer finishes and the server confirms the job was accepted.
+Parsing and indexing then continue on the server. Return to **Add data** to see its
+persisted progress, cancel it or retry a failed job. Closing a tab is not a cancel
+command. See [background jobs](IMPORT-JOBS.md).
+
+## Can I remove uploaded files after importing them?
+
+Open **Add data → Manage uploads**, choose a collection and confirm deletion of
+selected files or all its uploaded files. The dialog shows relative paths and
+sizes. It manages uploaded originals and media, not other server-local import
+folders, job history or the separate image cache.
+
+Indexed conversations and their search index remain, but attachments and older
+source-file fallbacks may need the originals and can stop working after deletion.
+Keep a backup of files you need. Cleanup is blocked while imports or indexing
+still depend on those files. See [managing uploaded files](IMPORT-JOBS.md#managing-uploaded-files).
+
+## What does turning rich rendering off do?
+
+Each role has an independent switch in Settings: user prompts, thinking and
+responses. Off retains basic Markdown, including emphasis, underline, tables,
+lists, links and code. Advanced math, diagrams and widgets remain readable as
+source. The existing visibility controls still decide which roles are shown.
+
+## Is the image cache part of my conversation archive?
+
+No. It is an optional server-only cache with separate storage and per-collection
+partitions. You can inspect its size or clear one collection/all cached images
+without removing conversations. Disabling it stops cache use while retaining
+existing cached bytes for later reuse. Remote images still load inline through
+the checked proxy when caching is off. See [image loading and cache](IMPORT-JOBS.md#image-loading-and-cache).
 
 ## What does the OpenRouter script do?
 

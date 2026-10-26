@@ -1,11 +1,13 @@
+import { t, formatNumber } from './i18n';
+import { useUIStore } from './store';
 import type { ThreadTurn } from './types';
 
 const SKIP = /(?:users|projects|user|message_feedback|shared_conversations|sora)\.json$/i;
 
 export const collLabel = (c: string): string => {
-  if (c === 'all' || c === '__all__') return 'All collections';
-  if (c === 'chunks') return 'Chunks';
-  if (c === 'threadshelf_conversations') return 'ThreadShelf conversations';
+  if (c === 'all' || c === '__all__') return t('All collections');
+  if (c === 'chunks') return t('Chunks');
+  if (c === 'threadshelf_conversations') return t('ThreadShelf conversations');
   return c;
 };
 
@@ -51,14 +53,20 @@ export const compactModel = (value: string | undefined, maxLength = 30): string 
 
 export const fmtTime = (ms: number): string => {
   const s = Math.floor(ms / 1000);
-  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+  if (useUIStore.getState().locale === 'en')
+    return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+  const unit = (value: number, name: string) =>
+    formatNumber(value, { style: 'unit', unit: name, unitDisplay: 'narrow' });
+  return s < 60
+    ? unit(s, 'second')
+    : `${unit(Math.floor(s / 60), 'minute')} ${unit(s % 60, 'second')}`;
 };
 
 export const fmtDate = (value: string | undefined): string => {
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(useUIStore.getState().locale, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -76,7 +84,7 @@ export const fmtDateShort = (value: string | undefined): string => {
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(useUIStore.getState().locale, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -91,14 +99,32 @@ export const fmtRelative = (value: string | undefined, now: number = Date.now())
   const ms = date.getTime();
   if (Number.isNaN(ms)) return '';
   const diff = now - ms;
-  if (diff < 45_000) return 'just now';
+  if (diff < 45_000) return t('just now');
   const minutes = Math.round(diff / 60_000);
-  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 60 && useUIStore.getState().locale === 'en') return `${minutes} min ago`;
+  if (minutes < 60)
+    return new Intl.RelativeTimeFormat(useUIStore.getState().locale, { numeric: 'auto' }).format(
+      -minutes,
+      'minute',
+    );
   const hours = Math.round(diff / 3_600_000);
-  if (hours < 24) return `${hours} h ago`;
+  if (hours < 24 && useUIStore.getState().locale === 'en') return `${hours} h ago`;
+  if (hours < 24)
+    return new Intl.RelativeTimeFormat(useUIStore.getState().locale, { numeric: 'auto' }).format(
+      -hours,
+      'hour',
+    );
   const days = Math.round(diff / 86_400_000);
-  if (days < 7) return `${days} d ago`;
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
+  if (days < 7 && useUIStore.getState().locale === 'en') return `${days} d ago`;
+  if (days < 7)
+    return new Intl.RelativeTimeFormat(useUIStore.getState().locale, { numeric: 'auto' }).format(
+      -days,
+      'day',
+    );
+  return new Intl.DateTimeFormat(useUIStore.getState().locale, {
+    month: 'short',
+    day: 'numeric',
+  }).format(date);
 };
 
 export const escapeRegex = (s: string): string => {
@@ -252,14 +278,16 @@ export const downloadFile = (
 export const fmtBytes = (bytes: number | undefined): string => {
   if (!bytes || bytes <= 0) return '—';
   if (bytes >= 1024 ** 3)
-    return `${(bytes / 1024 ** 3).toFixed(bytes >= 10 * 1024 ** 3 ? 0 : 1)} GB`;
-  if (bytes >= 1024 ** 2) return `${Math.round(bytes / 1024 ** 2)} MB`;
-  return `${Math.round(bytes / 1024)} KB`;
+    return `${formatNumber(bytes / 1024 ** 3, { minimumFractionDigits: bytes >= 10 * 1024 ** 3 ? 0 : 1, maximumFractionDigits: bytes >= 10 * 1024 ** 3 ? 0 : 1 })} GB`;
+  if (bytes >= 1024 ** 2) return `${formatNumber(Math.round(bytes / 1024 ** 2))} MB`;
+  return `${formatNumber(Math.round(bytes / 1024))} KB`;
 };
 
 /** Download counts in the compact form catalogs use: 12.4M, 58k, 940. */
 export const fmtCount = (value: number | undefined): string => {
   if (!value || value <= 0) return '0';
+  if (useUIStore.getState().locale !== 'en')
+    return formatNumber(value, { notation: 'compact', maximumFractionDigits: 1 });
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1000) return `${Math.round(value / 1000)}k`;
   return String(value);

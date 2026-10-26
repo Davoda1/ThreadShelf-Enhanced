@@ -327,10 +327,16 @@ describe('collection HTTP deletion shares the ingestion upload resolver', () => 
       await writeFile(decoy, 'Synthetic unrelated file');
       const form = new FormData();
       form.append('collectionName', collection);
+      // A recognized archive with a non-indexable one-character turn exercises
+      // original-file publication without requiring an embedding model. Empty
+      // and unsupported inputs are intentionally skipped in Enhanced 1.3.0.
+      const source = JSON.stringify([
+        { conversationKey: 'deletion-fixture', turns: [{ user: '?' }] },
+      ]);
       form.append(
-        'folder/empty.json',
-        new Blob(['[]'], { type: 'application/json' }),
-        'empty.json',
+        'folder/conversation.json',
+        new Blob([source], { type: 'application/json' }),
+        'conversation.json',
       );
       const upload = await fetch(`${worker.baseUrl}/api/ingest-upload`, {
         method: 'POST',
@@ -338,8 +344,8 @@ describe('collection HTTP deletion shares the ingestion upload resolver', () => 
         signal: AbortSignal.timeout(30000),
       });
       assert.equal(upload.status, 200, await upload.text());
-      const uploaded = join(uploads, collection, 'empty.json');
-      assert.equal(await readFile(uploaded, 'utf8'), '[]');
+      const uploaded = join(uploads, collection, 'conversation.json');
+      assert.equal(await readFile(uploaded, 'utf8'), source);
       const created = await fetch(`${worker.baseUrl}/api/collections`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },

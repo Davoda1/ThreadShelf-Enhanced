@@ -1,3 +1,4 @@
+import { t, useI18n, formatNumber } from '../i18n';
 import { useMemo } from 'react';
 import type { SearchResult } from '../types';
 import { Icons } from '../icons';
@@ -32,13 +33,17 @@ function highlightSnippet(text: string, query: string): React.ReactNode {
 }
 
 export function ResultCard({ result, query, onClick, selected, onMoreLikeThis }: ResultCardProps) {
+  useI18n();
   const { metadata } = result;
   const role = metadata.role ?? 'ai';
   const roleLabel = { user: 'user', thinking: 'reasoning', ai: 'response' }[role] ?? role;
   const provider = getProvider(metadata.provider);
   const model = fmtModel(metadata.model);
   const date = fmtDateShort(metadata.createdAt);
-  const score = result.distance != null ? (1 - result.distance).toFixed(3) : '';
+  const score =
+    result.distance != null
+      ? formatNumber(1 - result.distance, { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+      : '';
   const scorePct = result.distance != null ? Math.round((1 - result.distance) * 100) : 0;
 
   const snippet = useMemo(() => highlightSnippet(result.document, query), [result.document, query]);
@@ -50,14 +55,14 @@ export function ResultCard({ result, query, onClick, selected, onMoreLikeThis }:
     <button className="result" data-selected={selected} aria-selected={selected} onClick={onClick}>
       <div className="result-head">
         <span className="r-role" data-role={role}>
-          {roleLabel}
+          {t(roleLabel)}
         </span>
         <span className="r-provider">
           <span className="pdot" style={{ background: provider.color }} />
           <span>{provider.short}</span>
         </span>
         {metadata.createdInThreadShelf && (
-          <span className="threadshelf-turn-badge">ThreadShelf</span>
+          <span className="threadshelf-turn-badge">{t('ThreadShelf')}</span>
         )}
         {result.distance != null && (
           <div className="r-meta-right">
@@ -99,7 +104,8 @@ export function ResultCard({ result, query, onClick, selected, onMoreLikeThis }:
         {metadata.turnIndex != null && (
           <>
             <span>
-              turn <b className="mono">#{metadata.turnIndex}</b>
+              {t('turn ')}
+              <b className="mono">#{metadata.turnIndex}</b>
             </span>
             <span className="dot" />
           </>
@@ -110,7 +116,7 @@ export function ResultCard({ result, query, onClick, selected, onMoreLikeThis }:
             className="more-like-this"
             role="button"
             tabIndex={0}
-            title="Search for similar passages"
+            title={t('Search for similar passages')}
             onClick={(e) => {
               e.stopPropagation();
               onMoreLikeThis();
@@ -123,10 +129,13 @@ export function ResultCard({ result, query, onClick, selected, onMoreLikeThis }:
               }
             }}
           >
-            more like this
+            {t('more like this')}
           </span>
         )}
-        <span className="open-thread">open thread {Icons.arrowRight}</span>
+        <span className="open-thread">
+          {t('open thread ')}
+          {Icons.arrowRight}
+        </span>
       </div>
     </button>
   );

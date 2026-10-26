@@ -1,5 +1,35 @@
 # Changelog
 
+## ThreadShelf Enhanced 1.3.0 — 2026-10-26
+
+### Imports and storage
+
+- Stream supported exports into bounded disk staging instead of retaining a whole folder or constructing a single collection-sized fingerprint string.
+- Publish matching archive and search-index generations atomically. Keep the previous collection readable while a replacement is prepared; preserve it on recognized corruption, cancellation or failed preparation.
+- Reuse embeddings only when content and the loaded model/runtime identity match. Preserve conversation identities, original raw content and local continuations.
+- Skip unrelated, unsupported and empty auxiliary files with diagnostics. Include supported image companions in browser folder uploads.
+- Persist accepted import jobs, progress, cancellation, retry and checked input snapshots. Browser disconnection after acceptance no longer cancels processing.
+- Allow individual or collection/all finished-job history removal, including completed, failed and cancelled records, while protecting queued, running, paused and interrupted jobs. Removal leaves imported conversations and published source files intact.
+- Record successful completion at 100% and display older completed jobs at 100% even when their last progress event stopped below completion.
+- Add a **Manage uploads** dialog on Add data with per-collection file paths, sizes, selected-file deletion and collection-wide cleanup. Protect imports that still need those files; retain indexed conversations while making the possible loss of original media and source fallbacks explicit.
+- Coordinate web, CLI, watcher and recovery indexing; reject a second HTTP server on the same store. Collection deletion cancels queued jobs and blocks active import conflicts.
+- Monitor heap, resident/native memory and effective host/container headroom, with bounded batches and controlled pressure handling.
+- Update the public manual importer to a 4 GiB default old-space ceiling and bounded startup-headroom checks, retaining its existing flags and interactive workflow.
+
+### Reading and settings
+
+- Add independent animated rich-rendering switches for user prompts, thinking and responses. Off retains basic Markdown; visibility controls remain separate.
+- Add Hungarian, German, Japanese, French and Russian interface languages alongside default English.
+- Defer expensive formatting while preserving reading position, source copy/export and narrow-window layouts.
+- Load images inline on click or automatically, with compact and wide placeholders for unavailable, pending and failed images.
+- Add an optional server-only image cache, separated by collection with size limits, usage statistics and independent clearing. Validate public image destinations, redirects and returned image bytes.
+
+### Upgrade and compatibility
+
+Existing HTTP/MCP contracts, role and identity keys, the embedding model and vector dimensions are retained. The internal archive/index publication layout changes. Stop and upgrade every process sharing a writable store, keep a complete stopped backup and do not open a 1.3.0-written store with an older server. Previous releases remain unchanged.
+
+See [background jobs and recovery](docs/IMPORT-JOBS.md), [compatibility](docs/ENHANCED_COMPATIBILITY.md) and [validation](docs/ENHANCED_VALIDATION.md).
+
 ## ThreadShelf Enhanced 1.2.0 — 2026-10-22
 
 Correctness release addressing the three independently reproduced storage and

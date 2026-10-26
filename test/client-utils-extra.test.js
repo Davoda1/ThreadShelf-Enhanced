@@ -97,7 +97,7 @@ describe('client utility extra boundaries', () => {
       fmtModel('C:\\Users\\private-user\\.lmstudio\\models\\Bielik.Q4_K_M.gguf'),
       'Bielik.Q4_K_M',
     );
-    assert.strictEqual(fmtModel('/home/example/models/local-model.gguf'), 'local-model');
+    assert.strictEqual(fmtModel('/home/tester/models/local-model.gguf'), 'local-model');
     assert.strictEqual(fmtModel('google/gemini-2.0'), 'google/gemini-2.0');
   });
 

@@ -1,3 +1,4 @@
+import { t, useI18n, formatNumber } from '../i18n';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ThreadTurn, RoleFilters } from '../types';
@@ -20,6 +21,7 @@ import { toast, confirmDialog } from '../toast';
 import { api } from '../api';
 import { Markdown } from './Markdown';
 import { ThreadContinuation } from './ThreadContinuation';
+import { useCollectionLock } from '../import-jobs';
 
 const THREADSHELF_CHAT_PREFIX = 'threadshelf://chat/';
 
@@ -40,7 +42,7 @@ interface ThreadReaderProps {
 const COLLAPSE_AT = 1800;
 
 function formatCount(n: number): string {
-  return n.toLocaleString();
+  return formatNumber(n);
 }
 
 function CopyBtn({ text }: { readonly text: string }) {
@@ -54,7 +56,7 @@ function CopyBtn({ text }: { readonly text: string }) {
   };
   return (
     <button className="copy-turn" onClick={handleCopy}>
-      {copied ? 'copied' : 'copy'}
+      {copied ? t('copied') : t('copy')}
     </button>
   );
 }
@@ -94,6 +96,9 @@ export function ThreadReader({
   query,
   onSimilar,
 }: ThreadReaderProps) {
+  useI18n();
+  const [resolvedCollection, setResolvedCollection] = useState(collection);
+  const collectionLock = useCollectionLock(resolvedCollection);
   const [originalIdentity, setOriginalIdentity] = useState<unknown>(undefined);
   const [originalConversation, setOriginalConversation] = useState<unknown>(undefined);
   const [turns, setTurns] = useState<ThreadTurn[] | null>(null);
@@ -122,6 +127,7 @@ export function ThreadReader({
       .thread(sourceFile, col, conversationKey, controller.signal)
       .then((d) => {
         setTurns(d.turns);
+        setResolvedCollection(d.collection || collection);
         setOriginalConversation(d.raw);
         setOriginalIdentity(d.sourceIdentity);
         setCreatedInThreadShelf(d.createdInThreadShelf);
@@ -187,7 +193,7 @@ export function ThreadReader({
       .filter(Boolean)
       .join('\n\n');
     void copyText(text).then((ok) =>
-      ok ? toast.success('Conversation copied.') : toast.error('Clipboard unavailable.'),
+      ok ? toast.success(t('Conversation copied.')) : toast.error(t('Clipboard unavailable.')),
     );
   }, [turns]);
 
@@ -231,11 +237,11 @@ export function ThreadReader({
     : '';
 
   const deleteThreadShelfChat = async () => {
-    if (!threadShelfChatId) return;
+    if (!threadShelfChatId || collectionLock) return;
     const confirmed = await confirmDialog({
-      title: `Delete “${title}”?`,
-      message: 'The conversation and its search index entries will be permanently removed.',
-      confirmLabel: 'Delete chat',
+      title: t('Delete “{title}”?', { title }),
+      message: t('The conversation and its search index entries will be permanently removed.'),
+      confirmLabel: t('Delete chat'),
       danger: true,
     });
     if (!confirmed) return;
@@ -246,7 +252,7 @@ export function ThreadReader({
         queryClient.invalidateQueries({ queryKey: ['files'] }),
         queryClient.invalidateQueries({ queryKey: ['search'] }),
       ]);
-      toast.success('Conversation deleted.');
+      toast.success(t('Conversation deleted.'));
       onBack();
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : 'Could not delete this chat.');
@@ -261,7 +267,7 @@ export function ThreadReader({
       collection: collLabel(collection),
     });
     downloadFile(`${slugify(title)}.md`, md);
-    toast.success('Exported as Markdown.');
+    toast.success(t('Exported as Markdown.'));
   };
 
   const exportJson = () => {
@@ -285,7 +291,7 @@ export function ThreadReader({
       JSON.stringify(payload, null, 2),
       'application/json;charset=utf-8',
     );
-    toast.success('Exported as JSON.');
+    toast.success(t('Exported as JSON.'));
   };
 
   return (
@@ -295,15 +301,19 @@ export function ThreadReader({
       style={{ '--provider-color': provColor } as React.CSSProperties}
     >
       <div className="thread-bar">
-        <button className="icon-btn mobile-menu-btn" onClick={onMenu} aria-label="Open sidebar">
+        <button
+          className="icon-btn mobile-menu-btn"
+          onClick={onMenu}
+          aria-label={t('Open sidebar')}
+        >
           {Icons.menu}
         </button>
         <button id="threadClose" className="thread-back" onClick={onBack} title="Esc">
           {Icons.arrowLeft}
-          <span>Back</span>
+          <span>{t('Back')}</span>
         </button>
         <span className="title-preview" title={title}>
-          {turns ? title : 'Loading…'}
+          {turns ? title : t('Loading…')}
         </span>
         {detectedModel && (
           <span className="bar-meta">
@@ -322,7 +332,14 @@ export function ThreadReader({
       {error && (
         <div className="banner err" style={{ margin: 16 }}>
           <span className="ico">{Icons.warn}</span>
-          <div className="grow">{error}</div>
+          <div className="grow">{t(error)}</div>
+        </div>
+      )}
+
+      {collectionLock && (
+        <div className="banner" role="status">
+          <span>{t('Collection replacement in progress. Changes are temporarily blocked.')}</span>{' '}
+          <a href="/indexing">{t('View import progress')}</a>
         </div>
       )}
 
@@ -334,37 +351,42 @@ export function ThreadReader({
               {detectedModel && (
                 <>
                   <span className="item">
-                    <span className="k">model</span>
+                    <span className="k">{t('model')}</span>
                     <span className="v">{detectedModel}</span>
                   </span>
                   <span className="sep">·</span>
                 </>
               )}
               <span className="item">
-                <span className="k">turns</span>
+                <span className="k">{t('turns')}</span>
                 <span className="v">{turns.length}</span>
               </span>
               <span className="sep">·</span>
               <span className="item">
-                <span className="k">length</span>
-                <span className="v">{formatCount(conversationStats.words)} words</span>
+                <span className="k">{t('length')}</span>
+                <span className="v">
+                  {formatCount(conversationStats.words)} {t('words')}
+                </span>
               </span>
               <span className="sep">·</span>
               <span className="item">
-                <span className="k">chars</span>
+                <span className="k">{t('chars')}</span>
                 <span className="v">{formatCount(conversationStats.chars)}</span>
               </span>
               <span className="sep">·</span>
               <span className="item">
-                <span className="k">file</span>
+                <span className="k">{t('file')}</span>
                 <span className="v">{shortPath(sourceFile)}</span>
               </span>
               {matchIdx != null && (
                 <>
                   <span className="sep">·</span>
                   <span className="item">
-                    <span className="k">match</span>
-                    <span className="v match">turn #{matchIdx}</span>
+                    <span className="k">{t('match')}</span>
+                    <span className="v match">
+                      {t('turn #')}
+                      {matchIdx}
+                    </span>
                   </span>
                 </>
               )}
@@ -374,38 +396,39 @@ export function ThreadReader({
           <div className="thread-actions-bar">
             {matchIdx != null && (
               <button className="btn sm" onClick={jumpMatch}>
-                {Icons.zap} Jump to match
+                {Icons.zap} {t('Jump to match')}{' '}
               </button>
             )}
             <button className="btn sm" onClick={copyThread}>
-              {Icons.copy} Copy conversation
+              {Icons.copy} {t('Copy conversation')}{' '}
             </button>
             <button className="btn sm" onClick={exportMarkdown}>
-              {Icons.download} Export .md
+              {Icons.download} {t('Export .md')}{' '}
             </button>
             <button className="btn sm" onClick={exportJson}>
-              {Icons.download} Export .json
+              {Icons.download} {t('Export .json')}{' '}
             </button>
             {matchIdx != null && (
               <button className="btn sm ghost" onClick={copyMatched}>
-                {Icons.copy} Copy matched turn
+                {Icons.copy} {t('Copy matched turn')}{' '}
               </button>
             )}
             {threadShelfChatId && (
               <button
                 id="deleteThreadShelfChat"
                 className="btn sm ghost danger"
+                disabled={Boolean(collectionLock)}
                 onClick={() => void deleteThreadShelfChat()}
               >
-                {Icons.trash} Delete chat
+                {Icons.trash} {t('Delete chat')}{' '}
               </button>
             )}
             <span style={{ flex: 1 }} />
             <div className="role-toggles" role="group">
               {[
-                { id: 'user' as const, label: 'User' },
-                { id: 'thinking' as const, label: 'Reasoning' },
-                { id: 'ai' as const, label: 'Response' },
+                { id: 'user' as const, label: t('User') },
+                { id: 'thinking' as const, label: t('Reasoning') },
+                { id: 'ai' as const, label: t('Response') },
               ].map((r) => (
                 <label key={r.id} className="role-toggle" data-role={r.id} data-on={visible[r.id]}>
                   <input
@@ -422,7 +445,9 @@ export function ThreadReader({
                   className="role-toggle"
                   data-role="threadshelf"
                   data-on={showThreadShelfTurns}
-                  title="Turns generated locally in ThreadShelf as continuations of this imported thread"
+                  title={t(
+                    'Turns generated locally in ThreadShelf as continuations of this imported thread',
+                  )}
                 >
                   <input
                     type="checkbox"
@@ -430,7 +455,7 @@ export function ThreadReader({
                     onChange={(event) => setShowThreadShelfTurns(event.target.checked)}
                   />
                   <span className="rt-dot" />
-                  <span>Continuations</span>
+                  <span>{t('Continuations')}</span>
                 </label>
               )}
             </div>
@@ -458,17 +483,29 @@ export function ThreadReader({
                       onClick={() => toggleExpand(i)}
                     >
                       <span className="rs-r">R</span>
-                      <span className="rs-label">reasoning</span>
+                      <span className="rs-label">{t('reasoning')}</span>
                       <span className="rs-idx">#{i}</span>
                       <span className="rs-chevron">{isOpen ? '−' : '+'}</span>
                     </button>
-                    {isOpen && <div className="reasoning-stub-body">{text}</div>}
+                    {isOpen && (
+                      <Markdown
+                        className="reasoning-stub-body"
+                        text={text}
+                        role="thinking"
+                        metadata={turn.metadata}
+                        assets={turn.assets}
+                        collection={resolvedCollection}
+                        eager
+                      />
+                    )}
                   </div>
                 );
               }
 
               const initial = { user: 'U', thinking: 'R', ai: 'A' }[role];
-              const roleTag = { user: 'user', thinking: 'reasoning', ai: 'response' }[role];
+              const roleTag = { user: t('user'), thinking: t('reasoning'), ai: t('response') }[
+                role
+              ];
 
               return (
                 <div
@@ -500,20 +537,21 @@ export function ThreadReader({
                         </time>
                       )}
                       {isMatch ? (
-                        <span className="match-pill">● match</span>
+                        <span className="match-pill">{t('● match')}</span>
                       ) : (
                         <CopyBtn text={text} />
                       )}
                       {onSimilar && (
                         <button
                           className="copy-turn"
-                          title="Search for similar passages"
+                          title={t('Search for similar passages')}
                           onClick={(e) => {
                             e.stopPropagation();
                             onSimilar(text);
                           }}
                         >
-                          similar
+                          {' '}
+                          {t('similar')}{' '}
                         </button>
                       )}
                     </div>
@@ -521,15 +559,20 @@ export function ThreadReader({
                       {isMatch ? (
                         // The search match keeps raw text so hits can be highlighted.
                         <Highlighted text={text} q={query} />
-                      ) : role === 'ai' ? (
-                        <Markdown text={text} metadata={turn.metadata} assets={turn.assets} />
                       ) : (
-                        text
+                        <Markdown
+                          text={text}
+                          role={role}
+                          metadata={turn.metadata}
+                          assets={turn.assets}
+                          collection={resolvedCollection}
+                          collapsed={isLong && !isLongOpen}
+                        />
                       )}
                     </div>
                     {isLong && (
                       <button className="show-more" onClick={() => toggleExpand(i)}>
-                        {isLongOpen ? 'Show less' : 'Show more'}
+                        {isLongOpen ? t('Show less') : t('Show more')}
                       </button>
                     )}
                   </div>
@@ -539,14 +582,14 @@ export function ThreadReader({
 
             <ThreadContinuation
               sourceFile={sourceFile}
-              collection={collection}
+              collection={resolvedCollection}
               conversationKey={conversationKey}
               showThreadShelfTurns={showThreadShelfTurns}
             />
 
             <div className="thread-end" aria-hidden="true">
               <span className="dot" />
-              <span>End of conversation</span>
+              <span>{t('End of conversation')}</span>
               <span className="dot" />
             </div>
           </div>

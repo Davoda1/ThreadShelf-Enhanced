@@ -1,3 +1,4 @@
+import { t, useI18n } from '../i18n';
 import { Icons } from '../icons';
 import { EXAMPLE_QUERIES } from '../constants';
 
@@ -6,12 +7,14 @@ interface EmptyProps {
 }
 
 export function Empty({ onPick }: EmptyProps) {
+  useI18n();
   return (
     <div className="empty">
-      <h3>Ask your archive in plain language.</h3>
+      <h3>{t('Ask your archive in plain language.')}</h3>
       <p>
-        ThreadShelf runs locally — your queries embed on this machine and search a local LanceDB.
-        Try a topic, a draft you half-remember, or the shape of an answer you're looking for.
+        {t(
+          "ThreadShelf runs locally — your queries embed on this machine and search a local LanceDB. Try a topic, a draft you half-remember, or the shape of an answer you're looking for.",
+        )}
       </p>
       <div className="examples">
         {EXAMPLE_QUERIES.map((q) => (
