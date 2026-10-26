@@ -1,3 +1,4 @@
+import { t, useI18n } from '../i18n';
 import { useState } from 'react';
 import { api } from '../api';
 import type { DirectoryBrowserResponse } from '../types';
@@ -8,6 +9,7 @@ interface DirectoryPickerProps {
 }
 
 export function DirectoryPicker({ initialPath, onSelect }: DirectoryPickerProps) {
+  useI18n();
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<DirectoryBrowserResponse | null>(null);
   const [path, setPath] = useState(initialPath || '');
@@ -38,9 +40,9 @@ export function DirectoryPicker({ initialPath, onSelect }: DirectoryPickerProps)
           disabled={loading}
           onClick={() => void browse(path)}
         >
-          {loading ? 'Opening…' : 'Browse system folders…'}
+          {loading ? t('Opening…') : t('Browse system folders…')}
         </button>
-        {error && <span className="field-error">{error}</span>}
+        {error && <span className="field-error">{t(error)}</span>}
       </div>
     );
   }
@@ -54,10 +56,10 @@ export function DirectoryPicker({ initialPath, onSelect }: DirectoryPickerProps)
           disabled={!data?.parent || loading}
           onClick={() => void browse(data?.parent)}
         >
-          Up
+          {t('Up')}
         </button>
         <input
-          aria-label="System folder path"
+          aria-label={t('System folder path')}
           value={path}
           onChange={(event) => setPath(event.target.value)}
           onKeyDown={(event) => {
@@ -70,10 +72,10 @@ export function DirectoryPicker({ initialPath, onSelect }: DirectoryPickerProps)
           disabled={loading}
           onClick={() => void browse(path)}
         >
-          Go
+          {t('Go')}
         </button>
         <button className="btn sm" type="button" onClick={() => setOpen(false)}>
-          Close
+          {t('Close')}
         </button>
       </div>
       <div className="directory-picker-roots">
@@ -83,8 +85,8 @@ export function DirectoryPicker({ initialPath, onSelect }: DirectoryPickerProps)
           </button>
         ))}
       </div>
-      {error && <div className="field-error">{error}</div>}
-      <div className="directory-picker-list" role="listbox" aria-label="System folders">
+      {error && <div className="field-error">{t(error)}</div>}
+      <div className="directory-picker-list" role="listbox" aria-label={t('System folders')}>
         {data?.directories.map((directory) => (
           <button
             type="button"
@@ -97,9 +99,9 @@ export function DirectoryPicker({ initialPath, onSelect }: DirectoryPickerProps)
             {directory.name}
           </button>
         ))}
-        {data?.directories.length === 0 && <span>No subdirectories</span>}
+        {data?.directories.length === 0 && <span>{t('No subdirectories')}</span>}
       </div>
-      {data?.truncated && <span className="sub">Showing the first 500 directories.</span>}
+      {data?.truncated && <span className="sub">{t('Showing the first 500 directories.')}</span>}
       <div className="directory-picker-foot">
         <span title={data?.path}>{data?.path}</span>
         <button
@@ -110,7 +112,7 @@ export function DirectoryPicker({ initialPath, onSelect }: DirectoryPickerProps)
             setOpen(false);
           }}
         >
-          Add this folder
+          {t('Add this folder')}
         </button>
       </div>
     </div>

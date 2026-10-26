@@ -172,14 +172,16 @@ function unavailableImageNode(tag, attrs, options) {
   if (tag === 'AsyncImage') {
     const design = imagePlaceholderDesign(attrs, options.imageAncestors);
     const wide = design === 'soft-horizon';
+    const slotWidth = width || (wide ? undefined : '172px');
+    const slotRatio = attrs.aspectRatio || (wide ? undefined : '5:4');
     area.classList.add('rich-image-placeholder', `rich-image-${design}`);
     area.dataset.placeholderDesign = design;
-    if (width) area.style.width = `min(${width}, 100%)`;
+    if (slotWidth) area.style.width = `min(${slotWidth}, 100%)`;
     if (attrs.maxWidth) area.style.maxWidth = `min(${attrs.maxWidth}, 100%)`;
-    if (attrs.aspectRatio) area.style.aspectRatio = attrs.aspectRatio.replace(':', ' / ');
+    if (slotRatio) area.style.aspectRatio = slotRatio.replace(':', ' / ');
     // Without both dimensions, retain in-flow content for intrinsic sizing.
     // Absolutely positioned artwork alone would collapse a ratio-only row.
-    if (!attrs.aspectRatio || !width) area.classList.add('rich-image-natural');
+    if (!slotRatio || !slotWidth) area.classList.add('rich-image-natural');
     area.setAttribute('role', 'img'); area.setAttribute('aria-label', [label, description].filter(Boolean).join(': '));
     area.title = [label, description].filter(Boolean).join(': ');
     if (wide) {
@@ -208,11 +210,18 @@ function unavailableImageNode(tag, attrs, options) {
   if (description) area.append(el(document, 'span', 'rich-image-description', description));
   // Only bind an explicit URL or an exact, caller-provided source identity.
   // A search query by itself is never resolved or sent to a remote service.
-  const asset = options.context.assets?.find(item => item.source === attrs.query && safeImageUrl(item.url));
+  const asset = options.context?.assets?.find(item => item.source === attrs.query && safeImageUrl(item.url));
   if (tag === 'AsyncImage' && (attrs.src || attrs.url || asset)) return createImageSlot(document, {
     url: attrs.src || attrs.url || asset?.url, label: asset?.label || description, placeholder: area,
   });
   return area;
+}
+// Exact missing-source geometry from Local Reader 4.0.0 R5, reused for regular
+// Markdown images as well as rich AsyncImage nodes. Never executes image queries.
+export function createMissingImagePlaceholder(document, { compact = false, alt = '', t = value => value } = {}) {
+  return unavailableImageNode('AsyncImage', {
+    query: alt, width: compact ? '172px' : '100%', aspectRatio: compact ? '5:4' : '16:9',
+  }, { document, t });
 }
 function replaceMarkers(root, records, options) {
   const { document } = options;

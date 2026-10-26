@@ -1,0 +1,87 @@
+.indexing-heading {
+  flex-wrap: wrap;
+  .manage-uploads-button {
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+}
+.upload-storage-scrim {
+  z-index: 99; // The shared confirmation dialog stays above this window.
+  place-items: center;
+  padding: 16px 12px;
+}
+.upload-storage-modal {
+  width: min(800px, 100%);
+  max-height: 100%;
+  overflow: hidden;
+  font-size: var(--fs-meta);
+  .upload-storage-body {
+    flex: 1 1 auto;
+  }
+  .banner {
+    margin: 0;
+  }
+  p {
+    overflow-wrap: anywhere;
+  }
+  input[type='checkbox'] {
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    flex: 0 0 auto;
+    accent-color: var(--accent);
+  }
+}
+.upload-storage-head,
+.upload-storage-toolbar,
+.upload-storage-pagination {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.upload-storage-head {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.upload-storage-toolbar select {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+}
+.upload-storage-note {
+  color: var(--text-3);
+  margin: 0;
+}
+.upload-storage-select-all {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.upload-storage-files {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  li {
+    border-top: 1px solid var(--border-0);
+  }
+  label {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 0;
+  }
+}
+.upload-storage-path {
+  overflow-wrap: anywhere;
+  color: var(--text-1);
+}
+.upload-storage-size {
+  white-space: nowrap;
+  color: var(--text-3);
+}
+.upload-storage-pagination {
+  justify-content: center;
+}

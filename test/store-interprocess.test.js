@@ -1,3 +1,4 @@
+import { closeStoragePublication } from '../src/storage-publication.js';
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
@@ -79,6 +80,7 @@ after(async () => {
         : undefined,
     ),
   );
+  closeStoragePublication();
   await rm(root, { recursive: true, force: true });
 });
 

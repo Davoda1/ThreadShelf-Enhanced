@@ -53,3 +53,11 @@ A saved search, a pinned conversation and a populated archive list with provider
 Conversation totals, activity over time, model and provider distributions, and the longest conversations in the demo archive.
 
 ![Light Insights dashboard with totals and charts for the synthetic demo archive](08-insights-light.png)
+
+## Manual importer demonstration
+
+[Watch the MP4](manual-importer-demo.mp4) or [download the asciicast](manual-importer-demo.cast).
+
+This recorded workflow uses simulated import results, synthetic exports and
+generic paths. It illustrates the interactive, combined and flags-only flows;
+current defaults and labels may differ from the recording.

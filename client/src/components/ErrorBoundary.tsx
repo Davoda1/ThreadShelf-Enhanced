@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { Component, type ReactNode, type ErrorInfo } from 'react';
 
 interface Props {
@@ -24,7 +25,9 @@ export class ErrorBoundary extends Component<Props, State> {
 
     return (
       <div style={{ padding: '40px 24px', maxWidth: 560 }}>
-        <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 500 }}>Something went wrong</h2>
+        <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 500 }}>
+          {t('Something went wrong')}
+        </h2>
         <pre
           style={{
             margin: 0,
@@ -45,7 +48,7 @@ export class ErrorBoundary extends Component<Props, State> {
           style={{ marginTop: 16 }}
           onClick={() => this.setState({ error: null })}
         >
-          Try again
+          {t('Try again')}
         </button>
       </div>
     );

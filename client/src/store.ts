@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { normalizeLocale, type Locale } from './i18n/core';
 import type {
   FavoriteGenerationModel,
   PinnedConversation,
@@ -19,6 +20,13 @@ export const favoriteModelKey = (model: FavoriteGenerationModel): string =>
   `${model.provider}\0${model.id}`;
 
 interface UIState {
+  imageLoadMode: 'click' | 'auto';
+  setImageLoadMode: (mode: 'click' | 'auto') => void;
+  locale: Locale;
+  setLocale: (locale: Locale) => void;
+  richRendering: RoleFilters;
+  setRichRendering: (role: keyof RoleFilters, enabled: boolean) => void;
+
   theme: Theme;
   toggleTheme: () => void;
   setTheme: (t: Theme) => void;
@@ -55,6 +63,14 @@ interface UIState {
 export const useUIStore = create<UIState>()(
   persist(
     (set) => ({
+      imageLoadMode: 'click',
+      setImageLoadMode: (mode) => set({ imageLoadMode: mode === 'auto' ? 'auto' : 'click' }),
+      locale: 'en',
+      setLocale: (locale) => set({ locale: normalizeLocale(locale) }),
+      richRendering: { user: false, thinking: false, ai: true },
+      setRichRendering: (role, enabled) =>
+        set((state) => ({ richRendering: { ...state.richRendering, [role]: enabled } })),
+
       theme: 'dark',
       toggleTheme: () => set((s) => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })),
       setTheme: (theme) => set({ theme }),
@@ -125,7 +141,28 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: 'threadshelf:ui',
+      merge: (persisted, current) => {
+        const saved =
+          persisted && typeof persisted === 'object' ? (persisted as Partial<UIState>) : {};
+        return {
+          ...current,
+          ...saved,
+          locale: normalizeLocale(saved.locale),
+          imageLoadMode: saved.imageLoadMode === 'auto' ? 'auto' : 'click',
+          richRendering: {
+            user: typeof saved.richRendering?.user === 'boolean' ? saved.richRendering.user : false,
+            thinking:
+              typeof saved.richRendering?.thinking === 'boolean'
+                ? saved.richRendering.thinking
+                : false,
+            ai: typeof saved.richRendering?.ai === 'boolean' ? saved.richRendering.ai : true,
+          },
+        };
+      },
       partialize: (state) => ({
+        imageLoadMode: state.imageLoadMode,
+        locale: state.locale,
+        richRendering: state.richRendering,
         theme: state.theme,
         activeColl: state.activeColl,
         roles: state.roles,

@@ -1,11 +1,22 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { join, basename, dirname, normalize, resolve, relative, isAbsolute } from 'path';
-import { existsSync, mkdirSync } from 'fs';
-import { copyFile, mkdir, rm } from 'fs/promises';
+import { join, basename, normalize, resolve, relative, isAbsolute } from 'path';
+import { chmodSync, mkdirSync } from 'fs';
+import { rm } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { uploadsPath } from '../paths.js';
-import { ingestFolder, listExportFiles } from '../ingest.js';
+import { listExportFiles } from '../ingest.js';
+import {
+  createFolderImportJob,
+  createUploadedImportJob,
+  listImportJobs,
+  getImportJob,
+  cancelImportJob,
+  retryImportJob,
+  waitForImportJob,
+  deleteImportJob,
+  clearFinishedImportJobs,
+} from '../import-jobs.js';
 import { listSourceFilesInCollection } from '../store.js';
 import {
   ValidationError,
@@ -13,8 +24,6 @@ import {
   normalizeCollectionSelector,
   normalizeBoolean,
 } from '../validation.js';
-
-import { abortOnDisconnect, isAbortError } from './stream-abort.js';
 
 const router = Router();
 
@@ -27,8 +36,13 @@ const MAX_UPLOAD_FILES = 1000;
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, callback) => {
-      mkdirSync(INCOMING_DIR, { recursive: true });
-      callback(null, INCOMING_DIR);
+      try {
+        mkdirSync(INCOMING_DIR, { recursive: true, mode: 0o700 });
+        chmodSync(INCOMING_DIR, 0o700);
+        callback(null, INCOMING_DIR);
+      } catch (error) {
+        callback(error as Error, '');
+      }
     },
     filename: (_req, _file, callback) => callback(null, randomUUID()),
   }),
@@ -101,38 +115,6 @@ const uploadRelativePath = (fieldname: string): { rel: string; relativePath: str
   };
 };
 
-const ensureUploadTarget = async (targetDir: string): Promise<void> => {
-  if (!existsSync(UPLOADS_DIR)) await mkdir(UPLOADS_DIR, { recursive: true });
-  if (!existsSync(targetDir)) await mkdir(targetDir, { recursive: true });
-};
-
-const persistUploadedFiles = async (
-  files: readonly Express.Multer.File[],
-  targetDir: string,
-  onFile?: (processedFiles: number, relativePath: string) => void,
-): Promise<{ ok: true } | { ok: false; error: string }> => {
-  await ensureUploadTarget(targetDir);
-
-  for (const [index, file] of files.entries()) {
-    const { rel, relativePath } = uploadRelativePath(file.fieldname);
-    if (!relativePath) {
-      return { ok: false, error: `Unsafe upload path: ${rel}` };
-    }
-
-    const outPath = join(targetDir, relativePath);
-    if (!isInsideDirectory(targetDir, outPath)) {
-      return { ok: false, error: `Upload path escapes target directory: ${rel}` };
-    }
-
-    const outDir = dirname(outPath);
-    if (!existsSync(outDir)) await mkdir(outDir, { recursive: true });
-    await copyFile(file.path, outPath);
-    onFile?.(index + 1, relativePath);
-  }
-
-  return { ok: true };
-};
-
 const writeEvent = (res: import('express').Response, payload: unknown): void => {
   if (res.destroyed || res.writableEnded) return;
   res.write(`${JSON.stringify(payload)}\n`);
@@ -181,168 +163,246 @@ router.get('/api/ingest-preview', async (req, res) => {
   }
 });
 
-router.post('/api/ingest-upload', upload.any(), async (req, res) => {
+const jobFailure = (job: import('../import-jobs.js').ImportJob): Error =>
+  new Error(job.error || `Import ${job.state}`);
+
+const readFolderRequest = (body: Record<string, unknown> | undefined) => {
+  // Preserve the legacy route's validation order when multiple fields are
+  // invalid: option errors are reported before checking the source path.
+  const clearFirst = normalizeBoolean(body?.clearFirst, { field: 'clearFirst' });
+  const folderPath = body?.folderPath;
+  if (
+    typeof folderPath !== 'string' ||
+    !folderPath.trim() ||
+    folderPath.length > 4096 ||
+    folderPath.includes('\0')
+  ) {
+    throw new ValidationError('Invalid folderPath', { field: 'folderPath' });
+  }
+  return {
+    folderPath,
+    collection:
+      tryNormalizeCollectionName(body?.collection) ||
+      tryNormalizeCollectionName(basename(folderPath)) ||
+      'chunks',
+    clearFirst,
+  };
+};
+
+const acceptUpload = async (req: import('express').Request) => {
   const files = getUploadedFiles(req.files);
-  let clearFirst: boolean;
   try {
-    clearFirst = normalizeBoolean(req.body?.clearFirst, { field: 'clearFirst' });
-  } catch (e) {
-    await cleanupUploadedTemps(files);
-    if (e instanceof ValidationError) {
-      return res.status(400).json({ error: e.message, field: e.field });
-    }
-    throw e;
-  }
-
-  if (files.length === 0) {
-    return res
-      .status(400)
-      .json({ error: 'No files uploaded. Choose JSON, HTML or ZIP exports, or an export folder.' });
-  }
-
-  const requestedCollection = tryNormalizeCollectionName(req.body?.collectionName);
-  const { collectionName, targetDir } = getUploadTarget(files, requestedCollection);
-
-  try {
-    const persisted = await persistUploadedFiles(files, targetDir);
-    if (!persisted.ok) {
-      return res.status(400).json({ status: 'error', error: persisted.error });
-    }
-
-    const result = await ingestFolder(collectionName, targetDir, { clearFirst });
-    res.json({ status: 'completed', result, collectionName });
-  } catch (e) {
-    console.error('[/api/ingest-upload]', e);
-    res.status(500).json({ status: 'error', error: (e as Error).message });
+    const clearFirst = normalizeBoolean(req.body?.clearFirst, { field: 'clearFirst' });
+    if (!files.length)
+      throw new ValidationError(
+        'No files uploaded. Choose JSON, HTML or ZIP exports, or an export folder.',
+        { field: 'files' },
+      );
+    const { collectionName, targetDir } = getUploadTarget(
+      files,
+      tryNormalizeCollectionName(req.body?.collectionName),
+    );
+    const inputs = files.map((file) => {
+      const { relativePath, rel } = uploadRelativePath(file.fieldname);
+      if (!relativePath || !isInsideDirectory(targetDir, join(targetDir, relativePath))) {
+        throw new ValidationError(`Unsafe upload path: ${rel}`, { field: 'files' });
+      }
+      return { path: file.path, relativePath };
+    });
+    return await createUploadedImportJob({
+      collection: collectionName,
+      sourceRoot: targetDir,
+      clearFirst,
+      files: inputs,
+    });
   } finally {
     await cleanupUploadedTemps(files);
+  }
+};
+
+const sendRequestError = (res: import('express').Response, error: unknown) => {
+  if (res.destroyed || res.writableEnded) return;
+  if (error instanceof ValidationError)
+    return res.status(400).json({ error: error.message, field: error.field });
+  const status = (error as { status?: number })?.status ?? 500;
+  return res
+    .status(status)
+    .json({ status: 'error', error: error instanceof Error ? error.message : String(error) });
+};
+
+/** The connection observes a durable job. Closing it never cancels processing. */
+const streamJob = async (
+  req: import('express').Request,
+  res: import('express').Response,
+  accepted: import('../import-jobs.js').ImportJob,
+) => {
+  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+  writeEvent(res, {
+    status: 'accepted',
+    jobId: accepted.id,
+    collectionName: accepted.collection,
+    safeToClose: true,
+  });
+  const observer = new AbortController();
+  const detach = () => observer.abort();
+  req.once('aborted', detach);
+  res.once('close', detach);
+  try {
+    const job = await waitForImportJob(accepted.id, {
+      signal: observer.signal,
+      onProgress: (current) =>
+        writeEvent(res, {
+          ...(current.progress ?? {
+            status: 'starting',
+            phase: current.state,
+            totalFiles: 0,
+            processedFiles: 0,
+            totalChunks: 0,
+            totalTokens: 0,
+            elapsedMs: 0,
+          }),
+          jobId: current.id,
+          jobState: current.state,
+          safeToClose: true,
+        }),
+    });
+    if (job.result)
+      writeEvent(res, {
+        status: 'completed',
+        result: job.result,
+        collectionName: job.collection,
+        jobId: job.id,
+        jobState: job.state,
+      });
+    else
+      writeEvent(res, {
+        status: 'error',
+        error: jobFailure(job).message,
+        jobId: job.id,
+        jobState: job.state,
+      });
+  } catch (error) {
+    if (!observer.signal.aborted)
+      writeEvent(res, {
+        status: 'error',
+        error: error instanceof Error ? error.message : String(error),
+        jobId: accepted.id,
+      });
+  } finally {
+    req.off('aborted', detach);
+    res.off('close', detach);
+    if (!res.destroyed) res.end();
+  }
+};
+
+router.get('/api/import-jobs', async (req, res) => {
+  const collection = req.query.collection;
+  if (collection !== undefined && typeof collection !== 'string')
+    return res.status(400).json({ error: 'Invalid collection' });
+  res.json({
+    jobs: await listImportJobs(collection && collection !== 'all' ? collection : undefined),
+  });
+});
+
+router.get('/api/import-jobs/:id', async (req, res) => {
+  const job = await getImportJob(String(req.params.id));
+  if (!job) return res.status(404).json({ error: 'Import job not found' });
+  res.json(job);
+});
+
+router.delete('/api/import-jobs', async (req, res) => {
+  try {
+    if (
+      Object.keys(req.query).some((key) => key !== 'collection') ||
+      (req.query.collection !== undefined && typeof req.query.collection !== 'string')
+    )
+      throw new ValidationError('Invalid collection', { field: 'collection' });
+    const collection = normalizeCollectionSelector(req.query.collection, { defaultValue: 'all' });
+    res.json({
+      deleted: await clearFinishedImportJobs(collection === 'all' ? undefined : collection),
+    });
+  } catch (error) {
+    sendRequestError(res, error);
+  }
+});
+
+router.delete('/api/import-jobs/:id', async (req, res) => {
+  try {
+    const id = String(req.params.id);
+    if (!(await deleteImportJob(id)))
+      return res.status(404).json({ error: 'Import job not found' });
+    res.json({ deleted: true, id });
+  } catch (error) {
+    sendRequestError(res, error);
+  }
+});
+
+router.post('/api/import-jobs/:id/cancel', async (req, res) => {
+  const job = await cancelImportJob(String(req.params.id));
+  if (!job) return res.status(404).json({ error: 'Import job not found' });
+  res.json({ job });
+});
+
+router.post('/api/import-jobs/:id/retry', async (req, res) => {
+  try {
+    const job = await retryImportJob(String(req.params.id));
+    if (!job) return res.status(404).json({ error: 'Import job not found' });
+    res.status(202).json({ job });
+  } catch (error) {
+    res.status(409).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/api/import-jobs', async (req, res) => {
+  try {
+    res.status(202).json({ job: await createFolderImportJob(readFolderRequest(req.body)) });
+  } catch (error) {
+    sendRequestError(res, error);
+  }
+});
+
+router.post('/api/import-jobs/upload', upload.any(), async (req, res) => {
+  try {
+    res.status(202).json({ job: await acceptUpload(req) });
+  } catch (error) {
+    sendRequestError(res, error);
+  }
+});
+
+// Existing Local apps keep the same result and NDJSON contracts.
+router.post('/api/ingest-upload', upload.any(), async (req, res) => {
+  try {
+    const accepted = await acceptUpload(req);
+    const job = await waitForImportJob(accepted.id);
+    if (!job.result) throw jobFailure(job);
+    if (!res.destroyed)
+      res.json({
+        status: 'completed',
+        result: job.result,
+        collectionName: job.collection,
+        jobId: job.id,
+      });
+  } catch (error) {
+    sendRequestError(res, error);
   }
 });
 
 router.post('/api/ingest-upload-progress', upload.any(), async (req, res) => {
-  const files = getUploadedFiles(req.files);
-  let clearFirst: boolean;
   try {
-    clearFirst = normalizeBoolean(req.body?.clearFirst, { field: 'clearFirst' });
-  } catch (e) {
-    await cleanupUploadedTemps(files);
-    if (e instanceof ValidationError) {
-      return res.status(400).json({ error: e.message, field: e.field });
-    }
-    throw e;
-  }
-  const requestedCollection = tryNormalizeCollectionName(req.body?.collectionName);
-
-  if (!files.length) {
-    return res.status(400).json({ status: 'error', error: 'No files uploaded' });
-  }
-
-  const { collectionName, targetDir } = getUploadTarget(files, requestedCollection);
-
-  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('X-Accel-Buffering', 'no');
-  if (typeof res.flushHeaders === 'function') res.flushHeaders();
-  const controller = abortOnDisconnect(req, res, 'Indexing stopped');
-
-  try {
-    writeEvent(res, {
-      status: 'starting',
-      phase: 'uploading',
-      totalFiles: files.length,
-      processedFiles: 0,
-      totalChunks: 0,
-      totalTokens: 0,
-      elapsedMs: 0,
-    });
-
-    const persisted = await persistUploadedFiles(
-      files,
-      targetDir,
-      (processedFiles, relativePath) => {
-        writeEvent(res, {
-          status: 'progress',
-          phase: 'uploading',
-          totalFiles: files.length,
-          processedFiles,
-          currentFile: relativePath,
-          totalChunks: 0,
-          totalTokens: 0,
-          elapsedMs: 0,
-        });
-      },
-    );
-    if (!persisted.ok) {
-      writeEvent(res, { status: 'error', error: persisted.error });
-      return;
-    }
-
-    const onProgress = (data: unknown) => writeEvent(res, data);
-    const result = await ingestFolder(collectionName, targetDir, {
-      clearFirst,
-      onProgress,
-      signal: controller.signal,
-    });
-    writeEvent(res, { status: 'completed', result, collectionName });
-  } catch (e) {
-    if (!isAbortError(e)) {
-      console.error('[/api/ingest-upload-progress]', e);
-      writeEvent(res, { status: 'error', error: (e as Error).message });
-    }
-  } finally {
-    await cleanupUploadedTemps(files);
-    res.end();
+    await streamJob(req, res, await acceptUpload(req));
+  } catch (error) {
+    sendRequestError(res, error);
   }
 });
 
 router.post('/api/ingest-progress', async (req, res) => {
-  const folderPath = req.body?.folderPath;
-  let clearFirst: boolean;
   try {
-    clearFirst = normalizeBoolean(req.body?.clearFirst, { field: 'clearFirst' });
-  } catch (e) {
-    if (e instanceof ValidationError) {
-      return res.status(400).json({ error: e.message, field: e.field });
-    }
-    throw e;
-  }
-
-  if (!folderPath || typeof folderPath !== 'string') {
-    return res.status(400).json({ error: 'Missing folderPath' });
-  }
-  if (folderPath.length > 4096 || folderPath.includes('\0')) {
-    return res.status(400).json({ error: 'Invalid folderPath' });
-  }
-
-  const collectionName =
-    tryNormalizeCollectionName(req.body?.collection) ||
-    tryNormalizeCollectionName(basename(folderPath)) ||
-    'chunks';
-
-  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('X-Accel-Buffering', 'no');
-  if (typeof res.flushHeaders === 'function') res.flushHeaders();
-  const controller = abortOnDisconnect(req, res, 'Indexing stopped');
-
-  const onProgress = (data: unknown) => {
-    res.write(`${JSON.stringify(data)}\n`);
-  };
-
-  try {
-    const result = await ingestFolder(collectionName, folderPath, {
-      clearFirst,
-      onProgress,
-      signal: controller.signal,
-    });
-    res.write(`${JSON.stringify({ status: 'completed', result })}\n`);
-  } catch (e) {
-    if (!isAbortError(e)) {
-      console.error('[/api/ingest-progress]', e);
-      writeEvent(res, { status: 'error', error: (e as Error).message });
-    }
-  } finally {
-    res.end();
+    await streamJob(req, res, await createFolderImportJob(readFolderRequest(req.body)));
+  } catch (error) {
+    sendRequestError(res, error);
   }
 });
 

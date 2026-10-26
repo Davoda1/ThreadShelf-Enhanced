@@ -92,6 +92,7 @@ class SourceReleaseTests(unittest.TestCase):
 
     def package(self, output_name='output', ref='HEAD', success=True):
         output = self.workspace / output_name
+        existing_paths = set(output.iterdir()) if output.is_dir() else set()
         result = subprocess.run(
             [sys.executable, str(self.repo / 'scripts/release-source.py'),
              '--output-dir', str(output), '--ref', ref],
@@ -102,12 +103,12 @@ class SourceReleaseTests(unittest.TestCase):
         if not success:
             self.assertNotEqual(result.returncode, 0, result.stdout)
             self.assertTrue(result.stderr.strip(), 'Rejected input needs a diagnostic')
-            self.assertFalse(output.exists() and any(output.iterdir()),
+            self.assertEqual(set(output.iterdir()) if output.is_dir() else set(), existing_paths,
                              'A rejected tree must not emit partial release files')
             return result
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual({path.name for path in output.iterdir()},
-                         {PREFIX + '.zip', PREFIX + '.tar.gz'})
+                         {PREFIX + '.zip', PREFIX + '.tar.gz', 'SHA256SUM.txt'})
         reports = [json.loads(line) for line in result.stdout.splitlines()]
         self.assertEqual(len(reports), 2)
         for report in reports:
@@ -162,6 +163,8 @@ class SourceReleaseTests(unittest.TestCase):
     def assert_archives_match_commit(self, output, ref='HEAD'):
         expected = self.committed_files(ref)
         for path in output.iterdir():
+            if path.name == 'SHA256SUM.txt':
+                continue
             with self.subTest(archive=path.name):
                 self.assertEqual(self.archive_files(path), expected)
 
@@ -173,6 +176,8 @@ class SourceReleaseTests(unittest.TestCase):
             self.assertEqual(report['commit'], self.base_commit)
             self.assertEqual(report['files'], expected_count)
         for path in output.iterdir():
+            if path.name == 'SHA256SUM.txt':
+                continue
             contents = self.archive_files(path)
             for executable in EXECUTABLES:
                 self.assertEqual(contents[executable][1], 0o755)
@@ -185,6 +190,15 @@ class SourceReleaseTests(unittest.TestCase):
         second, _ = self.package('second')
         for path in first.iterdir():
             self.assertEqual(path.read_bytes(), (second / path.name).read_bytes())
+
+    def test_one_consolidated_checksum_file_covers_only_the_two_archives(self):
+        output, _ = self.package()
+        names = sorted((PREFIX + '.zip', PREFIX + '.tar.gz'))
+        expected = ''.join(hashlib.sha256((output / name).read_bytes()).hexdigest()
+                           + '  ' + name + '\n' for name in names).encode('ascii')
+        self.assertEqual((output / 'SHA256SUM.txt').read_bytes(), expected)
+        for name in names:
+            self.assertNotIn('SHA256SUM.txt', self.archive_files(output / name))
 
     def test_untracked_configuration_personal_files_and_dependencies_are_excluded(self):
         for path in ('.env', 'personal/threadShelf-enhanced', 'private/settings.txt',
@@ -218,6 +232,8 @@ class SourceReleaseTests(unittest.TestCase):
             '.local/runtime/node', '.lancedb/archive/data.txt', '.uploads/source.json',
             '.threadshelf/model-cache/weights.bin', '.migration-stage-test/state.txt',
             'dist/server.js', 'public/index.html', 'release/artifact.txt',
+            '.ENV', 'nested/.ENV.LOCAL', 'Personal/launcher', 'nested/PRIVATE/state.txt',
+            '.THREADSHELF/image-cache/image.bin', '.tmp-staging/state.txt', 'SHA256SUM.txt',
         )
         for index, path in enumerate(cases):
             with self.subTest(path=path):
@@ -260,6 +276,53 @@ class SourceReleaseTests(unittest.TestCase):
         self.write('.gitattributes', b'* -text\nREADME.md export-ignore\n')
         self.commit('Hide source from git archive')
         self.package(success=False)
+
+    def test_export_substitution_cannot_change_committed_bytes(self):
+        self.write('.gitattributes', b'* -text\nREADME.md export-subst\n')
+        self.write('README.md', b'Commit metadata must remain literal: $Format:%H %an %ae$\n')
+        self.commit('Mark a synthetic source file for substitution')
+        result = self.package(success=False)
+        self.assertIn('changed committed source bytes', result.stderr)
+
+    def test_windows_unsafe_path_is_rejected_from_a_git_tree(self):
+        # Build the tree directly so this test also runs on Windows, where a
+        # colon is not a portable working-tree filename.
+        blob = self.git('hash-object', '-w', '--stdin', input_bytes=b'Synthetic bytes.\n').strip()
+        entries = self.git('ls-tree', '-z', 'HEAD')
+        tree = self.git('mktree', '-z', input_bytes=entries + b'100644 blob ' + blob
+                        + b'\tunsafe:stream\0').decode().strip()
+        commit = self.git('commit-tree', tree, '-p', self.base_commit,
+                          input_bytes=b'Create synthetic unsafe source tree\n').decode().strip()
+        self.package(ref=commit, success=False)
+
+    def test_symlinked_artifact_target_cannot_overwrite_an_unrelated_file(self):
+        output = self.workspace / 'symlink-output'
+        output.mkdir()
+        target = self.workspace / 'unrelated-file.txt'
+        original = b'Unrelated synthetic bytes must not change.\n'
+        target.write_bytes(original)
+        for name in (PREFIX + '.zip', PREFIX + '.tar.gz', 'SHA256SUM.txt'):
+            link = output / name
+            try:
+                link.symlink_to(target)
+            except OSError as error:
+                self.skipTest(f'Operating system does not permit symbolic links: {error}')
+            with self.subTest(target=name):
+                result = self.package(output_name='symlink-output', success=False)
+                self.assertIn('symlinked release output file', result.stderr)
+                self.assertEqual(target.read_bytes(), original)
+            link.unlink()
+
+    def test_symlinked_output_directory_is_rejected(self):
+        target = self.workspace / 'unrelated-directory'
+        target.mkdir()
+        output = self.workspace / 'symlink-directory'
+        try:
+            output.symlink_to(target, target_is_directory=True)
+        except OSError as error:
+            self.skipTest(f'Operating system does not permit symbolic links: {error}')
+        result = self.package(output_name='symlink-directory', success=False)
+        self.assertIn('symlinked release output directory', result.stderr)
 
     def test_invalid_ref_and_unsafe_version_produce_no_archives(self):
         self.package(output_name='bad-ref', ref='missing-synthetic-ref', success=False)

@@ -1,3 +1,5 @@
+import { useCollectionLock } from '../import-jobs';
+import { t, useI18n } from '../i18n';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
@@ -88,6 +90,8 @@ const titleFromMessages = (messages: readonly ContinuationMessage[]): string => 
 };
 
 export function ChatPage() {
+  const collectionLock = useCollectionLock('threadshelf_conversations');
+  useI18n();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const chatSearch = useSearch({ from: '/chat' });
@@ -250,6 +254,10 @@ export function ChatPage() {
   }, [loadList, navigate]);
 
   const startRename = () => {
+    if (collectionLock) {
+      toast.info(t('Collection replacement in progress. Changes are temporarily blocked.'));
+      return;
+    }
     if (!chat) return;
     setTitleDraft(chat.title);
     setEditingTitle(true);
@@ -258,6 +266,10 @@ export function ChatPage() {
   const saveRename = async () => {
     const next = titleDraft.replace(/\s+/g, ' ').trim();
     setEditingTitle(false);
+    if (collectionLock) {
+      toast.info(t('Collection replacement in progress. Changes are temporarily blocked.'));
+      return;
+    }
     if (!chat || !next || next === chat.title) return;
     try {
       const updated = await api.renameGenerationThread(chat.id, next);
@@ -266,7 +278,7 @@ export function ChatPage() {
         current.map((item) => (item.id === updated.id ? { ...item, title: updated.title } : item)),
       );
       await queryClient.invalidateQueries({ queryKey: ['generation-threads'] });
-      toast.success('Chat renamed.');
+      toast.success(t('Chat renamed.'));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not rename this chat.');
     }
@@ -275,9 +287,9 @@ export function ChatPage() {
   const clearPrivateChat = async () => {
     if (privateSession.messages.length || privateSession.hasRecovery) {
       const confirmed = await confirmDialog({
-        title: 'Delete this private chat?',
+        title: t('Delete this private chat?'),
         message: 'This unsaved session and its recovery attempts will be removed from this tab.',
-        confirmLabel: 'Delete chat',
+        confirmLabel: t('Delete chat'),
         danger: true,
       });
       if (!confirmed) return;
@@ -287,14 +299,18 @@ export function ChatPage() {
     sessionStorage.removeItem(PRIVATE_SESSION_KEY);
     setChat(undefined);
     setActiveId(threads[0]?.id ?? '');
-    toast.success('Private chat deleted.');
+    toast.success(t('Private chat deleted.'));
   };
 
   const deleteChat = async (thread: ThreadShelfChatSummary) => {
+    if (collectionLock) {
+      toast.info(t('Collection replacement in progress. Changes are temporarily blocked.'));
+      return;
+    }
     const confirmed = await confirmDialog({
-      title: `Delete “${thread.title}”?`,
+      title: t('Delete “{value0}”?', { value0: thread.title }),
       message: 'The conversation and its search index entries will be permanently removed.',
-      confirmLabel: 'Delete chat',
+      confirmLabel: t('Delete chat'),
       danger: true,
     });
     if (!confirmed) return;
@@ -312,7 +328,7 @@ export function ChatPage() {
         queryClient.invalidateQueries({ queryKey: ['collections'] }),
         queryClient.invalidateQueries({ queryKey: ['generation-threads'] }),
       ]);
-      toast.success('Conversation deleted.');
+      toast.success(t('Conversation deleted.'));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not delete this chat.');
     }
@@ -344,8 +360,8 @@ export function ChatPage() {
   const title = isPrivate
     ? titleFromMessages(privateSession.messages)
     : isDraft
-      ? 'New chat'
-      : (chat?.title ?? 'Chat');
+      ? t('New chat')
+      : (chat?.title ?? t('Chat'));
 
   return (
     <>
@@ -353,17 +369,19 @@ export function ChatPage() {
       <div className="main-scroll">
         <div className="chat-page">
           <main className="chat-workspace">
-            {error && <div className="banner err">{error}</div>}
+            {error && <div className="banner err">{t(error)}</div>}
             {!activeId && !loading && (
               <div className="chat-empty">
                 <span className="chat-empty-icon">{Icons.plus}</span>
-                <h1>Start a new conversation</h1>
+                <h1>{t('Start a new conversation')}</h1>
                 <p>
-                  Chats created here are separate from your imported archive. They stay local and
-                  become searchable after each complete response.
+                  {t(
+                    'Chats created here are separate from your imported archive. They stay local and become searchable after each complete response.',
+                  )}
                 </p>
                 <button className="btn primary" onClick={() => startSavedChat()}>
-                  {Icons.plus} New chat
+                  {Icons.plus}
+                  {t(' New chat')}
                 </button>
               </div>
             )}
@@ -375,7 +393,7 @@ export function ChatPage() {
                       <input
                         id="chatTitleInput"
                         className="chat-title-input"
-                        aria-label="Chat title"
+                        aria-label={t('Chat title')}
                         autoFocus
                         value={titleDraft}
                         onChange={(event) => setTitleDraft(event.target.value)}
@@ -391,37 +409,43 @@ export function ChatPage() {
                       />
                     ) : (
                       <h1
-                        title={chat ? 'Double-click to rename' : title}
+                        title={chat ? t('Double-click to rename') : title}
                         onDoubleClick={chat ? startRename : undefined}
                       >
                         {title}
                       </h1>
                     )}
                     {isPrivate ? (
-                      <span className="chat-storage-badge private">{Icons.ghost} Private</span>
+                      <span className="chat-storage-badge private">
+                        {Icons.ghost}
+                        {t(' Private')}
+                      </span>
                     ) : (
                       <span
                         className="chat-storage-badge saved"
-                        title="Stored locally and indexed for search"
+                        title={t('Stored locally and indexed for search')}
                       >
-                        Saved locally
+                        {t('Saved locally')}
                       </span>
                     )}
                   </div>
                   <div className="chat-hero-actions">
                     <span className="chat-storage-status">
                       {isPrivate
-                        ? 'Not saved or indexed · removed when this tab closes'
+                        ? t('Not saved or indexed · removed when this tab closes')
                         : isDraft
-                          ? 'Not saved yet · a chat is created on your first message'
+                          ? t('Not saved yet · a chat is created on your first message')
                           : chat?.updatedAt
-                            ? `Updated ${fmtRelative(chat.updatedAt) || 'just now'}`
-                            : 'Saved locally by default'}
+                            ? t('Updated {value0}', {
+                                value0: fmtRelative(chat.updatedAt) || 'just now',
+                              })
+                            : t('Saved locally by default')}
                     </span>
                     {isPrivate ? (
                       <div className="saved-chat-actions">
                         <button className="btn sm ghost" onClick={() => void clearPrivateChat()}>
-                          {Icons.trash} Delete
+                          {Icons.trash}
+                          {t(' Delete')}
                         </button>
                       </div>
                     ) : (
@@ -429,13 +453,26 @@ export function ChatPage() {
                         <div className="saved-chat-actions">
                           <button
                             id="renameChatButton"
+                            disabled={Boolean(collectionLock)}
                             className="btn sm ghost"
                             onClick={startRename}
                           >
-                            Rename
+                            {t('Rename')}
                           </button>
-                          <button className="btn sm ghost" onClick={() => void deleteChat(chat)}>
-                            {Icons.trash} Delete
+                          <button
+                            className="btn sm ghost"
+                            disabled={Boolean(collectionLock)}
+                            title={
+                              collectionLock
+                                ? t(
+                                    'Collection replacement in progress. Changes are temporarily blocked.',
+                                  )
+                                : undefined
+                            }
+                            onClick={() => void deleteChat(chat)}
+                          >
+                            {Icons.trash}
+                            {t(' Delete')}
                           </button>
                         </div>
                       )

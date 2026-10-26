@@ -1,3 +1,4 @@
+import { t, useI18n } from '../i18n';
 import { useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useUIStore } from '../store';
@@ -8,9 +9,12 @@ import { collLabel, fmtDate, shortPath } from '../utils';
 import type { ActivityBucket, LongestThread } from '../types';
 
 const compact = (n: number): string =>
-  new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(n);
+  new Intl.NumberFormat(useUIStore.getState().locale, {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(n);
 
-const full = (n: number): string => n.toLocaleString('en');
+const full = (n: number): string => n.toLocaleString(useUIStore.getState().locale);
 
 // Round a max value up to a clean axis number (1/2/5 × 10^k).
 const niceMax = (value: number): number => {
@@ -24,7 +28,7 @@ const niceMax = (value: number): number => {
 
 const monthLabel = (month: string): string => {
   const date = new Date(`${month}-01T00:00:00Z`);
-  return new Intl.DateTimeFormat('en', {
+  return new Intl.DateTimeFormat(useUIStore.getState().locale, {
     month: 'short',
     year: 'numeric',
     timeZone: 'UTC',
@@ -33,11 +37,15 @@ const monthLabel = (month: string): string => {
 
 const axisMonthLabel = (month: string): string => {
   const date = new Date(`${month}-01T00:00:00Z`);
-  const name = new Intl.DateTimeFormat('en', { month: 'short', timeZone: 'UTC' }).format(date);
+  const name = new Intl.DateTimeFormat(useUIStore.getState().locale, {
+    month: 'short',
+    timeZone: 'UTC',
+  }).format(date);
   return `${name} ’${month.slice(2, 4)}`;
 };
 
 function StatTile({ label, value }: { readonly label: string; readonly value: number }) {
+  useI18n();
   return (
     <div className="stat-tile">
       <span className="stat-label">{label}</span>
@@ -52,6 +60,7 @@ function StatTile({ label, value }: { readonly label: string; readonly value: nu
 // grow from the baseline with rounded data-ends, hairline gridlines behind,
 // tooltip + peak label carry the values.
 function ActivityChart({ activity }: { readonly activity: readonly ActivityBucket[] }) {
+  useI18n();
   const [hover, setHover] = useState<number | null>(null);
   const max = niceMax(Math.max(...activity.map((b) => b.count), 0));
   const peakIdx = useMemo(() => {
@@ -63,7 +72,9 @@ function ActivityChart({ activity }: { readonly activity: readonly ActivityBucke
   }, [activity]);
 
   if (activity.length === 0) {
-    return <p className="chart-empty">No dated turns yet — timestamps appear as you index.</p>;
+    return (
+      <p className="chart-empty">{t('No dated turns yet — timestamps appear as you index.')}</p>
+    );
   }
 
   // Label january of each year; if the range is short, label every ~6th month.
@@ -83,7 +94,7 @@ function ActivityChart({ activity }: { readonly activity: readonly ActivityBucke
           );
         })}
       </div>
-      <div className="chart-cols" role="img" aria-label="Indexed passages per month">
+      <div className="chart-cols" role="img" aria-label={t('Indexed passages per month')}>
         {activity.map((bucket, i) => {
           const pct = max > 0 ? (bucket.count / max) * 100 : 0;
           const isPeak = i === peakIdx && bucket.count > 0;
@@ -92,7 +103,10 @@ function ActivityChart({ activity }: { readonly activity: readonly ActivityBucke
               key={bucket.month}
               className="col-slot"
               onMouseEnter={() => setHover(i)}
-              aria-label={`${monthLabel(bucket.month)}: ${full(bucket.count)} passages`}
+              aria-label={t('{value0}: {value1} passages', {
+                value0: monthLabel(bucket.month),
+                value1: full(bucket.count),
+              })}
             >
               {isPeak && hover === null && <span className="col-peak">{full(bucket.count)}</span>}
               <div
@@ -103,7 +117,10 @@ function ActivityChart({ activity }: { readonly activity: readonly ActivityBucke
               {hover === i && (
                 <div className="chart-tip">
                   <b>{monthLabel(bucket.month)}</b>
-                  <span>{full(bucket.count)} passages</span>
+                  <span>
+                    {full(bucket.count)}
+                    {t(' passages')}
+                  </span>
                 </div>
               )}
             </div>
@@ -133,6 +150,7 @@ function BarList({
     readonly detail?: string;
   }[];
 }) {
+  useI18n();
   const max = Math.max(...items.map((item) => item.value), 1);
   return (
     <div className="bar-list">
@@ -150,6 +168,7 @@ function BarList({
 }
 
 export function InsightsPage() {
+  useI18n();
   const navigate = useNavigate();
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
   const activeColl = useUIStore((s) => s.activeColl);
@@ -181,7 +200,7 @@ export function InsightsPage() {
         <div className="view insights-view">
           <div className="insights-head">
             <div>
-              <h2>Archive insights</h2>
+              <h2>{t('Archive insights')}</h2>
               {data?.firstActivity && data?.lastActivity && (
                 <p className="insights-range">
                   {fmtDate(data.firstActivity).split(',')[0]} —{' '}
@@ -190,11 +209,11 @@ export function InsightsPage() {
               )}
             </div>
             <label className="insights-scope">
-              <span>scope</span>
+              <span>{t('scope')}</span>
               <select
                 value={scope}
                 onChange={(e) => setScope(e.target.value)}
-                aria-label="Insights scope"
+                aria-label={t('Insights scope')}
               >
                 {collections.map((c) => (
                   <option key={c} value={c}>
@@ -207,8 +226,8 @@ export function InsightsPage() {
 
           {isError && (
             <div className="empty">
-              <h3>Could not load insights.</h3>
-              <p>Is the backend running?</p>
+              <h3>{t('Could not load insights.')}</h3>
+              <p>{t('Is the backend running?')}</p>
             </div>
           )}
 
@@ -216,35 +235,35 @@ export function InsightsPage() {
 
           {isEmpty && (
             <div className="empty">
-              <h3>Nothing indexed yet.</h3>
-              <p>Index a folder of chat exports and your archive stats will appear here.</p>
+              <h3>{t('Nothing indexed yet.')}</h3>
+              <p>{t('Index a folder of chat exports and your archive stats will appear here.')}</p>
             </div>
           )}
 
           {data && !isEmpty && (
             <>
               <div className="stat-tiles">
-                <StatTile label="Conversations" value={data.totals.conversations} />
-                <StatTile label="Turns" value={data.totals.turns} />
-                <StatTile label="Files" value={data.totals.files} />
-                <StatTile label="Indexed passages" value={data.totals.chunks} />
+                <StatTile label={t('Conversations')} value={data.totals.conversations} />
+                <StatTile label={t('Turns')} value={data.totals.turns} />
+                <StatTile label={t('Files')} value={data.totals.files} />
+                <StatTile label={t('Indexed passages')} value={data.totals.chunks} />
                 {scope === 'all' && (
-                  <StatTile label="Collections" value={data.totals.collections} />
+                  <StatTile label={t('Collections')} value={data.totals.collections} />
                 )}
               </div>
 
               <section className="insight-card">
-                <h3>Activity over time</h3>
-                <p className="insight-sub">Indexed passages per month, by turn date</p>
+                <h3>{t('Activity over time')}</h3>
+                <p className="insight-sub">{t('Indexed passages per month, by turn date')}</p>
                 <ActivityChart activity={data.activity} />
               </section>
 
               <div className="insight-grid">
                 <section className="insight-card">
-                  <h3>Top models</h3>
-                  <p className="insight-sub">By indexed passages</p>
+                  <h3>{t('Top models')}</h3>
+                  <p className="insight-sub">{t('By indexed passages')}</p>
                   {data.topModels.length === 0 ? (
-                    <p className="chart-empty">No model metadata in this scope.</p>
+                    <p className="chart-empty">{t('No model metadata in this scope.')}</p>
                   ) : (
                     <BarList
                       items={data.topModels.map((m) => ({
@@ -258,10 +277,10 @@ export function InsightsPage() {
                 </section>
 
                 <section className="insight-card">
-                  <h3>Providers</h3>
-                  <p className="insight-sub">Turns per provider</p>
+                  <h3>{t('Providers')}</h3>
+                  <p className="insight-sub">{t('Turns per provider')}</p>
                   {data.providers.length === 0 ? (
-                    <p className="chart-empty">No conversations stored yet.</p>
+                    <p className="chart-empty">{t('No conversations stored yet.')}</p>
                   ) : (
                     <BarList
                       items={data.providers.map((p) => {
@@ -284,8 +303,12 @@ export function InsightsPage() {
               </div>
 
               <section className="insight-card">
-                <h3>Longest conversations</h3>
-                <p className="insight-sub">Top {data.longestThreads.length} by turn count</p>
+                <h3>{t('Longest conversations')}</h3>
+                <p className="insight-sub">
+                  {t('Top ')}
+                  {data.longestThreads.length}
+                  {t(' by turn count')}
+                </p>
                 <div className="longest-list">
                   {data.longestThreads.map((thread, i) => {
                     const provider = getProvider(thread.provider);
@@ -302,7 +325,8 @@ export function InsightsPage() {
                           {thread.title || shortPath(thread.sourceFile)}
                         </span>
                         <span className="l-meta">
-                          {thread.turnCount} turns
+                          {thread.turnCount}
+                          {t(' turns')}
                           {thread.lastTurnAt
                             ? ` · ${fmtDate(thread.lastTurnAt).split(',')[0]}`
                             : ''}

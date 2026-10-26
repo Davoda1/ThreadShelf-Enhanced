@@ -200,7 +200,7 @@ const migrateLegacyChat = async (id: string): Promise<ThreadShelfChat> => {
     await insertChat(chat);
     await replaceThreadsForFile(LEGACY_THREADSHELF_CHAT_COLLECTION, sourceFile, 'threadshelf', []);
     return { chat, needsIndex: true };
-  });
+  }, [THREADSHELF_CHAT_COLLECTION, LEGACY_THREADSHELF_CHAT_COLLECTION]);
   if (loaded.needsIndex)
     await indexWithStatus({ collection: THREADSHELF_CHAT_COLLECTION, sourceFile });
   return loaded.chat;
@@ -288,7 +288,7 @@ export const getThreadShelfChat = async (value: unknown): Promise<ThreadShelfCha
     if (!legacyRows.some((candidate) => candidate.conversationKey === id))
       throw new ThreadShelfChatNotFoundError();
     return undefined;
-  });
+  }, [THREADSHELF_CHAT_COLLECTION, LEGACY_THREADSHELF_CHAT_COLLECTION]);
   if (loaded) {
     if (loaded.needsIndex) {
       await indexWithStatus({

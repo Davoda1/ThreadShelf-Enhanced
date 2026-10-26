@@ -1,3 +1,5 @@
+import { useUIStore } from '../store';
+import { t, useI18n } from '../i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import type {
@@ -17,10 +19,30 @@ interface ModelCatalogModalProps {
 }
 
 const SORTS: readonly { readonly value: CatalogSort; readonly label: string }[] = [
-  { value: 'downloads', label: 'Most downloaded' },
-  { value: 'trending', label: 'Trending' },
-  { value: 'likes', label: 'Most liked' },
-  { value: 'recent', label: 'Recently updated' },
+  {
+    value: 'downloads',
+    get label() {
+      return t('Most downloaded');
+    },
+  },
+  {
+    value: 'trending',
+    get label() {
+      return t('Trending');
+    },
+  },
+  {
+    value: 'likes',
+    get label() {
+      return t('Most liked');
+    },
+  },
+  {
+    value: 'recent',
+    get label() {
+      return t('Recently updated');
+    },
+  },
 ];
 
 const FIT_LABEL: Record<CatalogFit, string> = {
@@ -30,14 +52,18 @@ const FIT_LABEL: Record<CatalogFit, string> = {
 };
 
 const hardwareSummary = (hardware: HardwareProfile | null): string => {
-  if (!hardware) return 'detecting hardware…';
+  if (!hardware) return t('detecting hardware…');
   const device = hardware.devices[0];
   return device
-    ? `${device.name} · ${fmtBytes(hardware.modelBudgetBytes)} usable`
-    : `CPU only · ${fmtBytes(hardware.modelBudgetBytes)} usable RAM`;
+    ? t('{device} · {size} usable', {
+        device: device.name,
+        size: fmtBytes(hardware.modelBudgetBytes),
+      })
+    : t('CPU only · {size} usable RAM', { size: fmtBytes(hardware.modelBudgetBytes) });
 };
 
 export function ModelCatalogModal({ open, onClose, onDownloaded }: ModelCatalogModalProps) {
+  useI18n();
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<CatalogSort>('downloads');
   const [models, setModels] = useState<readonly CatalogModelSummary[]>([]);
@@ -109,7 +135,7 @@ export function ModelCatalogModal({ open, onClose, onDownloaded }: ModelCatalogM
           setHardware(response.hardware);
         })
         .catch((cause: unknown) =>
-          toast.error(cause instanceof Error ? cause.message : 'Could not load model files.'),
+          toast.error(cause instanceof Error ? cause.message : t('Could not load model files.')),
         )
         .finally(() => setDetailLoading(false));
     },
@@ -138,11 +164,11 @@ export function ModelCatalogModal({ open, onClose, onDownloaded }: ModelCatalogM
           },
           controller.signal,
         );
-        toast.success(`Downloaded ${repoId} (${quant}).`);
+        toast.success(t('Downloaded {value0} ({value1}).', { value0: repoId, value1: quant }));
         if (saved) onDownloaded?.(saved);
       } catch (cause) {
         if (!controller.signal.aborted) {
-          toast.error(cause instanceof Error ? cause.message : 'Download failed.');
+          toast.error(cause instanceof Error ? cause.message : t('Download failed.'));
         }
       } finally {
         setDownloading(null);
@@ -162,18 +188,22 @@ export function ModelCatalogModal({ open, onClose, onDownloaded }: ModelCatalogM
         className="modal-card catalog-modal"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
-        aria-label="Download a model"
+        aria-label={t('Download a model')}
       >
         <div className="modal-head catalog-head">
           <div>
-            <h3>Download a model</h3>
+            <h3>{t('Download a model')}</h3>
             <p>
-              GGUF models from the Hugging Face Hub, matched against your hardware. Only search
-              terms leave this machine — no chat content is ever sent.
+              {t(
+                'GGUF models from the Hugging Face Hub, matched against your hardware. Only search terms leave this machine — no chat content is ever sent.',
+              )}
             </p>
           </div>
-          <span className="catalog-origin" title="Catalog metadata is fetched from huggingface.co">
-            catalog · huggingface.co
+          <span
+            className="catalog-origin"
+            title={t('Catalog metadata is fetched from huggingface.co')}
+          >
+            {t('catalog · huggingface.co')}
           </span>
         </div>
 
@@ -182,13 +212,13 @@ export function ModelCatalogModal({ open, onClose, onDownloaded }: ModelCatalogM
             autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search models — e.g. qwen, coder, heretic, uncensored…"
-            aria-label="Search models"
+            placeholder={t('Search models — e.g. qwen, coder, heretic, uncensored…')}
+            aria-label={t('Search models')}
           />
           <select
             value={sort}
             onChange={(event) => setSort(event.target.value as CatalogSort)}
-            aria-label="Sort models"
+            aria-label={t('Sort models')}
           >
             {SORTS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -199,19 +229,21 @@ export function ModelCatalogModal({ open, onClose, onDownloaded }: ModelCatalogM
         </div>
 
         <div className="catalog-hardware">
-          <b>Your machine:</b> {hardwareSummary(hardware)}
+          <b>{t('Your machine:')}</b> {hardwareSummary(hardware)}
           {!tokenConfigured && (
             <span className="catalog-token-hint">
-              No HF_TOKEN set — gated models are marked and cannot be downloaded.
+              {t('No HF_TOKEN set — gated models are marked and cannot be downloaded.')}
             </span>
           )}
         </div>
 
         <div className="catalog-body">
-          {error && <p className="catalog-error">{error}</p>}
-          {loading && models.length === 0 && <p className="catalog-empty">Loading catalog…</p>}
+          {error && <p className="catalog-error">{t(error)}</p>}
+          {loading && models.length === 0 && (
+            <p className="catalog-empty">{t('Loading catalog…')}</p>
+          )}
           {!loading && !error && models.length === 0 && (
-            <p className="catalog-empty">No GGUF models matched that search.</p>
+            <p className="catalog-empty">{t('No GGUF models matched that search.')}</p>
           )}
 
           {models.map((model) => {
@@ -229,23 +261,36 @@ export function ModelCatalogModal({ open, onClose, onDownloaded }: ModelCatalogM
                     <em>{model.author}</em>
                   </span>
                   <span className="catalog-item-meta">
-                    <span title={`${model.downloads.toLocaleString()} downloads`}>
+                    <span
+                      title={t('{value0} downloads', {
+                        value0: model.downloads.toLocaleString(useUIStore.getState().locale),
+                      })}
+                    >
                       ↓ {fmtCount(model.downloads)}
                     </span>
-                    <span title={`${model.likes.toLocaleString()} likes`}>
+                    <span
+                      title={t('{value0} likes', {
+                        value0: model.likes.toLocaleString(useUIStore.getState().locale),
+                      })}
+                    >
                       ♥ {fmtCount(model.likes)}
                     </span>
                     {model.trustedPublisher && (
-                      <span className="catalog-badge trusted" title="Known-good GGUF publisher">
-                        trusted
+                      <span
+                        className="catalog-badge trusted"
+                        title={t('Known-good GGUF publisher')}
+                      >
+                        {t('trusted')}
                       </span>
                     )}
                     {model.gated !== false && (
                       <span
                         className="catalog-badge gated"
-                        title="This repository is gated on Hugging Face. Accept its licence there and set HF_TOKEN in the server .env."
+                        title={t(
+                          'This repository is gated on Hugging Face. Accept its licence there and set HF_TOKEN in the server .env.',
+                        )}
                       >
-                        needs HF login
+                        {t('needs HF login')}
                       </span>
                     )}
                   </span>
@@ -253,11 +298,15 @@ export function ModelCatalogModal({ open, onClose, onDownloaded }: ModelCatalogM
 
                 {isOpen && (
                   <div className="catalog-quants">
-                    {detailLoading && <p className="catalog-empty">Reading files…</p>}
+                    {detailLoading && <p className="catalog-empty">{t('Reading files…')}</p>}
                     {detail && detail.gated !== false && (
                       <p className="catalog-gated-note">
-                        {detail.id} is gated. Accept the licence on Hugging Face, then set{' '}
-                        <code>HF_TOKEN</code> in the server <code>.env</code> to download it here.
+                        {detail.id}
+                        {t(' is gated. Accept the licence on Hugging Face, then set')}{' '}
+                        <code>HF_TOKEN</code>
+                        {t(' in the server ')}
+                        <code>.env</code>
+                        {t(' to download it here.')}
                       </p>
                     )}
                     {detail?.quants.map((quant) => {
@@ -267,21 +316,28 @@ export function ModelCatalogModal({ open, onClose, onDownloaded }: ModelCatalogM
                         <div className="catalog-quant" key={quant.label} data-fit={quant.fit}>
                           <span className="catalog-quant-name">
                             {quant.label}
-                            {quant.recommended && <em title="Balanced default">recommended</em>}
-                            {quant.shards > 1 && <i>{quant.shards} shards</i>}
+                            {quant.recommended && (
+                              <em title={t('Balanced default')}>{t('recommended')}</em>
+                            )}
+                            {quant.shards > 1 && (
+                              <i>
+                                {quant.shards}
+                                {t(' shards')}
+                              </i>
+                            )}
                           </span>
                           <span className="catalog-quant-size">{fmtBytes(quant.totalBytes)}</span>
                           <span className="catalog-quant-fit" data-fit={quant.fit}>
-                            {FIT_LABEL[quant.fit]}
+                            {t(FIT_LABEL[quant.fit])}
                           </span>
                           <button
                             type="button"
                             className="btn"
                             disabled={busy || Boolean(downloading) || blocked}
                             onClick={() => void download(detail.id, quant.label)}
-                            title={blocked ? 'Gated repository — HF_TOKEN required' : undefined}
+                            title={blocked ? t('Gated repository — HF_TOKEN required') : undefined}
                           >
-                            {busy ? `${percent}%` : 'Download'}
+                            {busy ? `${percent}%` : t('Download')}
                           </button>
                         </div>
                       );
@@ -297,11 +353,11 @@ export function ModelCatalogModal({ open, onClose, onDownloaded }: ModelCatalogM
         <div className="modal-foot">
           {downloading ? (
             <button className="btn ghost" onClick={() => abortRef.current?.abort()}>
-              Cancel download
+              {t('Cancel download')}
             </button>
           ) : (
             <button className="btn ghost" onClick={close}>
-              Close
+              {t('Close')}
             </button>
           )}
         </div>
@@ -323,7 +379,7 @@ const busyBar = (
         <div className="catalog-progress-fill" style={{ width: `${percent}%` }} />
       </div>
       <span title={file}>
-        {percent}% · {file || 'starting…'}
+        {percent}% · {file || t('starting…')}
       </span>
     </div>
   );

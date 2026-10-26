@@ -1,4 +1,4 @@
-/** Adapted from ThreadShelf Local Reader by davoda1. See adjacent licenses and README.
+/** Adapted from ThreadShelf Local Reader 3.3.0. See adjacent licenses and README.
  * Native archive imports read input as inert data; never extract or execute it. */
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -11,7 +11,22 @@ import { loadBackup } from './providers/venice.mjs';
 import { stringifyJSON } from './providers/common.mjs';
 import { jsonEvents } from './stream-json.mjs';
 
-export const IMPORT_LIMITS = Object.freeze({ fileBytes: 512 * 1024 ** 2, htmlBytes: 512 * 1024 ** 2, zipBytes: 1024 ** 4, expandedBytes: 256 * 1024 ** 3, streamBytes: 256 * 1024 ** 3, recordBytes: 512 * 1024 ** 2, streamingThreshold: 8 * 1024 ** 2, metadataBytes: 16 * 1024 ** 2, directoryBytes: 64 * 1024 ** 2, records: 2_000_000, entries: 100000, depth: 64, jsonDepth: 256, nodes: 4_000_000 });
+export const IMPORT_LIMITS = Object.freeze({ fileBytes: 512 * 1024 ** 2, htmlBytes: 512 * 1024 ** 2, zipBytes: 1024 ** 4, expandedBytes: 256 * 1024 ** 3, streamBytes: 256 * 1024 ** 3, recordBytes: 64 * 1024 ** 2, streamingThreshold: 8 * 1024 ** 2, metadataBytes: 16 * 1024 ** 2, directoryBytes: 64 * 1024 ** 2, records: 2_000_000, entries: 100000, depth: 64, jsonDepth: 256, nodes: 4_000_000 });
+class UnsupportedExportError extends Error {
+  constructor(message) { super(message); this.name = 'UnsupportedExportError'; this.code = 'UNSUPPORTED_EXPORT'; }
+}
+/** A bounded, deliberately conservative probe shared by durable folder snapshots. */
+export function isClearlyUnsupportedExportPrefix(raw, filename) {
+  const extension = path.extname(filename.split('!').at(-1)).toLowerCase();
+  if (extension && extension !== '.json') return false;
+  // Preserve potential UTF-16/32 and ZIP inputs for their proper adapters. A
+  // prefix consisting only of whitespace is inconclusive, however long it is.
+  if (raw[0] === 0xff || raw[0] === 0xfe || raw.subarray(0, 4).includes(0) || (raw[0] === 0x50 && raw[1] === 0x4b)) return false;
+  const head = raw.toString('utf8').replace(/^\uFEFF/, '').trimStart();
+  return Boolean(head) && !/^[\[{]/.test(head) && !head.startsWith('<');
+}
+const diagnostic = (error, sourceFile) => ({ error: error.message, sourceFile, kind: error.code === 'UNSUPPORTED_EXPORT' ? 'unsupported' : 'invalid' });
+const checkpoint = async options => { abort(options.signal); await options.checkpoint?.(); abort(options.signal); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const list = value => Array.isArray(value) ? value : [];
 const hash = value => createHash('sha256').update(typeof value === 'string' || Buffer.isBuffer(value) ? value : JSON.stringify(value)).digest('hex');
@@ -107,11 +122,13 @@ function genericMessages(messages, conversation, { content = m => m.content ?? m
 }
 
 /** Normalizes JSON documents synchronously. Used inside the import worker, never in the UI. */
-export function normalizeDocument(input, sourceFile = 'export.json', { limits = IMPORT_LIMITS, sourceIndex } = {}) {
+export function normalizeDocument(input, sourceFile = 'export.json', options = {}) {
+  const { limits = IMPORT_LIMITS, sourceIndex } = options;
   safeTree(input, limits);
   const data = jsonSafe(input), result = [];
+  if (Array.isArray(data) && !data.length) return result;
   if (Array.isArray(data) && data.length && data.every(t => object(t) && ['user', 'ai', 'thinking'].some(k => typeof t[k] === 'string'))) {
-    return normalizeDocument({ provider: 'threadshelf', turns: data }, sourceFile, { limits });
+    return normalizeDocument({ provider: 'threadshelf', turns: data }, sourceFile, { ...options, limits });
   }
   // Original console export: owners contain every stored conversation/message variant.
   if (data?.format === 'venice-chat-history' || Array.isArray(data?.owners)) {
@@ -161,7 +178,13 @@ export function normalizeDocument(input, sourceFile = 'export.json', { limits = 
   }
   // Index converter wrappers retain native ChatGPT mapping or rendered message records.
   if (Array.isArray(data?.conversations) && !data.conversations.some(c => c?.responses || c?.chat_messages)) {
-    for (const [index, conversation] of data.conversations.entries()) result.push(...normalizeDocument(conversation, sourceFile, { limits, sourceIndex: sourceIndex ?? index }));
+    for (const [index, conversation] of data.conversations.entries()) {
+      try { result.push(...normalizeDocument(conversation, sourceFile, { ...options, limits, sourceIndex: sourceIndex ?? index })); }
+      catch (error) {
+        if (error.code !== 'UNSUPPORTED_EXPORT') throw error;
+        emit(options, { phase: 'warning', sourceFile, message: `Skipped non-conversation array record ${index + 1}.` });
+      }
+    }
     return result;
   }
   const provider = detectProvider(data);
@@ -275,7 +298,7 @@ export function normalizeDocument(input, sourceFile = 'export.json', { limits = 
   if (Array.isArray(data)) {
     for (const [index, conversation] of data.entries()) {
       if (!object(conversation)) continue;
-      try { result.push(...normalizeDocument(conversation, sourceFile, { limits, sourceIndex: sourceIndex ?? index })); } catch (error) { if (error.name === 'AbortError') throw error; /* Non-conversation metadata is retained in the original input. */ }
+      try { result.push(...normalizeDocument(conversation, sourceFile, { ...options, limits, sourceIndex: sourceIndex ?? index })); } catch (error) { if (error.code !== 'UNSUPPORTED_EXPORT') throw error; emit(options, { phase: 'warning', sourceFile, message: `Skipped non-conversation array record ${index + 1}.` }); }
     }
     if (result.length) return result;
   }
@@ -284,7 +307,7 @@ export function normalizeDocument(input, sourceFile = 'export.json', { limits = 
     result.push(build(String(provider).toLowerCase(), data, genericMessages(data.messages, data), sourceFile)); return result;
   }
   if (Array.isArray(data?.chat_messages)) return [];
-  throw new Error('Unrecognized conversation export. Select a supported native JSON/HTML export, its ZIP archive, or an export folder.');
+  throw new UnsupportedExportError('Unrecognized conversation export. Select a supported native JSON/HTML export, its ZIP archive, or an export folder.');
 }
 
 function* tree(node) { if (typeof node !== 'string') { yield node; for (const child of node.children ?? []) yield* tree(child); } }
@@ -338,7 +361,7 @@ function htmlConversations(raw, sourceFile, options) {
       results.push(build('converted', record, turns, sourceFile, block.attrs['data-conversation-id']));
     }
   }
-  if (!results.length) throw new Error('This HTML has no recognized conversation data. Import the original JSON or Gemini Takeout HTML. HTML and scripts are never executed.');
+  if (!results.length) throw new UnsupportedExportError('This HTML has no recognized conversation data. Import the original JSON or Gemini Takeout HTML. HTML and scripts are never executed.');
   return results;
 }
 
@@ -387,7 +410,7 @@ async function* zipChunks(entry, options, maxBytes) {
     .catch(async error => { failure = error; try { await stream.writable.abort(error); } catch {} });
   try {
     for await (const chunk of stream.readable) {
-      abort(options.signal); total += chunk.byteLength;
+      await checkpoint(options); total += chunk.byteLength;
       if (total > maxBytes) throw new Error('Expanded ZIP member exceeded the configured streaming safety limit.');
       yield chunk;
     }
@@ -412,6 +435,7 @@ async function* streamedJSON(factory, size, filename, options) {
   const progressSource = async function* (phase) {
     let bytes = 0, last = 0;
     for await (const chunk of factory()) {
+      await checkpoint(options);
       bytes += chunk.byteLength;
       if (bytes - last >= 32 * 1024 ** 2) { last = bytes; emit(options, { phase, sourceFile: filename, bytes, totalBytes: size, message: `${phase === 'validating' ? 'Validating' : 'Reading'} ${Math.round(bytes / 1024 ** 2)} MiB of ${Math.round(size / 1024 ** 2)} MiB.` }); }
       yield chunk;
@@ -431,7 +455,7 @@ async function* streamedJSON(factory, size, filename, options) {
     if (event.type === 'field') {
       safeTree(event.value, limits);
       metadataBytes += event.bytes;
-      if (metadataBytes > limits.fileBytes) throw new Error('JSON wrapper metadata exceeds the whole-document safety limit.');
+      if (metadataBytes > Math.min(limits.fileBytes, limits.recordBytes)) throw new Error('JSON wrapper metadata exceeds the bounded metadata safety limit. Export a conversation-array JSON file.');
       metadata[event.name] = event.value;
     }
   }
@@ -444,6 +468,7 @@ async function* streamedJSON(factory, size, filename, options) {
   }
   if (whole || metadataBytes > limits.metadataBytes) {
     if (size > limits.fileBytes) throw new Error(`This JSON adapter requires whole-document processing and is limited to ${Math.round(limits.fileBytes / 1024 ** 2)} MiB. Export separate conversations or use a supported conversation-array JSON format.`);
+    await options.beforeWholeDocument?.(size);
     const chunks = []; let total = 0;
     for await (const chunk of factory()) { abort(options.signal); total += chunk.byteLength; if (total > limits.fileBytes) throw new Error('JSON exceeds the whole-document safety limit.'); chunks.push(Buffer.from(chunk)); }
     for (const record of parseBytes(Buffer.concat(chunks), filename, options)) if (record.turns.length) yield record;
@@ -459,7 +484,7 @@ async function* streamedJSON(factory, size, filename, options) {
     else {
       // Array normalization historically ignores non-conversation metadata records.
       try { records = normalizeDocument(event.value, filename, { ...options, sourceIndex: event.index }); }
-      catch (error) { if (kind !== 'array') throw error; emit(options, { phase: 'warning', sourceFile: filename, message: `Skipped non-conversation array record ${event.index + 1}: ${error.message}` }); continue; }
+      catch (error) { if (error.code !== 'UNSUPPORTED_EXPORT') throw error; emit(options, { phase: 'warning', sourceFile: filename, message: `Skipped non-conversation array record ${event.index + 1}: ${error.message}` }); continue; }
     }
     for (const record of records) if (record.turns.length) yield record;
     await tick();
@@ -467,7 +492,9 @@ async function* streamedJSON(factory, size, filename, options) {
 }
 
 async function* parseSource(factory, size, filename, options, readSmall) {
+  await checkpoint(options);
   if (size <= Math.min(options.limits.streamingThreshold, options.limits.fileBytes)) {
+    await options.beforeWholeDocument?.(size);
     for (const record of parseBytes(await readSmall(), filename, options)) if (record.turns.length) yield record;
     return;
   }
@@ -475,9 +502,12 @@ async function* parseSource(factory, size, filename, options, readSmall) {
   for await (const chunk of factory()) { prefix = Buffer.from(chunk.subarray(0, 8192)); break; }
   const head = prefix.toString('utf8').replace(/^\uFEFF/, '').trimStart();
   const utf8 = !prefix.subarray(0, 4).includes(0) && !(prefix[0] === 0xff || prefix[0] === 0xfe);
+  if (isClearlyUnsupportedExportPrefix(prefix, filename))
+    throw new UnsupportedExportError('File has no recognizable conversation export structure.');
   if (/\.html?$/i.test(filename) || head.startsWith('<') || !utf8 || (!head && size <= prefix.length) || (head && !/^[\[{]/.test(head))) {
     const limit = /\.html?$/i.test(filename) || head.startsWith('<') ? options.limits.htmlBytes : options.limits.fileBytes;
     if (size > limit) throw new Error(`HTML, non-UTF-8 JSON and unsupported containers retain the ${Math.round(limit / 1024 ** 2)} MiB whole-document safety limit. Use UTF-8 conversation-array JSON for larger exports.`);
+    await options.beforeWholeDocument?.(size);
     for (const record of parseBytes(await readSmall(), filename, options)) if (record.turns.length) yield record;
   } else yield* streamedJSON(factory, size, filename, options);
 }
@@ -495,13 +525,18 @@ async function* scan(paths, options, depth = 0, seen = new Set()) {
         if (depth >= options.limits.depth) throw new Error('Folder nesting exceeds import depth limit.');
         const children = await fs.readdir(filename);
         yield* scan(children.sort().map(name => path.join(filename, name)), options, depth + 1, seen);
-      } else if (stat.isFile() && (depth === 0 || candidate(path.basename(filename)))) yield { filename, stat };
-    } catch (error) { if (error.name === 'AbortError') throw error; yield { error: error.message, sourceFile: filename }; }
+      } else if (stat.isFile()) {
+        if (candidate(path.basename(filename))) yield { filename, stat };
+        else emit(options, { phase: 'skipped', code: 'unsupported', sourceFile: filename, message: 'Unrelated file or account metadata skipped.' });
+      }
+    } catch (error) { if (error.name === 'AbortError' || error.code === 'MEMORY_PRESSURE') throw error; yield diagnostic(error, filename); }
   }
 }
 function parseBytes(raw, filename, options) {
   abort(options.signal);
   const head = raw.subarray(0, 200).toString('utf8').replace(/^\uFEFF/, '').trimStart();
+  if (isClearlyUnsupportedExportPrefix(raw.subarray(0, 8192), filename))
+    throw new UnsupportedExportError('File has no recognizable conversation export structure.');
   if (/\.html?$/i.test(filename) || head.startsWith('<!DOCTYPE') || head.startsWith('<html')) {
     if (raw.length > options.limits.htmlBytes) throw new Error('HTML exceeds the configured safety limit.');
     return htmlConversations(raw, filename, options);
@@ -521,7 +556,7 @@ export async function* importPaths(paths, options = {}) {
   emit(options, { phase: 'scanning', message: 'Scanning selected exports.' });
   for await (const item of scan(paths, options)) { if (item.error) yield item; else files.push(item); if (files.length > options.limits.entries) throw new Error('Too many selected files.'); }
   for (const item of files) {
-    abort(options.signal); current++;
+    await checkpoint(options); current++;
     const filename = item.filename;
     emit(options, { phase: 'reading', current, total: files.length, sourceFile: filename, message: path.basename(filename) });
     try {
@@ -540,7 +575,7 @@ export async function* importPaths(paths, options = {}) {
               const manifestData = decodeJSONBytes(await zipBytes(manifest, options, 1024 * 1024));
               if (manifestData.backupVersion === 4) { backups.push(filename); continue; }
             } catch (error) {
-              if (error.name === 'AbortError') throw error;
+              if (error.name === 'AbortError' || error.code === 'MEMORY_PRESSURE') throw error;
               // An unrelated malformed manifest must not hide valid exports in the same ZIP.
               // The normal per-member pass reports its actual diagnostic below.
             }
@@ -548,7 +583,11 @@ export async function* importPaths(paths, options = {}) {
           if (entries.some(e => /^db\/chunk-\d+\.json$/.test(e.filename))) { backups.push(filename); continue; }
           for (const entry of entries) {
             abort(options.signal);
-            if (entry.directory || !candidate(entry.filename) || /\.zip$/i.test(entry.filename)) continue;
+            if (entry.directory) continue;
+            if (!candidate(entry.filename) || /\.zip$/i.test(entry.filename)) {
+              emit(options, { phase: 'skipped', code: 'unsupported', sourceFile: filename + '!' + entry.filename, message: 'Non-conversation archive member retained in the original archive.' });
+              continue;
+            }
             const sourceFile = filename + '!' + entry.filename;
             try {
               const limit = /\.html?$/i.test(entry.filename) ? options.limits.htmlBytes : options.limits.fileBytes;
@@ -558,7 +597,7 @@ export async function* importPaths(paths, options = {}) {
               for await (const record of parseSource(() => zipChunks(entry, options, options.limits.streamBytes), entry.uncompressedSize, sourceFile, options, () => zipBytes(entry, options, limit))) { found = true; abort(options.signal); yield record; }
               if (!found) emit(options, { phase: 'skipped', sourceFile, message: 'No readable conversation turns.' });
               await tick();
-            } catch (error) { if (error.name === 'AbortError') throw error; emit(options, { phase: 'error', sourceFile, message: error.message }); yield { error: error.message, sourceFile }; }
+            } catch (error) { if (error.name === 'AbortError' || error.code === 'MEMORY_PRESSURE') throw error; emit(options, { phase: 'error', sourceFile, message: error.message }); yield diagnostic(error, sourceFile); }
           }
         } finally { await zip.close(); await handle.close(); }
       } else {
@@ -570,7 +609,7 @@ export async function* importPaths(paths, options = {}) {
           const factory = async function* () {
             await unchanged();
             for (let offset = 0; offset < initial.size;) {
-              abort(options.signal); const bytes = Buffer.allocUnsafe(Math.min(256 * 1024, initial.size - offset));
+              await checkpoint(options); const bytes = Buffer.allocUnsafe(Math.min(256 * 1024, initial.size - offset));
               const { bytesRead } = await handle.read(bytes, 0, bytes.length, offset);
               if (!bytesRead) throw new Error('Input was truncated during import.');
               offset += bytesRead; yield bytes.subarray(0, bytesRead);
@@ -585,17 +624,17 @@ export async function* importPaths(paths, options = {}) {
           if (!found) emit(options, { phase: 'skipped', sourceFile: filename, message: 'No readable conversation turns.' });
         } finally { await handle.close(); }
       }
-    } catch (error) { if (error.name === 'AbortError') throw error; emit(options, { phase: 'error', sourceFile: filename, message: error.message }); yield { error: error.message, sourceFile: filename }; }
+    } catch (error) { if (error.name === 'AbortError' || error.code === 'MEMORY_PRESSURE') throw error; emit(options, { phase: 'error', sourceFile: filename, message: error.message }); yield diagnostic(error, filename); }
     await tick();
   }
   if (backups.length) {
     const sourceFile = backups.join(';');
     try {
       abort(options.signal);
-      const backup = await loadBackup(backups, { signal: options.signal, limits: { jsonBytes: options.limits.fileBytes, databaseBytes: Math.min(options.limits.expandedBytes, 2 * 1024 ** 3), uploadBytes: Math.min(options.limits.zipBytes, 4 * 1024 ** 3) } });
+      const backup = await loadBackup(backups, { signal: options.signal, beforeWholeDocument: options.beforeWholeDocument, limits: { jsonBytes: options.limits.fileBytes, databaseBytes: Math.min(options.limits.expandedBytes, 2 * 1024 ** 3), uploadBytes: Math.min(options.limits.zipBytes, 4 * 1024 ** 3) } });
       abort(options.signal);
       for (const record of normalizeDocument(backup, sourceFile, options)) if (record.turns.length) yield record;
-    } catch (error) { if (error.name === 'AbortError') throw error; yield { error: error.message, sourceFile }; }
+    } catch (error) { if (error.name === 'AbortError' || error.code === 'MEMORY_PRESSURE') throw error; yield diagnostic(error, sourceFile); }
   }
   emit(options, { phase: 'complete', current: files.length, total: files.length, message: 'Import scan complete.' });
 }

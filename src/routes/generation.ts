@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { IndexingBusyError, CollectionBusyError } from '../indexing-coordinator.js';
 import {
   getGenerationConfig,
   llamaCppConfigChanged,
@@ -70,6 +71,10 @@ const parseProvider = (value: unknown): GenerationProviderId => {
 };
 
 const errorResponse = (res: import('express').Response, error: unknown): void => {
+  if (error instanceof IndexingBusyError || error instanceof CollectionBusyError) {
+    res.status(409).json({ error: error.message, code: error.code });
+    return;
+  }
   if (error instanceof ValidationError) {
     res.status(400).json({ error: error.message, field: error.field });
     return;

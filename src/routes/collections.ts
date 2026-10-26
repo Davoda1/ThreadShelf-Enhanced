@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { IndexingBusyError, CollectionBusyError } from '../indexing-coordinator.js';
+import { withCollectionJobDeletion } from '../import-jobs.js';
 import { dropCollection } from '../store.js';
 import {
   getAllCollections,
@@ -45,6 +47,8 @@ router.post('/api/collections', async (req, res) => {
     res.json({ ok: true, collection: name });
   } catch (e) {
     console.error('[/api/collections POST]', e);
+    if (e instanceof IndexingBusyError || e instanceof CollectionBusyError)
+      return res.status(409).json({ error: e.message, code: e.code });
     res.status(500).json({ error: (e as Error).message });
   }
 });
@@ -59,11 +63,15 @@ router.post('/api/collections/:name/clear', async (req, res) => {
   }
 
   try {
-    await dropCollection(name);
-    await ensureCollectionExists(name);
+    await withCollectionJobDeletion(name, async () => {
+      await dropCollection(name);
+      await ensureCollectionExists(name);
+    });
     res.json({ ok: true, collection: name });
   } catch (e) {
     console.error('[/api/collections/:name/clear]', e);
+    if (e instanceof IndexingBusyError || e instanceof CollectionBusyError)
+      return res.status(409).json({ error: e.message, code: e.code });
     res.status(500).json({ error: (e as Error).message });
   }
 });
@@ -82,6 +90,8 @@ router.delete('/api/collections/:name', async (req, res) => {
     res.json({ ok: true, collection: name });
   } catch (e) {
     console.error('[/api/collections/:name DELETE]', e);
+    if (e instanceof IndexingBusyError || e instanceof CollectionBusyError)
+      return res.status(409).json({ error: e.message, code: e.code });
     res.status(500).json({ error: (e as Error).message });
   }
 });

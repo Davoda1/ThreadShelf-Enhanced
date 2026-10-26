@@ -1,3 +1,5 @@
+import { withCollectionMutationGuard } from '../indexing-coordinator.js';
+import { withCollectionJobDeletion } from '../import-jobs.js';
 import { mkdir, open, readFile, realpath, rename, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -111,23 +113,27 @@ export const getAllCollections = async (): Promise<string[]> => {
 };
 
 export const addManualCollection = async (name: string): Promise<void> =>
-  withInterprocessLock(COLLECTIONS_FILE, async () => {
-    const collections = await readManualCollections();
-    if (!collections.includes(name)) {
-      collections.push(name);
-      collections.sort();
-      await writeManualCollectionsLocked(collections);
-    }
-  });
+  withCollectionMutationGuard(name, () =>
+    withInterprocessLock(COLLECTIONS_FILE, async () => {
+      const collections = await readManualCollections();
+      if (!collections.includes(name)) {
+        collections.push(name);
+        collections.sort();
+        await writeManualCollectionsLocked(collections);
+      }
+    }),
+  );
 
 export const removeManualCollection = async (name: string): Promise<void> =>
-  withInterprocessLock(COLLECTIONS_FILE, async () => {
-    const collections = await readManualCollections();
-    const filtered = collections.filter((c) => c !== name);
-    if (filtered.length !== collections.length) {
-      await writeManualCollectionsLocked(filtered);
-    }
-  });
+  withCollectionMutationGuard(name, () =>
+    withInterprocessLock(COLLECTIONS_FILE, async () => {
+      const collections = await readManualCollections();
+      const filtered = collections.filter((c) => c !== name);
+      if (filtered.length !== collections.length) {
+        await writeManualCollectionsLocked(filtered);
+      }
+    }),
+  );
 
 export const ensureCollectionExists = async (name: string): Promise<void> => {
   const all = await getAllCollections();
@@ -140,9 +146,13 @@ export const deleteCollectionFull = async (
   name: string,
   uploadsDir: string = uploadsPath(),
 ): Promise<void> => {
-  // Fail before destructive work when registry corruption already prevents cleanup.
+  // Preserve both archive data and queued work when the registry needs repair.
   await readManualCollections();
-  await dropCollection(name);
-  await removeManualCollection(name);
-  await rm(join(uploadsDir, name), { recursive: true, force: true });
+  return withCollectionJobDeletion(name, async () => {
+    // Fail before destructive work when registry corruption already prevents cleanup.
+    await readManualCollections();
+    await dropCollection(name);
+    await removeManualCollection(name);
+    await rm(join(uploadsDir, name), { recursive: true, force: true });
+  });
 };

@@ -4,9 +4,18 @@ import { join } from 'path';
 import apiRouter from './routes/index.js';
 import { requireLocalOrigin } from './routes/local-origin.js';
 import { createLocalApiRouter } from './routes/local-api.js';
-import { startLocalApiNetworkListener } from './local-api-network.js';
+import { startLocalApiNetworkListener, stopLocalApiNetworkListener } from './local-api-network.js';
 import { dataDir, packagePath } from './paths.js';
 import { startIndexRecovery } from './store.js';
+import { withServerInstance } from './indexing-coordinator.js';
+import { startImportJobs } from './import-jobs.js';
+import { startMemoryWatcher } from './memory-governor.js';
+import {
+  manageLlamaShutdownExternally,
+  stopManagedLlamaServer,
+} from './generation/llama-process.js';
+
+manageLlamaShutdownExternally();
 
 const app = express();
 // Mounted ahead of the app-wide body parser: inference requests carry whole
@@ -41,16 +50,64 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   if (err.name === 'MulterError') {
     return res.status(400).json({ error: err.message });
   }
-  res.status(500).json({ error: err?.message || 'Server error' });
+  const status = (err as Error & { status?: number }).status ?? 500;
+  res
+    .status(status)
+    .json({ error: err?.message || 'Server error', code: (err as Error & { code?: string }).code });
 });
 
 const portArg = process.argv[2];
 const PORT = Number(portArg ?? process.env.PORT) || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
 
-app.listen(PORT, HOST, () => {
-  startIndexRecovery();
-  void startLocalApiNetworkListener(PORT);
-  console.log(`Server listening on ${HOST}:${PORT}`);
-  console.log('Data directory:', dataDir());
-});
+try {
+  await withServerInstance(
+    () =>
+      new Promise<void>((resolveServer, rejectServer) => {
+        let shuttingDown = false;
+        let stopRecovery = () => {};
+        let stopJobs = async () => {};
+        let stopMemory = () => {};
+        const server = app.listen(PORT, HOST, () => {
+          if (shuttingDown) {
+            server.close();
+            return;
+          }
+          stopMemory = startMemoryWatcher();
+          stopJobs = startImportJobs();
+          stopRecovery = startIndexRecovery();
+          void startLocalApiNetworkListener(PORT);
+          console.log(`Server listening on ${HOST}:${PORT}`);
+          console.log('Data directory:', dataDir());
+        });
+        server.once('error', rejectServer);
+        const shutdown = async () => {
+          if (shuttingDown) return;
+          shuttingDown = true;
+          stopRecovery();
+          stopMemory();
+          // Stop accepting observers first; accepted jobs keep durable checkpoints.
+          server.close();
+          server.closeAllConnections();
+          try {
+            await Promise.all([
+              stopJobs(),
+              stopLocalApiNetworkListener(),
+              stopManagedLlamaServer(),
+            ]);
+            resolveServer();
+          } catch (error) {
+            rejectServer(error);
+          } finally {
+            process.off('SIGINT', shutdown);
+            process.off('SIGTERM', shutdown);
+          }
+        };
+        process.on('SIGINT', shutdown);
+        process.on('SIGTERM', shutdown);
+      }),
+  );
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error);
+  process.exitCode = 1;
+}

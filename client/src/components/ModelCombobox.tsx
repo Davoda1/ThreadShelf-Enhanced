@@ -1,3 +1,4 @@
+import { t, useI18n, formatNumber } from '../i18n';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useListboxPosition } from './useListboxPosition';
@@ -15,17 +16,22 @@ interface ModelComboboxProps {
 
 const compactModelMeta = (model: GenerationModel): string => {
   const parts: string[] = [];
-  if (model.loaded) parts.push('loaded');
-  if (model.sizeBytes) parts.push(`${(model.sizeBytes / 1024 ** 3).toFixed(1)} GB`);
-  if (model.contextLength) parts.push(`${Math.round(model.contextLength / 1024)}k ctx`);
+  if (model.loaded) parts.push(t('Loaded'));
+  if (model.sizeBytes)
+    parts.push(
+      `${formatNumber(model.sizeBytes / 1024 ** 3, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} GB`,
+    );
+  if (model.contextLength)
+    parts.push(`${formatNumber(Math.round(model.contextLength / 1024))}k ctx`);
   if (
     model.id === 'openrouter/free' ||
     model.id.endsWith(':free') ||
     (Number(model.promptPrice) === 0 && Number(model.completionPrice) === 0)
   ) {
-    parts.push('free');
+    parts.push(t('free'));
   }
-  if (model.createdAt) parts.push(new Date(model.createdAt).toLocaleDateString());
+  if (model.createdAt)
+    parts.push(new Date(model.createdAt).toLocaleDateString(useUIStore.getState().locale));
   return parts.join(' · ');
 };
 
@@ -36,6 +42,7 @@ export function ModelCombobox({
   onChange,
   disabled = false,
 }: ModelComboboxProps) {
+  useI18n();
   const rootRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const listId = `${useId()}-models`;
@@ -97,7 +104,7 @@ export function ModelCombobox({
       <div className="model-combobox-input">
         <input
           role="combobox"
-          aria-label="Generation model"
+          aria-label={t('Generation model')}
           aria-expanded={open}
           aria-controls={listId}
           aria-activedescendant={
@@ -108,7 +115,7 @@ export function ModelCombobox({
           disabled={disabled}
           value={open ? query : (selected?.name ?? '')}
           title={selected?.path || selected?.id}
-          placeholder={disabled ? 'No models available' : 'Type to find a model…'}
+          placeholder={disabled ? t('No models available') : t('Type to find a model…')}
           onFocus={() => {
             setOpen(true);
             setQuery('');
@@ -156,18 +163,21 @@ export function ModelCombobox({
             id={listId}
             className="model-combobox-popover"
             role="listbox"
-            aria-label="Available models"
+            aria-label={t('Available models')}
             ref={listRef}
             style={position}
             onPointerDown={(event) => event.stopPropagation()}
             onMouseDown={(event) => event.preventDefault()}
           >
             <div className="model-combobox-summary">
-              <span>{visible.length === 100 ? '100+' : visible.length} matches</span>
-              <span>favorites first</span>
+              <span>
+                {visible.length === 100 ? '100+' : visible.length}
+                {t(' matches')}
+              </span>
+              <span>{t('favorites first')}</span>
             </div>
             {visible.length === 0 ? (
-              <div className="model-combobox-empty">No matching models</div>
+              <div className="model-combobox-empty">{t('No matching models')}</div>
             ) : (
               visible.map((model, index) => {
                 const favorite = favoriteKeys.has(favoriteModelKey(model));
@@ -187,8 +197,11 @@ export function ModelCombobox({
                       type="button"
                       className="model-favorite"
                       data-favorite={favorite}
-                      aria-label={`${favorite ? 'Remove' : 'Add'} ${model.name} ${favorite ? 'from' : 'to'} favorites`}
-                      title={favorite ? 'Remove from favorites' : 'Add to favorites'}
+                      aria-label={t(
+                        favorite ? 'Remove {name} from favorites' : 'Add {name} to favorites',
+                        { name: model.name },
+                      )}
+                      title={favorite ? t('Remove from favorites') : t('Add to favorites')}
                       onClick={(event) => {
                         event.stopPropagation();
                         toggleFavorite({ provider, id: model.id, name: model.name });

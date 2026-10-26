@@ -59,24 +59,70 @@ const files = Array.from(
 );
 
 test.beforeEach(async ({ page }) => {
+  let completedJob;
   await page.route('**/api/**', async (route) => {
     const pathname = new URL(route.request().url()).pathname;
-    if (pathname === '/api/ingest-progress' || pathname === '/api/ingest-upload-progress') {
-      await route.fulfill({
-        contentType: 'application/x-ndjson',
-        body:
-          JSON.stringify({
-            status: 'completed',
-            result: { files, conversations: 24, ingested: 72, elapsedMs: 1000 },
-          }) + '\n',
-      });
+    if (pathname === '/api/import-jobs' || pathname === '/api/import-jobs/upload') {
+      if (route.request().method() === 'POST') {
+        const isUpload = pathname.endsWith('/upload');
+        const input = isUpload
+          ? {
+              collection: route
+                .request()
+                .postData()
+                .match(/name="collectionName"\r\n\r\n([^\r\n]*)/)?.[1],
+              clearFirst: false,
+            }
+          : route.request().postDataJSON();
+        completedJob = {
+          id: 'synthetic-layout-job',
+          collection: input.collection,
+          kind: isUpload ? 'upload' : 'folder',
+          state: 'completed',
+          clearFirst: input.clearFirst,
+          createdAt: Date.now() - 1000,
+          updatedAt: Date.now(),
+          cancelRequested: false,
+          attempts: 1,
+          safeToClose: true,
+          collectionLocked: false,
+          result: { files, conversations: 24, ingested: 72, elapsedMs: 1000 },
+        };
+        // Submission only acknowledges receipt. The subsequent jobs refresh
+        // delivers the persisted completion, as the real background API does.
+        await route.fulfill({
+          status: 202,
+          json: { job: { ...completedJob, state: 'queued', result: undefined } },
+        });
+      } else {
+        await route.fulfill({ json: { jobs: completedJob ? [completedJob] : [] } });
+      }
       return;
     }
     const responses = {
       '/api/health': { ok: true },
+      '/api/memory': {
+        totalBytes: 16 * 1024 ** 3,
+        availableBytes: 12 * 1024 ** 3,
+        reserveBytes: 1024 ** 3,
+        rssBytes: 512 * 1024 ** 2,
+        heapUsedBytes: 128 * 1024 ** 2,
+        heapLimitBytes: 4 * 1024 ** 3,
+        externalBytes: 128 * 1024 ** 2,
+        processBudgetBytes: 8 * 1024 ** 3,
+        pressure: 'normal',
+        reason: null,
+      },
       '/api/collections': { collections: collectionNames },
       '/api/collections/all/stats': { ...stats[0], collections: stats },
       '/api/files': { files: [] },
+      '/api/image-cache': {
+        enabled: false,
+        maxBytes: 512 * 1024 ** 2,
+        bytes: 0,
+        count: 0,
+        collections: [],
+      },
       '/api/ingest-preview': { collection: collectionNames[0], files, duplicates: [] },
       '/api/generation/threads': {
         threads: Array.from({ length: 24 }, (_, i) => ({
@@ -88,7 +134,7 @@ test.beforeEach(async ({ page }) => {
           createdInThreadShelf: true,
         })),
       },
-      '/api/generation/runtime': { runtime: { state: 'stopped' } },
+      '/api/generation/runtime': { runtime: { state: 'stopped', detail: 'No model loaded.' } },
       '/api/generation/config': {
         config: {
           llamaCpp: {
@@ -114,7 +160,7 @@ test.beforeEach(async ({ page }) => {
           name: `Synthetic model ${i}`,
           provider: 'llama-cpp',
         })),
-        runtime: { state: 'stopped' },
+        runtime: { state: 'stopped', detail: 'No model loaded.' },
       },
       '/api/generation/prompts': { prompts: [], activePromptId: null },
       '/api/thread': {
@@ -184,6 +230,11 @@ for (const viewport of [
     await expect(page.locator('.ingest-preview-row')).toHaveCount(24);
     await page.locator('#ingestBtn').click();
     await expect(page.locator('#ingestStatus')).toContainText('Indexed 24 conversations');
+    await expect(page.locator('.import-job[data-job-id="synthetic-layout-job"]')).toHaveAttribute(
+      'data-state',
+      'completed',
+    );
+    await expect(page.locator('.import-job')).toContainText('24 conversations; 72 indexed chunks.');
     await page.locator('.export-guides summary').click();
 
     await expectWithinViewport(page.locator('.main'));
@@ -258,7 +309,7 @@ test('individual export files can be selected without a directory picker', async
   ]);
   await expect(page.locator('#folderChosenLabel')).toHaveText('3 export files selected');
   await expect(page.locator('.ingest-preview-row')).toHaveCount(3);
-  const upload = page.waitForRequest('**/api/ingest-upload-progress');
+  const upload = page.waitForRequest('**/api/import-jobs/upload');
   await page.locator('#ingestBtn').click();
   expect((await upload).postData()).toContain('name="collectionName"\r\n\r\nchunks');
   await expect(page.locator('#ingestStatus')).toContainText('Indexed 24 conversations');
@@ -266,7 +317,10 @@ test('individual export files can be selected without a directory picker', async
   await page.getByPlaceholder('/absolute/path/to/exports').fill('/synthetic/second-folder');
   await page.getByRole('button', { name: 'Use path' }).click();
   await expect(page.locator('.ingest-preview-row')).toHaveCount(24);
-  const pathIngest = page.waitForRequest('**/api/ingest-progress');
+  const pathIngest = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname === '/api/import-jobs' && request.method() === 'POST',
+  );
   await page.locator('#ingestBtn').click();
   expect((await pathIngest).postDataJSON().folderPath).toBe('/synthetic/second-folder');
 });

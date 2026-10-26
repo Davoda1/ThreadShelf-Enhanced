@@ -1,4 +1,4 @@
-// Rendering pipeline adapted from ThreadShelf Local Reader by davoda1 (MIT).
+// Rendering pipeline adapted from ThreadShelf Local Reader 3.3.0 (MIT).
 // See ATTRIBUTION.md. Source messages are never rewritten by these adapters.
 import { marked } from 'marked';
 import { highlighter, normalizeCodeLanguage, getCodeLanguageLabel } from './highlight.js';
@@ -9,7 +9,7 @@ import { referencesFor } from './rich-context.js';
 import { mountChartInteractions } from './rich-chart-interactions.js';
 import { buildMermaidRepairCandidates } from './mermaid-repair.js';
 import { discardMathRecords, protectMathInMarkdown, restoreMathPlaceholders, renderMathPlaceholders } from './math.js';
-import { createImageSlot, safeImageUrl, mountImages } from './images.js';
+import { createImageSlot, safeImageUrl, mountImages, configureImages } from './images.js';
 marked.setOptions({
   breaks: true,
   gfm: true,
@@ -50,11 +50,13 @@ function createMarkedRenderer() {
     return `<span class="archived-image-source" data-image-url="${escapeHtml(url)}" data-image-source="${escapeHtml(token.href || '')}" data-image-label="${escapeHtml(token.text || '')}"></span>`;
   };
 
-  // Raw HTML from archived messages is displayed literally rather than injected.
-  // Math placeholders are restored from opaque text after sanitization.
+  // Permit only attribute-free, inert formatting tags. Unknown HTML remains
+  // visible source; archived classes, styles and event handlers never enter the
+  // document. This also supports underline, which has no Markdown delimiter.
   renderer.html = function html(token) {
     const raw = typeof token === 'string' ? token : token?.raw || token?.text || '';
-    return escapeHtml(raw);
+    const inertTag = /^<\/?(?:p|br|hr|h[1-6]|blockquote|ul|ol|li|strong|b|em|i|u|ins|del|s|code|pre|table|thead|tbody|tfoot|tr|th|td|sup|sub|kbd|mark)\s*\/?\s*>$/i;
+    return raw.split(/(<[^>]*>)/g).map((part) => inertTag.test(part) ? part : escapeHtml(part)).join('');
   };
 
   return renderer;
@@ -94,7 +96,9 @@ function highlightCodeBlock(block) {
   // inserted into the document. Preserve their source verbatim here.
   if (language === 'mermaid') return;
 
-  if (hljs && typeof hljs.highlightElement === 'function') {
+  // Highlighting a huge generated source file can monopolize the browser. Its
+  // complete source remains readable/copyable without running grammar regexes.
+  if (rawCode.length <= 100_000 && hljs && typeof hljs.highlightElement === 'function') {
     try {
       delete block.dataset.highlighted;
       block.removeAttribute('data-highlighted');
@@ -117,7 +121,7 @@ function sanitizeRenderedHtml(html) {
 
   const allowedTags = new Set([
     'P', 'BR', 'HR', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
-    'BLOCKQUOTE', 'UL', 'OL', 'LI', 'STRONG', 'B', 'EM', 'I', 'DEL', 'S',
+    'BLOCKQUOTE', 'UL', 'OL', 'LI', 'STRONG', 'B', 'EM', 'I', 'U', 'INS', 'DEL', 'S', 'MARK',
     'CODE', 'PRE', 'A', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD',
     'SPAN', 'DIV', 'SUP', 'SUB', 'KBD', 'INPUT',
   ]);
@@ -553,7 +557,8 @@ class MermaidRenderer {
 
 }
 
-let assetsReady;
+let mathAssetsReady;
+let mermaidAssetsReady;
 function loadScript(name) {
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
@@ -563,23 +568,31 @@ function loadScript(name) {
     document.head.append(script);
   });
 }
-function loadAssets() {
-  if (!assetsReady) assetsReady = (async () => {
-    window.MathJax = {
-      options: { enableMenu: false },
-      startup: { typeset: false },
-      svg: { fontCache: 'local' },
-      // These packages are already bundled. Archived TeX cannot download
-      // extensions or run HTML/link commands.
-      tex: { packages: ['base', 'ams', 'newcommand', 'noundefined', 'configmacros'] },
-    };
-    await Promise.all([loadScript('mathjax-tex-svg.js'), loadScript('mermaid.min.js')]);
-    await window.MathJax?.startup?.promise;
-  })();
-  return assetsReady;
+function loadAssets({ math, mermaid }) {
+  const required = [];
+  if (math) {
+    mathAssetsReady ??= (async () => {
+      window.MathJax = {
+        options: { enableMenu: false },
+        startup: { typeset: false },
+        svg: { fontCache: 'local' },
+        // These packages are already bundled. Archived TeX cannot download
+        // extensions or run HTML/link commands.
+        tex: { packages: ['base', 'ams', 'newcommand', 'noundefined', 'configmacros'] },
+      };
+      await loadScript('mathjax-tex-svg.js');
+      await window.MathJax?.startup?.promise;
+    })().catch(error => { mathAssetsReady = undefined; throw error; });
+    required.push(mathAssetsReady);
+  }
+  if (mermaid) {
+    mermaidAssetsReady ??= loadScript('mermaid.min.js').catch(error => { mermaidAssetsReady = undefined; throw error; });
+    required.push(mermaidAssetsReady);
+  }
+  return Promise.all(required);
 }
 
-export function mountMarkdown(container, text, { metadata, assets = [] } = {}) {
+export function mountMarkdown(container, text, { metadata, assets = [], rich = true, collection } = {}) {
   let active = true;
   const mathIds = [];
   const plainMarkdown = value => {
@@ -587,12 +600,25 @@ export function mountMarkdown(container, text, { metadata, assets = [] } = {}) {
     mathIds.push(...math.ids);
     return restoreMathPlaceholders(sanitizeRenderedHtml(marked.parse(math.content, { renderer: markedRenderer })), math.ids);
   };
-  const context = { ...referencesFor({ metadata }), assets };
+  const context = { ...(rich ? referencesFor({ metadata }) : {}), assets };
   try {
-    const rich = prepareRichMarkdown(text);
-    container.innerHTML = rich.literalOnly
-      ? `<pre class="rich-original-source">${escapeHtml(text)}</pre>`
-      : renderRichHtml(plainMarkdown(rich.content), rich.records, { renderMarkdown: plainMarkdown, t: tr, context });
+    if (rich) {
+      const prepared = prepareRichMarkdown(text);
+      container.innerHTML = prepared.literalOnly
+        ? `<pre class="rich-original-source">${escapeHtml(text)}</pre>`
+        : renderRichHtml(plainMarkdown(prepared.content), prepared.records, { renderMarkdown: plainMarkdown, t: tr, context });
+    } else {
+      container.innerHTML = plainMarkdown(text);
+      // Preserve every equation delimiter verbatim, without loading MathJax or
+      // retaining its pending records. Basic mode still renders normal Markdown.
+      for (const source of container.querySelectorAll('[data-chatgpt-math-id]')) {
+        source.classList.remove('chatgpt-math-placeholder');
+        source.classList.add('chatgpt-math-source');
+        source.removeAttribute('data-chatgpt-math-id');
+      }
+      discardMathRecords(mathIds);
+      mathIds.length = 0;
+    }
   } catch {
     discardMathRecords(mathIds);
     container.textContent = text;
@@ -604,26 +630,26 @@ export function mountMarkdown(container, text, { metadata, assets = [] } = {}) {
   const referencedUrls = new Set([...container.querySelectorAll('[data-image-url]')].map(node => node.dataset.imageUrl));
   const attachments = document.createElement('div');
   attachments.className = 'archived-image-attachments';
-  attachments.setAttribute('aria-label', 'Saved image attachments');
+  attachments.setAttribute('aria-label', tr('Saved image attachments'));
   for (const asset of assets.slice(0, 256)) {
     const url = safeImageUrl(asset.url);
     if (!url || referencedUrls.has(url)) continue;
     referencedUrls.add(url);
-    attachments.append(createImageSlot(document, { url, label: asset.label || asset.source || 'Saved attachment' }));
+    attachments.append(createImageSlot(document, { url, label: asset.label || asset.source || tr('Saved attachment') }));
   }
   if (attachments.childNodes.length) container.append(attachments);
   for (const table of container.querySelectorAll('table')) {
     if (table.closest('.rich-chart')) continue;
     const viewport = document.createElement('div');
     viewport.className = 'markdown-table-scroll'; viewport.tabIndex = 0;
-    viewport.setAttribute('role', 'region'); viewport.setAttribute('aria-label', 'Scrollable table');
+    viewport.setAttribute('role', 'region'); viewport.setAttribute('aria-label', tr('Scrollable table'));
     table.replaceWith(viewport); viewport.append(table);
   }
-  const blocks = upgradeMermaidBlocks(container);
+  const blocks = rich ? upgradeMermaidBlocks(container) : [];
   addCodeBlockControls(container);
   const renderer = new MermaidRenderer();
-  const disposeCharts = mountChartInteractions(container);
-  const disposeImages = mountImages(container);
+  const disposeCharts = rich ? mountChartInteractions(container) : () => {};
+  const disposeImages = mountImages(container, { collection });
   const controller = new AbortController();
   container.addEventListener('click', async event => {
     const button = event.target.closest?.('.code-copy-button');
@@ -635,15 +661,15 @@ export function mountMarkdown(container, text, { metadata, assets = [] } = {}) {
     }
     const code = button.closest('pre')?.querySelector('code');
     const source = diagram ? currentMermaidSource(diagram) : code?.dataset.originalCode ?? code?.textContent ?? '';
-    try { await copyTextToClipboard(source); if (active) showCopyButtonStatus(button, 'Copied'); }
-    catch { if (active) showCopyButtonStatus(button, 'Copy failed'); }
+    try { await copyTextToClipboard(source); if (active) showCopyButtonStatus(button, tr('Copied')); }
+    catch { if (active) showCopyButtonStatus(button, tr('Copy failed')); }
   }, { signal: controller.signal });
 
   const renderAsync = (math = false) => {
     const generation = renderer.renderGeneration;
     renderQueue = renderQueue.catch(() => {}).then(async () => {
       if (!active || generation !== renderer.renderGeneration) return;
-      try { await loadAssets(); } catch { /* Individual renderers preserve source on failure. */ }
+      try { await loadAssets({ math: math && mathIds.length > 0, mermaid: blocks.length > 0 }); } catch { /* Individual renderers preserve source on failure. */ }
       if (!active || generation !== renderer.renderGeneration) return;
       if (math) await renderMathPlaceholders(container);
       if (active) await renderer.renderMermaidBlocks(blocks, generation);
@@ -662,4 +688,8 @@ export function mountMarkdown(container, text, { metadata, assets = [] } = {}) {
     discardMathRecords(mathIds);
     container.querySelectorAll('.code-copy-button').forEach(button => window.clearTimeout(button.copyStatusTimer));
   };
+}
+
+export function configureMarkdownImages(container, options = {}) {
+  configureImages(container, options);
 }

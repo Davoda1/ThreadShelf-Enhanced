@@ -1,28 +1,24 @@
 # Architecture
 
-ThreadShelf is intentionally small: one Node.js server, reusable core modules,
-local embedding, local vector storage, and a React browser UI.
+ThreadShelf Enhanced uses one Node.js HTTP server per database, reusable core
+modules, local embeddings, LanceDB archive/vector storage and a React browser UI.
+SQLite coordinates locks and persists import jobs, publication metadata and
+temporary staging records; it does not replace the published LanceDB archive.
 
 Conversation generation is an optional layer on top of the archive. The
 `llama.cpp` path is local; the explicitly selected OpenRouter path is external.
 
 ## High-Level Flow
 
-```text
-Export folder
-  -> src/ingest.ts
-  -> src/parser.ts
-  -> src/chunking.ts
-  -> src/embedding.ts
-  -> src/store.ts
-  -> LanceDB
-  -> src/server.ts API
-  -> public/ UI
-  -> mcp/server.ts
+Imports follow a durable sequence: accept uploaded files or snapshot a local
+folder, persist the job, normalize records into bounded disk spools, prepare
+archive rows and vectors, then atomically publish their matching generation.
+Readers keep using the previously published generation until that final step.
+The HTTP UI, CLI and MCP read through the same storage and service layer.
 
-Indexed thread -> generation provider registry -> llama.cpp loopback OR OpenRouter
-Created chat -> internal __threads namespace -> generation provider -> persisted exchange
-```
+Conversation generation is separate: stored threads or new local chats use the
+provider registry, then the completed exchange is saved with recoverable index
+work. Local `llama.cpp` and explicitly selected OpenRouter share this lifecycle.
 
 ## Modules
 
@@ -32,6 +28,8 @@ Created chat -> internal __threads namespace -> generation provider -> persisted
 - Serves the web UI.
 - Exposes collection, ingest, search, thread, upload, stats, and health routes.
 - Mounts HTTP routes from `src/routes/`.
+- Holds the database-specific HTTP instance lock, starts job recovery and memory
+  monitoring, and coordinates their shutdown before releasing the instance lock.
 - Mounts the OpenAI/Anthropic-compatible local model API at `/v1`
   (`src/routes/local-api.ts`) ahead of the app-wide 512 KB JSON parser, since
   inference bodies carry whole conversations.
@@ -42,8 +40,10 @@ Created chat -> internal __threads namespace -> generation provider -> persisted
 `src/routes/`
 
 - Own HTTP-specific validation, upload handling, and NDJSON progress streams.
-- Delegate reusable behavior to `src/services/` and `src/store.ts`.
-- Wrap every long download in `abortOnDisconnect` (`stream-abort.ts`), which
+- Delegate reusable behavior to `src/services/`, `src/import-jobs.ts` and
+  `src/store.ts`. Legacy ingest streams observe durable jobs; disconnecting after
+  acceptance does not cancel them. Cancellation uses the job action explicitly.
+- Wrap model/runtime downloads in `abortOnDisconnect` (`stream-abort.ts`), which
   listens for both `req`'s `aborted` and `res`'s `close` — a browser cancelling a
   `fetch` only fires the latter, and missing it leaves the server downloading
   gigabytes after the user pressed Cancel.
@@ -53,45 +53,85 @@ Created chat -> internal __threads namespace -> generation provider -> persisted
 - Shared business logic used by HTTP routes and MCP.
 - Keeps collection, search, and thread loading behavior consistent across surfaces.
 
-`src/ingest.ts`
+`src/import-jobs.ts` and `src/indexing-coordinator.ts`
 
-- Finds likely export files recursively.
-- Skips known metadata/account files.
-- Parses files, chunks turns, embeds chunks, and writes rows to storage.
+- Persist accepted job state, progress, input checksums, attempts and cancellation.
+  Upload transfer must finish before the client can safely close its tab.
+- Snapshot supported source files and bounded image companions so later source
+  changes cannot silently alter an accepted job. Resume verifies checksums.
+- Share one active index operation across web, CLI, watcher and edit recovery.
+  A second HTTP server for the same database is rejected even on a different port.
+- Reserve an active clear job's collection against other mutations while leaving
+  its published data readable. Interrupted clear jobs retain a logical reservation
+  until recovery or cancellation; process termination alone does not bypass it.
+- Serialize collection job acceptance, claiming and deletion. Deletion cancels
+  queued work and rejects active/interrupted imports rather than allowing a job
+  to recreate a deleted collection later.
+- Remove completed/failed/cancelled history under the same lifecycle coordination,
+  retaining archive data while discarding that job's retry inputs.
+
+`src/upload-storage.ts` and `src/routes/uploads.ts`
+
+- List uploaded originals with bounded pagination and relative paths; expose
+  selective deletion and collection-wide file cleanup to the Manage uploads dialog.
+- Coordinate cleanup with indexing and job input maintenance, including jobs in
+  other collections whose incomplete snapshots still depend on those files.
+- Exclude transfer staging, symbolic links and protected server storage; remove
+  regular uploaded files without changing archive rows, indexes or job history.
+
+`src/ingest.ts` and `src/enhanced-import/`
+
+- Discover supported exports recursively and normalize them incrementally where
+  their format allows. The adapter layer retains raw data and source identity;
+  `src/parser.ts` remains available for the original parser API.
+- Write bounded records and verified completion checkpoints to disk spools.
+  No complete folder or collection becomes one JavaScript array/string.
+- Report unsupported/unrelated files, auxiliary metadata and empty exports as
+  skips. A valid mixed folder or ZIP still imports. Recognized malformed exports,
+  no valid conversations, or preparation failure prevent a clear replacement.
 - Reimport merges local continuations into matching conversations; missing keys
   retain their locally continued branch. Rewritten positional keys fork safely.
-- Files that parse to zero conversations are skipped (reported in `skippedFiles`)
-  and never remove archived rows, including in watch mode.
-- `clearFirst` stages the complete folder before publication. Invalid or empty
-  files, embedding failures, or cancellation before the archive commit preserve
-  the previous collection and report `replacementSkipped`; staging requires
-  memory proportional to the folder. Progress events carry per-batch
-  `embeddingDone`/`embeddingTotal` and `progressPercent`.
+- Preserve an empty/skipped source's stored data during additive/watch imports.
+  An empty auxiliary file does not veto a clear selection with valid conversations.
+- Publish uploaded originals only for source groups that completed successfully.
 
-Archive/index recovery (`src/store.ts`):
+`src/import-storage-stage.ts`, `src/storage-publication.ts` and `src/storage-read-leases.ts`
 
-- Replacements use atomic LanceDB merges, rather than separate delete/add calls.
-- Archive turns and their `indexPending` job commit together. The index is a
-  recoverable projection: `local` refreshes locally authored chunks, `all`
-  rebuilds a file, `delete` removes a tombstone, and `reset` rebuilds a collection.
-- Embedding runs outside the global `__threads` lock. Writers take a snapshot,
-  embed, then re-read the scope under the lock and commit only if it is unchanged
-  (up to 3 attempts), so imports never block unrelated chat saves.
-- A disconnect after archive publication does not interrupt the index commit.
-  An index failure retains the durable job with `indexAttempts`, `indexRetryAt`
-  and `indexError`; workers in the HTTP server, MCP server and CLIs retry with
-  15 s–1 h backoff and pause after 8 failures until the thread is edited.
-  Undecodable rows are marked `invalid`, keep their raw data, and are excluded
-  from search without hiding healthy conversations. Full replacements stay out
-  of search until the matching vectors are ready, avoiding stale turn offsets.
-- The LanceDB connection uses `readConsistencyInterval: 0`, so cached table
-  handles observe commits from other processes.
-- Deletion and recovery acquire the collection lock before the thread-table lock.
-  Deletion rejects an active chat generation with 409. Tombstones contain no turn
-  text and are removed after the vectors are deleted; retries cannot recreate a
-  deleted chat from an old in-memory snapshot.
-- `test/archive-recovery.test.js` injects write failures, races deletion with an
-  in-flight index, and kills a child process between archive/index commits.
+- Join old/new records, replay retries and cache completed embedding batches on
+  disk rather than retaining archive-sized maps in the JavaScript heap.
+- Stage archive rows with an internal generation and vectors in a hidden table.
+  A small synced SQLite transaction selects both together. Cancellation or failure
+  before publication leaves the old selection intact.
+- Capture one publication mapping for a read operation. Shared read leases prevent
+  retirement/deletion from removing tables still in use. Cleanup retains the
+  current and previous publication and reclaims abandoned staging safely.
+- Keep all public queries and mutations on the active generation; internal tables
+  never appear as user collections. Legacy named collections remain readable.
+
+Saved-edit index recovery (`src/store.ts`)
+
+- Archive turns and their durable `indexPending` marker commit together for local
+  edits. `local`, `all`, `delete` and `reset` describe the required index repair.
+- Embed outside the global thread-table lock, then re-read the stored scope before
+  committing. A changed snapshot is retried, preserving concurrent appends.
+- Preserve failures in `indexAttempts`, `indexRetryAt` and `indexError`, with
+  15-second to one-hour backoff and a pause after eight failed attempts until the
+  affected thread changes. Recovery shares the indexer with import jobs.
+- Retain undecodable rows as `invalid` instead of deleting their raw data. Searches
+  exclude unsafe pending/invalid rows. An excessive exclusion backlog produces
+  `INDEX_RECOVERY_REQUIRED` rather than an unbounded query or partial success.
+- Use LanceDB `readConsistencyInterval: 0` and collection-before-thread lock order
+  so separate processes observe current commits without bypassing coordination.
+
+`src/memory-governor.ts`
+
+- Check RSS/native memory, V8 heap headroom and available host/container memory,
+  including ancestor cgroup limits and reclaimable clean cache.
+- Reduce batch sizes, pause for available headroom, or return a controlled pressure
+  error. Checkpoints are cancellable; a JavaScript heap ceiling is not a whole-
+  process or whole-system memory limit.
+
+See [IMPORT-JOBS.md](IMPORT-JOBS.md) for APIs, resource limits and recovery actions.
 
 `src/parser.ts`
 
@@ -109,11 +149,15 @@ Archive/index recovery (`src/store.ts`):
 `src/embedding.ts`
 
 - Loads the local multilingual Xenova embedding model.
-- Produces vectors for chunks and search queries.
+- Produces 384-dimensional vectors for chunks and search queries.
+- Reuses completed import embeddings only when the text and certified identity of
+  the actually loaded model/tokenizer/runtime match. Missing or changing cache
+  files disable certification; a model name alone is not proof of compatible bytes.
 
 `src/store.ts`
 
-- Manages LanceDB tables as collections.
+- Resolves logical collections to their published archive generation and vector
+  table, with a fallback for legacy named tables.
 - Writes chunk rows.
 - Runs vector search.
 - Lists files and collection stats.
@@ -170,8 +214,29 @@ Archive/index recovery (`src/store.ts`):
 `client/src/`
 
 - React frontend built with Vite into `public/`.
-- Handles collection selection, ingest, upload, search, role filters, file tree,
-  thread reader, and the persistent New chat workspace.
+- Handles collection selection, uploads, persistent import-job cards, search,
+  role filters, file tree, thread reader and the persistent New chat workspace.
+- Stores separate basic/rich rendering preferences for user, thinking and response
+  roles. Basic mode still formats Markdown; visibility filters remain independent.
+- Defers expensive offscreen/collapsed formatting and preserves source text for
+  copy/export and navigation. Lazy mounting preserves the visible scroll position.
+- Localizes interface text in English (default), Hungarian, German, Japanese,
+  French and Russian without translating conversation content.
+- Loads remote images inline on click by default, or automatically when selected.
+  Compact/wide placeholders keep missing, waiting and failed states readable.
+
+`src/image-cache.ts` and `src/routes/image-cache.ts`
+
+- Fetch public HTTP(S) images through a server proxy, with DNS pinning, redirect
+  validation, time/byte limits and raster signature checks. Credentials, cookies
+  and referrers are not forwarded; private network addresses and active formats
+  such as HTML/SVG are rejected.
+- Optionally retain image bytes in a separate server-only cache partitioned by
+  collection. Caching starts disabled and has a shared total size limit; collection
+  or whole-cache purge does not modify archive data.
+- Use `Cache-Control: no-store` for proxy responses. Disabling the cache retains
+  existing cache bytes but bypasses their use and prevents new cache writes.
+  Explicit imported/local image assets do not use the external proxy.
 
 ## Data Model
 
@@ -200,12 +265,12 @@ Chunk rows stored in LanceDB include:
 
 ## Collections
 
-Each collection maps to a LanceDB table. A shared internal `__threads` table
-additionally stores the normalized turns of every ingested conversation, keyed
-by `(collection, sourceFile, conversationKey)`; it is replaced per file on
-re-ingest and cleared alongside its collection. Collections are used to isolate
-archives:
-
+Each collection is a logical archive. Legacy collections use their named LanceDB
+vector table. A 1.3.0 import prepares a hidden vector table and archive rows tagged
+with an internal generation, then publishes their mapping atomically. The shared
+`__threads` key includes `(collection, sourceFile, conversationKey, importGeneration)`;
+public thread identities remain `(collection, sourceFile, conversationKey)`.
+Collections isolate archives:
 - One provider per collection.
 - One project per collection.
 - One time range per collection.
@@ -239,9 +304,12 @@ npm start
 
 Upload paths are normalized and checked to reduce path traversal risk.
 Incoming multipart files are staged on disk rather than buffered fully in
-memory. Deleting a collection removes its LanceDB table and copies stored below
-`.uploads/<collection>`; it never deletes files from the original folder chosen
-by the user.
+memory. Browser folder uploads include supported raster image companions as well
+as export files. Accepted inputs and progress live below the configured database;
+completed source originals retain their compatible `.uploads/<collection>` paths.
+Deleting a collection removes its archive generations, vector tables, publication
+metadata and uploaded copies; it never deletes the original folder selected by
+the user.
 
 ## Embeddings
 
@@ -258,6 +326,12 @@ This is a local multilingual model. The first run may be slower because model fi
 Core routes:
 
 - `GET /api/health`
+- `GET /api/memory`
+- `GET /api/import-jobs`, `GET /api/import-jobs/:id`
+- `POST /api/import-jobs`, `POST /api/import-jobs/upload`
+- `POST /api/import-jobs/:id/cancel`, `POST /api/import-jobs/:id/retry`
+- `GET`, `PUT`, `DELETE /api/image-cache`
+- `GET /api/image-cache/resource`
 - `GET /api/collections`
 - `POST /api/collections`
 - `DELETE /api/collections/:name`
@@ -315,8 +389,11 @@ Browser workflows:
 npm run test:playwright
 ```
 
-The full `npm run check` gate also verifies repository privacy hygiene,
-documentation links, lint, TypeScript, and the production client build.
+The full `npm run check` gate also verifies dependency security, repository privacy
+hygiene, documentation links, lint, TypeScript and the production client build.
+Security checks require the advisory service and audit application all/production
+dependencies, the renderer-build lockfile and bundled components, including asset
+hashes. Functional checks can reuse the local embedding-model cache.
 
 ## Extension Points
 

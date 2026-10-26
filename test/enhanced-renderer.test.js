@@ -4,7 +4,8 @@ import { prepareRichMarkdown, parseRichSpan } from '../client/src/enhanced-rende
 import { referencesFor } from '../client/src/enhanced-renderer/rich-context.js';
 import { normalizeChart } from '../client/src/enhanced-renderer/rich-charts.js';
 import { buildMermaidRepairCandidates } from '../client/src/enhanced-renderer/mermaid-repair.js';
-import { safeImageUrl } from '../client/src/enhanced-renderer/images.js';
+import { safeImageUrl, imageResourceUrl } from '../client/src/enhanced-renderer/images.js';
+import { setRendererLocale, tr, readerLocaleCoverage } from '../client/src/enhanced-renderer/locale.js';
 
 const chart = { chartType: 'bar', xKey: 'name', series: [{ dataKey: 'value', label: 'Value' }], data: [{ name: 'A', value: 0 }, { name: 'B', value: -3 }] };
 
@@ -54,7 +55,7 @@ test('Mermaid repairs are deterministic alternate display sources', () => {
 });
 
 test('image loading accepts only explicit safe URLs, never local files or executable payloads', () => {
-  for (const unsafe of ['javascript:alert(1)', 'file:///home/example/private.png', 'sandbox:/tmp/pic.png', '//tracker.test/x', 'https://user:pass@example.com/x', 'data:image/svg+xml,<svg/>', 'cute cats']) assert.equal(safeImageUrl(unsafe), null);
+  for (const unsafe of ['javascript:alert(1)', 'file:///home/tester/private.png', 'sandbox:/tmp/pic.png', '//tracker.test/x', 'https://user:pass@example.com/x', 'data:image/svg+xml,<svg/>', 'cute cats']) assert.equal(safeImageUrl(unsafe), null);
   for (const safe of ['https://example.com/picture.png', '/images/saved.png', 'data:image/png;base64,aGVsbG8=']) assert.equal(safeImageUrl(safe), safe);
 });
 
@@ -66,4 +67,28 @@ test('Processor legacy markers become data-only display nodes and stay literal i
   assert.equal(prepareRichMarkdown('`' + source + '`').records.size, 0);
   const hostile = prepareRichMarkdown('entity["x","<script>alert(1)</script>"]');
   assert.equal([...hostile.records.values()][0].attrs.value, '<script>alert(1)</script>');
+});
+
+test('external images use an encoded local resource route while archived assets stay local', () => {
+  const source = 'https://example.com/image.png?name=a&collection=untrusted';
+  const result = new URL(imageResourceUrl(source, { collection: 'photos' }), 'http://localhost');
+  assert.equal(result.pathname, '/api/image-cache/resource');
+  assert.equal(result.searchParams.get('url'), source);
+  assert.equal(result.searchParams.get('collection'), 'photos');
+  assert.equal(new URL(imageResourceUrl(source, { collection: 'all' }), 'http://localhost').searchParams.has('collection'), false);
+  assert.equal(imageResourceUrl('/images/saved.png'), '/images/saved.png');
+  assert.equal(imageResourceUrl('data:image/png;base64,aGVsbG8='), 'data:image/png;base64,aGVsbG8=');
+  assert.equal(imageResourceUrl('javascript:alert(1)'), null);
+});
+
+test('Russian renderer catalog covers every control and unknown locale falls back to English', () => {
+  setRendererLocale('ru');
+  for (const source of readerLocaleCoverage) {
+    assert.equal(typeof tr(source), 'string');
+    assert.ok(tr(source).length);
+    if (!['X', 'Y'].includes(source)) assert.notEqual(tr(source), source, source);
+  }
+  assert.equal(tr('An unknown label'), 'An unknown label');
+  setRendererLocale('unsupported');
+  assert.equal(tr('Copy'), 'Copy');
 });

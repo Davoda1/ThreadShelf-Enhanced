@@ -1,3 +1,4 @@
+import { closeStoragePublication } from '../src/storage-publication.js';
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -16,6 +17,7 @@ const {
 } = await import('../src/store.ts');
 
 after(async () => {
+  closeStoragePublication();
   await rm(root, { recursive: true, force: true });
 });
 

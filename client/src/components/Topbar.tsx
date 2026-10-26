@@ -1,14 +1,27 @@
+import { t, useI18n } from '../i18n';
 import type { ReactNode } from 'react';
 import { Icons } from '../icons';
 import { collLabel } from '../utils';
 
 const VIEW_LABELS: Record<string, string> = {
-  search: 'Archive',
-  insights: 'Insights',
-  indexing: 'Add data',
-  mcp: 'MCP',
-  settings: 'Settings',
-  chat: 'Chat',
+  get search() {
+    return t('Archive');
+  },
+  get insights() {
+    return t('Insights');
+  },
+  get indexing() {
+    return t('Add data');
+  },
+  get mcp() {
+    return t('MCP');
+  },
+  get settings() {
+    return t('Settings');
+  },
+  get chat() {
+    return t('Chat');
+  },
 };
 
 interface TopbarProps {
@@ -19,13 +32,14 @@ interface TopbarProps {
 }
 
 export function Topbar({ view, activeColl, onMenu, actions }: TopbarProps) {
+  useI18n();
   return (
     <div className="topbar">
-      <button className="icon-btn mobile-menu-btn" onClick={onMenu} aria-label="Open sidebar">
+      <button className="icon-btn mobile-menu-btn" onClick={onMenu} aria-label={t('Open sidebar')}>
         {Icons.menu}
       </button>
       <div className="crumbs">
-        <span>{VIEW_LABELS[view]}</span>
+        <span>{t(VIEW_LABELS[view] ?? view)}</span>
         {view === 'search' && (
           <>
             <span className="sep">/</span>

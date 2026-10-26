@@ -1,3 +1,4 @@
+import { t, useI18n, formatNumber, formatDate } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
@@ -20,6 +21,7 @@ import { ModelCatalogModal } from './ModelCatalogModal';
 import { ModelCombobox } from './ModelCombobox';
 import { NumberCombobox } from './NumberCombobox';
 import { LlamaLogPanel } from './LlamaLogPanel';
+import { useCollectionLock } from '../import-jobs';
 
 interface ThreadContinuationProps {
   readonly sourceFile?: string;
@@ -39,7 +41,9 @@ interface ThreadContinuationProps {
 }
 
 const modelLabel = (model: GenerationModel): string => {
-  const size = model.sizeBytes ? ` · ${(model.sizeBytes / 1024 ** 3).toFixed(1)} GB` : '';
+  const size = model.sizeBytes
+    ? ` · ${formatNumber(model.sizeBytes / 1024 ** 3, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} GB`
+    : '';
   return `${model.loaded ? '● ' : ''}${model.name}${size}`;
 };
 
@@ -102,6 +106,7 @@ export function ThreadContinuation({
   onModelChanged,
   showThreadShelfTurns = true,
 }: ThreadContinuationProps) {
+  useI18n();
   const queryClient = useQueryClient();
   const masterPrompt = useActiveMasterPromptText();
   const [config, setConfig] = useState<GenerationConfigResponse | null>(null);
@@ -328,6 +333,9 @@ export function ThreadContinuation({
 
   const isThreadShelfChat = Boolean(threadId);
   const isStandaloneChat = isThreadShelfChat || ephemeral || draftSaved;
+  const collectionLock = useCollectionLock(
+    ephemeral ? '' : collection || (isStandaloneChat ? 'threadshelf_conversations' : ''),
+  );
   const selectedModel = models.find((candidate) => candidate.id === model);
   const contextWindowTokens =
     provider === 'llama-cpp'
@@ -387,7 +395,9 @@ export function ThreadContinuation({
       setRuntime(response.runtime);
       window.dispatchEvent(new Event('threadshelf:generation-runtime-changed'));
       toast.success(
-        `Context window changed to ${nextConfig.config.llamaCpp.contextSize.toLocaleString()} tokens.`,
+        t('Context window changed to {count} tokens.', {
+          count: formatNumber(nextConfig.config.llamaCpp.contextSize),
+        }),
       );
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Could not change context window.';
@@ -410,18 +420,21 @@ export function ThreadContinuation({
         queryClient.invalidateQueries({ queryKey: ['search'] }),
         queryClient.invalidateQueries({ queryKey: ['thread'] }),
       ]);
-      toast.success('Model unloaded from memory. GGUF file kept on disk.');
+      toast.success(t('Model unloaded from memory. GGUF file kept on disk.'));
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : 'Could not unload model.');
     }
   };
 
   const send = async () => {
+    if (collectionLock) return;
     const text = prompt.trim();
     if (!text || !model) return;
     if (!maxTokensValid) {
       setError(
-        `Max answer must be a whole number from 1 to ${maximumAnswerTokens.toLocaleString()}.`,
+        t('Max answer must be a whole number from 1 to {count}.', {
+          count: formatNumber(maximumAnswerTokens),
+        }),
       );
       return;
     }
@@ -577,7 +590,7 @@ export function ThreadContinuation({
   const runtimeModel = runtime?.model ? compactModel(runtime.model) : undefined;
   const modelStatusName =
     compactModel(selectedModel?.name || runtime?.model || model, 24) ||
-    (loadingModels ? 'Loading models…' : 'Select a model');
+    (loadingModels ? t('Loading models…') : t('Select a model'));
   const modelDotState = sending
     ? 'loading'
     : provider === 'openrouter'
@@ -614,7 +627,7 @@ export function ThreadContinuation({
                   <div className="turn-head">
                     {!isStandaloneChat && (
                       <span className="role-tag">
-                        {message.role === 'user' ? 'continued user' : 'generated response'}
+                        {message.role === 'user' ? t('continued user') : t('generated response')}
                       </span>
                     )}
                     {showModel && (
@@ -629,15 +642,24 @@ export function ThreadContinuation({
                 )}
                 {message.reasoning && (
                   <details className="generated-reasoning">
-                    <summary>Model reasoning</summary>
-                    <div>{message.reasoning}</div>
+                    <summary>{t('Model reasoning')}</summary>
+                    <Markdown
+                      text={message.reasoning}
+                      role="thinking"
+                      collection={
+                        collection || (isStandaloneChat ? 'threadshelf_conversations' : undefined)
+                      }
+                    />
                   </details>
                 )}
-                {message.role === 'assistant' ? (
-                  <Markdown className="turn-body" text={message.content} />
-                ) : (
-                  <div className="turn-body">{message.content}</div>
-                )}
+                <Markdown
+                  className="turn-body"
+                  text={message.content}
+                  role={message.role === 'user' ? 'user' : 'ai'}
+                  collection={
+                    collection || (isStandaloneChat ? 'threadshelf_conversations' : undefined)
+                  }
+                />
                 {message.role === 'assistant' &&
                   message.usage &&
                   // Chat view keeps only tok/s + context (rest in the tooltip);
@@ -647,27 +669,36 @@ export function ThreadContinuation({
                       className="turn-generation-metrics"
                       title={[
                         message.usage.promptTokens !== undefined
-                          ? `prompt ${message.usage.promptTokens.toLocaleString()} tokens`
+                          ? t('prompt {count} tokens', {
+                              count: formatNumber(message.usage.promptTokens),
+                            })
                           : '',
                         message.usage.completionTokens !== undefined
-                          ? `answer ${message.usage.completionTokens.toLocaleString()} tokens`
+                          ? t('answer {count} tokens', {
+                              count: formatNumber(message.usage.completionTokens),
+                            })
                           : '',
                         message.performance?.source === 'provider'
-                          ? 'speed reported by the backend'
-                          : 'speed measured across the request',
+                          ? t('speed reported by the backend')
+                          : t('speed measured across the request'),
                       ]
                         .filter(Boolean)
                         .join(' · ')}
                     >
                       {message.performance && (
                         <strong>
-                          {message.performance.completionTokensPerSecond.toFixed(1)} tok/s
+                          {formatNumber(message.performance.completionTokensPerSecond, {
+                            minimumFractionDigits: 1,
+                            maximumFractionDigits: 1,
+                          })}{' '}
+                          tok/s
                         </strong>
                       )}
                       {message.contextWindowTokens && message.usage.totalTokens !== undefined && (
                         <span>
-                          context {message.usage.totalTokens.toLocaleString()} /{' '}
-                          {message.contextWindowTokens.toLocaleString()}
+                          {' '}
+                          {t('context')} {formatNumber(message.usage.totalTokens)} /{' '}
+                          {formatNumber(message.contextWindowTokens)}
                         </span>
                       )}
                     </div>
@@ -676,30 +707,38 @@ export function ThreadContinuation({
                       className="turn-generation-metrics"
                       title={
                         message.performance?.source === 'provider'
-                          ? 'Token speed reported by the generation backend'
-                          : 'Token speed measured across the request'
+                          ? t('Token speed reported by the generation backend')
+                          : t('Token speed measured across the request')
                       }
                     >
                       {message.performance && (
                         <strong>
-                          {message.performance.completionTokensPerSecond.toFixed(1)} tok/s
+                          {formatNumber(message.performance.completionTokensPerSecond, {
+                            minimumFractionDigits: 1,
+                            maximumFractionDigits: 1,
+                          })}{' '}
+                          tok/s
                         </strong>
                       )}
                       {message.usage.promptTokens !== undefined && (
-                        <span>prompt {message.usage.promptTokens.toLocaleString()}</span>
+                        <span>
+                          {t('prompt')} {formatNumber(message.usage.promptTokens)}
+                        </span>
                       )}
                       {message.usage.completionTokens !== undefined && (
-                        <span>answer {message.usage.completionTokens.toLocaleString()}</span>
+                        <span>
+                          {t('answer')} {formatNumber(message.usage.completionTokens)}
+                        </span>
                       )}
                       {message.contextWindowTokens && message.usage.totalTokens !== undefined && (
                         <span>
-                          context {message.usage.totalTokens.toLocaleString()} /{' '}
-                          {message.contextWindowTokens.toLocaleString()} ·{' '}
-                          {Math.max(
-                            0,
-                            message.contextWindowTokens - message.usage.totalTokens,
-                          ).toLocaleString()}{' '}
-                          left
+                          {' '}
+                          {t('context')} {formatNumber(message.usage.totalTokens)} /{' '}
+                          {formatNumber(message.contextWindowTokens)} ·{' '}
+                          {formatNumber(
+                            Math.max(0, message.contextWindowTokens - message.usage.totalTokens),
+                          )}{' '}
+                          {t('left')}{' '}
                         </span>
                       )}
                     </div>
@@ -714,10 +753,13 @@ export function ThreadContinuation({
           <section className="interrupted-generation" key={attempt.id}>
             <header>
               <div>
-                <strong>{attempt.stopped ? 'Stopped generation' : 'Failed generation'}</strong>
+                <strong>
+                  {attempt.stopped ? t('Stopped generation') : t('Failed generation')}
+                </strong>
                 <span>
-                  not saved · {compactModel(attempt.model)} ·{' '}
-                  {new Date(attempt.createdAt).toLocaleTimeString()}
+                  {' '}
+                  {t('not saved ·')} {compactModel(attempt.model)} ·{' '}
+                  {formatDate(new Date(attempt.createdAt), { timeStyle: 'medium' })}
                 </span>
               </div>
               <div className="interrupted-generation-actions">
@@ -726,47 +768,71 @@ export function ThreadContinuation({
                   disabled={sending}
                   onClick={() => setPrompt(attempt.prompt)}
                 >
-                  Retry prompt
+                  {' '}
+                  {t('Retry prompt')}{' '}
                 </button>
                 <button
                   className="btn sm"
                   onClick={() =>
                     void copyText(attemptTranscript(attempt)).then((copied) =>
                       copied
-                        ? toast.success('Partial generation copied.')
-                        : toast.error('Could not copy partial generation.'),
+                        ? toast.success(t('Partial generation copied.'))
+                        : toast.error(t('Could not copy partial generation.')),
                     )
                   }
                 >
-                  {Icons.copy} Copy attempt
+                  {Icons.copy} {t('Copy attempt')}{' '}
                 </button>
                 <button
                   className="btn sm ghost"
-                  aria-label="Dismiss failed generation"
+                  aria-label={t('Dismiss failed generation')}
                   onClick={() =>
                     setInterruptedGenerations((current) =>
                       current.filter((candidate) => candidate.id !== attempt.id),
                     )
                   }
                 >
-                  Dismiss
+                  {' '}
+                  {t('Dismiss')}{' '}
                 </button>
               </div>
             </header>
             <div className="interrupted-prompt">
-              <span>Prompt</span>
-              <p>{attempt.prompt}</p>
+              <span>{t('Prompt')}</span>
+              <Markdown
+                text={attempt.prompt}
+                role="user"
+                collection={
+                  collection || (isStandaloneChat ? 'threadshelf_conversations' : undefined)
+                }
+              />
             </div>
             {attempt.reasoning && (
               <details className="generated-reasoning" open>
-                <summary>Partial model reasoning</summary>
-                <div>{attempt.reasoning}</div>
+                <summary>{t('Partial model reasoning')}</summary>
+                <Markdown
+                  text={attempt.reasoning}
+                  role="thinking"
+                  collection={
+                    collection || (isStandaloneChat ? 'threadshelf_conversations' : undefined)
+                  }
+                />
               </details>
             )}
             <div className="turn-body interrupted-answer">
-              {attempt.content || <em>No answer tokens were received.</em>}
+              {attempt.content ? (
+                <Markdown
+                  text={attempt.content}
+                  role="ai"
+                  collection={
+                    collection || (isStandaloneChat ? 'threadshelf_conversations' : undefined)
+                  }
+                />
+              ) : (
+                <em>{t('No answer tokens were received.')}</em>
+              )}
             </div>
-            <footer>{attempt.error}</footer>
+            <footer>{t(attempt.error)}</footer>
           </section>
         ))}
 
@@ -782,11 +848,19 @@ export function ThreadContinuation({
             <div className="turn-content">
               {!isStandaloneChat && (
                 <div className="turn-head">
-                  <span className="role-tag">continued user</span>
+                  <span className="role-tag">{t('continued user')}</span>
                   <span className="threadshelf-turn-badge">ThreadShelf</span>
                 </div>
               )}
-              <div className="turn-body">{pendingUser}</div>
+              <Markdown
+                className="turn-body"
+                text={pendingUser}
+                role="user"
+                collection={
+                  collection || (isStandaloneChat ? 'threadshelf_conversations' : undefined)
+                }
+                eager
+              />
             </div>
           </div>
           <div
@@ -799,7 +873,7 @@ export function ThreadContinuation({
             {!isStandaloneChat && <div className="turn-avatar">A</div>}
             <div className="turn-content">
               <div className="turn-head">
-                {!isStandaloneChat && <span className="role-tag">generating response</span>}
+                {!isStandaloneChat && <span className="role-tag">{t('generating response')}</span>}
                 <span className="turn-model" title={streamedModel || model}>
                   {compactModel(streamedModel || model)}
                 </span>
@@ -807,7 +881,7 @@ export function ThreadContinuation({
               </div>
               {streamedReasoning.length > 0 && (
                 <details className="generated-reasoning">
-                  <summary>Model reasoning · streaming</summary>
+                  <summary>{t('Model reasoning · streaming')}</summary>
                   <div>
                     {streamedReasoning.map((chunk, index) => (
                       <span className="stream-fragment" key={index}>
@@ -825,7 +899,7 @@ export function ThreadContinuation({
                     </span>
                   ))
                 ) : (
-                  <span className="stream-placeholder">Waiting for first token</span>
+                  <span className="stream-placeholder">{t('Waiting for first token')}</span>
                 )}
                 <span className="stream-cursor" aria-hidden="true" />
               </div>
@@ -846,12 +920,12 @@ export function ThreadContinuation({
                         .join('\n\n'),
                     ).then((copied) =>
                       copied
-                        ? toast.success('Current output copied.')
-                        : toast.error('Could not copy current output.'),
+                        ? toast.success(t('Current output copied.'))
+                        : toast.error(t('Could not copy current output.')),
                     )
                   }
                 >
-                  {Icons.copy} Copy current output
+                  {Icons.copy} {t('Copy current output')}{' '}
                 </button>
               )}
             </div>
@@ -860,14 +934,21 @@ export function ThreadContinuation({
       )}
 
       <div className="continue-card">
-        {error && <div className="banner err">{error}</div>}
+        {collectionLock && (
+          <div className="banner" role="status">
+            <span>{t('Collection replacement in progress. Changes are temporarily blocked.')}</span>{' '}
+            <a href="/indexing">{t('View import progress')}</a>
+          </div>
+        )}
+        {error && <div className="banner err">{t(error)}</div>}
         {sending && (
           <div className="generation-progress" role="status" aria-live="polite">
             <span className="generation-spinner" aria-hidden="true" />
             <div>
-              <strong>{progress}</strong>
+              <strong>{t(progress)}</strong>
               <span>
-                {compactModel(streamedModel || model)} · {elapsedSeconds}s elapsed
+                {compactModel(streamedModel || model)} · {elapsedSeconds}
+                {t('s elapsed')}{' '}
               </span>
             </div>
           </div>
@@ -882,7 +963,11 @@ export function ThreadContinuation({
               void send();
             }
           }}
-          placeholder={`${isStandaloneChat ? 'Message' : 'Ask a follow-up'}… (Enter to send, Shift+Enter for a new line)`}
+          placeholder={
+            isStandaloneChat
+              ? t('Message… (Enter to send, Shift+Enter for a new line)')
+              : t('Ask a follow-up… (Enter to send, Shift+Enter for a new line)')
+          }
           maxLength={100_000}
           rows={isStandaloneChat ? 2 : 3}
           disabled={sending}
@@ -896,12 +981,14 @@ export function ThreadContinuation({
               data-state={modelDotState}
               aria-expanded={modelMenuOpen}
               aria-haspopup="dialog"
-              title="Model and generation settings"
+              title={t('Model and generation settings')}
               onClick={() => setModelMenuOpen((open) => !open)}
             >
               <span className="runtime-dot" aria-hidden="true" />
               <span className="model-status-name">{modelStatusName}</span>
-              {provider === 'openrouter' && <span className="off-device-chip">off-device</span>}
+              {provider === 'openrouter' && (
+                <span className="off-device-chip">{t('off-device')}</span>
+              )}
               <span className="model-status-chevron" aria-hidden="true">
                 ▾
               </span>
@@ -911,12 +998,12 @@ export function ThreadContinuation({
               <div
                 className="model-popover"
                 role="dialog"
-                aria-label="Model and generation settings"
+                aria-label={t('Model and generation settings')}
               >
                 <div
                   className="model-popover-providers"
                   role="tablist"
-                  aria-label="Generation provider"
+                  aria-label={t('Generation provider')}
                 >
                   <button
                     type="button"
@@ -925,7 +1012,8 @@ export function ThreadContinuation({
                     data-active={provider === 'llama-cpp'}
                     onClick={() => provider !== 'llama-cpp' && changeProvider('llama-cpp')}
                   >
-                    llama.cpp · local
+                    {' '}
+                    {t('llama.cpp · local')}{' '}
                   </button>
                   <button
                     type="button"
@@ -934,7 +1022,8 @@ export function ThreadContinuation({
                     data-active={provider === 'openrouter'}
                     onClick={() => provider !== 'openrouter' && changeProvider('openrouter')}
                   >
-                    OpenRouter · external
+                    {' '}
+                    {t('OpenRouter · external')}{' '}
                   </button>
                 </div>
 
@@ -950,8 +1039,8 @@ export function ThreadContinuation({
                     {provider === 'llama-cpp' && (
                       <button
                         className="btn sm icon-only"
-                        title="Browse and download GGUF models"
-                        aria-label="Browse and download GGUF models"
+                        title={t('Browse and download GGUF models')}
+                        aria-label={t('Browse and download GGUF models')}
                         disabled={sending}
                         onClick={() => {
                           setModelMenuOpen(false);
@@ -963,8 +1052,8 @@ export function ThreadContinuation({
                     )}
                     <button
                       className="btn sm icon-only"
-                      title="Refresh model list"
-                      aria-label="Refresh model list"
+                      title={t('Refresh model list')}
+                      aria-label={t('Refresh model list')}
                       disabled={loadingModels}
                       onClick={() => void loadModels()}
                     >
@@ -974,10 +1063,10 @@ export function ThreadContinuation({
                 </div>
 
                 {provider === 'openrouter' && (
-                  <div className="model-catalog-filters" aria-label="OpenRouter model filters">
-                    <span>Catalog</span>
+                  <div className="model-catalog-filters" aria-label={t('OpenRouter model filters')}>
+                    <span>{t('Catalog')}</span>
                     <select
-                      aria-label="Sort OpenRouter models"
+                      aria-label={t('Sort OpenRouter models')}
                       value={openRouterSort}
                       onChange={(event) => {
                         const next = event.target.value as OpenRouterModelSort;
@@ -985,9 +1074,9 @@ export function ThreadContinuation({
                         void loadModels('openrouter', { sort: next, freeOnly });
                       }}
                     >
-                      <option value="most-popular">Most popular this week</option>
-                      <option value="newest">Latest</option>
-                      <option value="default">Default</option>
+                      <option value="most-popular">{t('Most popular this week')}</option>
+                      <option value="newest">{t('Latest')}</option>
+                      <option value="default">{t('Default')}</option>
                     </select>
                     <label>
                       <input
@@ -998,8 +1087,8 @@ export function ThreadContinuation({
                           setFreeOnly(next);
                           void loadModels('openrouter', { sort: openRouterSort, freeOnly: next });
                         }}
-                      />
-                      Free only
+                      />{' '}
+                      {t('Free only')}{' '}
                     </label>
                   </div>
                 )}
@@ -1007,25 +1096,30 @@ export function ThreadContinuation({
                 <div className="model-runtime" data-state={runtime?.state || 'loading'}>
                   <div>
                     <strong>
-                      {models.length.toLocaleString()}{' '}
+                      {formatNumber(models.length)}{' '}
                       {provider === 'llama-cpp'
-                        ? 'GGUF models discovered'
-                        : 'live models available'}
+                        ? t('GGUF models discovered')
+                        : t('live models available')}
                     </strong>
                     <span title={selectedModel?.path || selectedModel?.id}>
                       {selectedModel
-                        ? `${selectedModel.loaded ? 'Loaded' : 'Selected'} · ${modelLabel(selectedModel)}`
-                        : 'No model selected'}
+                        ? `${selectedModel.loaded ? t('Loaded') : t('Selected')} · ${modelLabel(selectedModel)}`
+                        : t('No model selected')}
                     </span>
-                    {runtimeModel && !selectedModel?.loaded && <span>Active: {runtimeModel}</span>}
-                    {runtime && <span>{runtime.detail}</span>}
+                    {runtimeModel && !selectedModel?.loaded && (
+                      <span>
+                        {t('Active:')} {runtimeModel}
+                      </span>
+                    )}
+                    {runtime?.detail && <span>{t(runtime.detail)}</span>}
                   </div>
                   {runtime &&
                     (runtime.state === 'starting' ||
                       runtime.state === 'ready' ||
                       (runtime.state === 'external' && Boolean(runtime.model))) && (
                       <button className="btn sm" onClick={() => void ejectModel()}>
-                        Eject
+                        {' '}
+                        {t('Eject')}{' '}
                       </button>
                     )}
                 </div>
@@ -1033,16 +1127,18 @@ export function ThreadContinuation({
                 <div className="generation-budget">
                   {provider === 'llama-cpp' ? (
                     <div className="generation-budget-field">
-                      <span>Context window</span>
+                      <span>{t('Context window')}</span>
                       <NumberCombobox
                         id="chatContextSize"
-                        label="Context window in tokens"
+                        label={t('Context window in tokens')}
                         value={contextSize}
                         onChange={setContextSize}
                         options={CONTEXT_SIZE_OPTIONS}
-                        optionLabel={(value) => `${value.toLocaleString()} tokens`}
+                        optionLabel={(value) => t('{count} tokens', { count: formatNumber(value) })}
                         invalid={!contextSizeValid}
-                        title="Pick a preset or type any whole number from 512 to 1,048,576 tokens"
+                        title={t(
+                          'Pick a preset or type any whole number from 512 to 1,048,576 tokens',
+                        )}
                       />
                       <button
                         type="button"
@@ -1050,26 +1146,34 @@ export function ThreadContinuation({
                         disabled={!contextSizeDirty || savingContextSize || sending}
                         onClick={() => void applyContextSize()}
                       >
-                        {savingContextSize ? 'Applying…' : 'Apply'}
+                        {savingContextSize ? t('Applying…') : t('Apply')}
                       </button>
                     </div>
                   ) : (
                     <span>
-                      Context window{' '}
-                      <strong>{contextWindowTokens?.toLocaleString() ?? 'unknown'}</strong> tokens
+                      {' '}
+                      {t('Context window')}{' '}
+                      <strong>
+                        {contextWindowTokens !== undefined
+                          ? formatNumber(contextWindowTokens)
+                          : t('unknown')}
+                      </strong>{' '}
+                      {t('tokens')}{' '}
                     </span>
                   )}
                   <div className="generation-budget-field">
-                    <span>Max answer</span>
+                    <span>{t('Max answer')}</span>
                     <NumberCombobox
                       id="maxAnswerTokens"
-                      label="Maximum response tokens"
+                      label={t('Maximum response tokens')}
                       value={maxTokens}
                       onChange={setMaxTokens}
                       options={maxTokenOptions}
-                      optionLabel={(value) => `${value.toLocaleString()} tokens`}
+                      optionLabel={(value) => t('{count} tokens', { count: formatNumber(value) })}
                       invalid={!maxTokensValid}
-                      title={`Pick a preset or type any whole number from 1 to ${maximumAnswerTokens.toLocaleString()} tokens`}
+                      title={t('Pick a preset or type any whole number from 1 to {count} tokens', {
+                        count: formatNumber(maximumAnswerTokens),
+                      })}
                     />
                   </div>
                 </div>
@@ -1080,8 +1184,8 @@ export function ThreadContinuation({
                       type="checkbox"
                       checked={zdrOnly}
                       onChange={(event) => setZdrOnly(event.target.checked)}
-                    />
-                    ZDR-only routing <span>may exclude most endpoints</span>
+                    />{' '}
+                    {t('ZDR-only routing')} <span>{t('may exclude most endpoints')}</span>
                   </label>
                 )}
 
@@ -1097,21 +1201,22 @@ export function ThreadContinuation({
           <div className="composer-actions">
             <span className="composer-hint">
               {provider === 'llama-cpp'
-                ? 'Loopback-only llama-server'
-                : 'Sent off-device via OpenRouter'}
+                ? t('Loopback-only llama-server')
+                : t('Sent off-device via OpenRouter')}
             </span>
             {sending ? (
               <button className="btn danger" onClick={() => requestController.current?.abort()}>
-                Stop
+                {' '}
+                {t('Stop')}{' '}
               </button>
             ) : (
               <button
                 id="continueSend"
                 className="btn primary"
-                disabled={!prompt.trim() || !model}
+                disabled={!prompt.trim() || !model || Boolean(collectionLock)}
                 onClick={() => void send()}
               >
-                {isStandaloneChat ? 'Send' : 'Continue'}
+                {isStandaloneChat ? t('Send') : t('Continue')}
               </button>
             )}
           </div>

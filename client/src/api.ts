@@ -225,6 +225,7 @@ export const api = {
 
   thread(sourceFile: string, collection: string, conversationKey?: string, signal?: AbortSignal) {
     return request<{
+      collection?: string;
       sourceFile: string;
       title?: string;
       conversationKey?: string;

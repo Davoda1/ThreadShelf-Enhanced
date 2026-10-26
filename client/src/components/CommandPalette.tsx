@@ -1,3 +1,4 @@
+import { t, useI18n } from '../i18n';
 import { useState, useEffect, useRef } from 'react';
 import type { CollectionStats } from '../types';
 import { Icons } from '../icons';
@@ -41,6 +42,7 @@ export function CommandPalette({
   onNewColl,
   onRefresh,
 }: CommandPaletteProps) {
+  useI18n();
   const [query, setQuery] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -61,47 +63,47 @@ export function CommandPalette({
 
   const groups: PaletteGroup[] = [
     {
-      label: 'Go to',
+      label: t('Go to'),
       items: [
         {
           id: 'go-search',
-          label: 'Search archive',
+          label: t('Search archive'),
           icon: Icons.search,
           action: () => setView('/search'),
         },
         {
           id: 'go-chat',
-          label: 'Chat history',
+          label: t('Chat history'),
           icon: Icons.chat,
           action: () => setView('/chat'),
         },
         {
           id: 'go-insights',
-          label: 'Insights',
+          label: t('Insights'),
           icon: Icons.chart,
           action: () => setView('/insights'),
         },
         {
           id: 'go-indexing',
-          label: 'Indexing',
+          label: t('Indexing'),
           icon: Icons.download,
           action: () => setView('/indexing'),
         },
-        { id: 'go-mcp', label: 'MCP', icon: Icons.plug, action: () => setView('/mcp') },
+        { id: 'go-mcp', label: t('MCP'), icon: Icons.plug, action: () => setView('/mcp') },
         {
           id: 'go-settings',
-          label: 'Settings',
+          label: t('Settings'),
           icon: Icons.settings,
           action: () => setView('/settings'),
         },
       ],
     },
     {
-      label: 'Collections',
+      label: t('Collections'),
       items: [
         {
           id: 'coll-all',
-          label: 'All collections',
+          label: t('All collections'),
           icon: Icons.scope,
           action: () => setActiveColl('all'),
         },
@@ -117,17 +119,17 @@ export function CommandPalette({
       ],
     },
     {
-      label: 'Actions',
+      label: t('Actions'),
       items: [
-        { id: 'a-chat', label: 'New chat', icon: Icons.spark, action: onNewChat },
-        { id: 'a-new', label: 'New collection…', icon: Icons.plus, action: onNewColl },
+        { id: 'a-chat', label: t('New chat'), icon: Icons.spark, action: onNewChat },
+        { id: 'a-new', label: t('New collection…'), icon: Icons.plus, action: onNewColl },
         {
           id: 'a-index',
-          label: 'Index a folder',
+          label: t('Index a folder'),
           icon: Icons.folder,
           action: () => setView('/indexing'),
         },
-        { id: 'a-refresh', label: 'Refresh stats', icon: Icons.refresh, action: onRefresh },
+        { id: 'a-refresh', label: t('Refresh stats'), icon: Icons.refresh, action: onRefresh },
       ],
     },
   ];
@@ -173,7 +175,7 @@ export function CommandPalette({
               setActiveIdx(0);
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Search commands, collections, or actions…"
+            placeholder={t('Search commands, collections, or actions…')}
           />
           <kbd>ESC</kbd>
         </div>
@@ -204,7 +206,7 @@ export function CommandPalette({
           ))}
           {allItems.length === 0 && (
             <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-3)', fontSize: 12 }}>
-              No matches
+              {t('No matches')}
             </div>
           )}
         </div>

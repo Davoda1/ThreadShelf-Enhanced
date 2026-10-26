@@ -1,3 +1,4 @@
+import { t, useI18n, formatNumber } from '../i18n';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
 import type { GenerationRuntimeStatus, LlamaRuntimeDiagnostics } from '../types';
@@ -10,6 +11,7 @@ const shortModel = (value?: string): string => {
 };
 
 export function GenerationRuntimeBadge({ detailed = false }: { readonly detailed?: boolean }) {
+  useI18n();
   const [runtime, setRuntime] = useState<GenerationRuntimeStatus | null>(null);
   const [diagnostics, setDiagnostics] = useState<LlamaRuntimeDiagnostics | null>(null);
   const [ejecting, setEjecting] = useState(false);
@@ -55,9 +57,9 @@ export function GenerationRuntimeBadge({ detailed = false }: { readonly detailed
       const response = await api.ejectGenerationModel(runtime?.model);
       setRuntime(response.runtime);
       window.dispatchEvent(new Event('threadshelf:generation-runtime-changed'));
-      toast.success('llama.cpp model ejected from memory.');
+      toast.success(t('llama.cpp model ejected from memory.'));
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : 'Could not eject the model.');
+      toast.error(cause instanceof Error ? cause.message : t('Could not eject the model.'));
     } finally {
       setEjecting(false);
     }
@@ -70,37 +72,41 @@ export function GenerationRuntimeBadge({ detailed = false }: { readonly detailed
       (runtime.state === 'external' && Boolean(runtime.model)));
   const deviceBackend = diagnostics?.devices[0]?.id.replace(/\d+$/, '').toUpperCase();
   const compute = (() => {
-    if (!runtime || !diagnostics) return 'unknown';
+    if (!runtime || !diagnostics) return t('unknown');
     if (runtime.state === 'stopped') {
       return diagnostics.devices.length > 0
-        ? `idle · GPU (${deviceBackend || 'accelerator'})`
-        : 'idle · CPU';
+        ? t('idle · GPU ({device})', { device: deviceBackend || t('accelerator') })
+        : t('idle · CPU');
     }
     if (diagnostics.offload.mode === 'hybrid') {
-      return `hybrid ${diagnostics.offload.gpuPercent}% GPU`;
+      return t('hybrid {percent}% GPU', {
+        percent: formatNumber(diagnostics.offload.gpuPercent ?? 0),
+      });
     }
-    if (diagnostics.offload.mode === 'gpu') return `GPU · ${deviceBackend || 'accelerator'}`;
+    if (diagnostics.offload.mode === 'gpu') return `GPU · ${deviceBackend || t('accelerator')}`;
     if (diagnostics.offload.mode === 'cpu') return 'CPU';
-    if (diagnostics.devices.length > 0) return `GPU · ${deviceBackend || 'accelerator'}`;
-    return diagnostics.deviceDetectionSupported ? 'CPU' : 'unknown';
+    if (diagnostics.devices.length > 0) return `GPU · ${deviceBackend || t('accelerator')}`;
+    return diagnostics.deviceDetectionSupported ? 'CPU' : t('unknown');
   })();
   const installTooltip = [
-    diagnostics?.executable ? `Selected executable: ${diagnostics.executable}` : undefined,
-    `Detected compute: ${compute}`,
+    diagnostics?.executable
+      ? t('Selected executable: {path}', { path: diagnostics.executable })
+      : undefined,
+    t('Detected compute: {compute}', { compute }),
     '',
-    'Check for a newer stable llama.cpp build:',
+    t('Check for a newer stable llama.cpp build:'),
     'npm run setup:llama -- -- --check',
     '',
-    'Install CPU:',
+    t('Install CPU:'),
     'npm run setup:llama -- -- --install --variant cpu',
     '',
-    'Install NVIDIA CUDA:',
+    t('Install NVIDIA CUDA:'),
     'npm run setup:llama -- -- --install --variant cuda',
     '',
-    'Install Vulkan GPU:',
+    t('Install Vulkan GPU:'),
     'npm run setup:llama -- -- --install --variant vulkan',
     '',
-    'macOS: use the cpu variant; Metal is included automatically.',
+    t('macOS: use the cpu variant; Metal is included automatically.'),
   ]
     .filter((line): line is string => line !== undefined)
     .join('\n');
@@ -114,14 +120,21 @@ export function GenerationRuntimeBadge({ detailed = false }: { readonly detailed
       ? [
           compute,
           ...appliedProfile.map((entry) => `${entry.setting} ${entry.value}`),
-          gpuWeightsMiB > 0 ? `GPU weights ${(gpuWeightsMiB / 1024).toFixed(1)} GiB` : '',
+          gpuWeightsMiB > 0
+            ? t('GPU weights {size} GiB', {
+                size: formatNumber(gpuWeightsMiB / 1024, {
+                  maximumFractionDigits: 1,
+                  minimumFractionDigits: 1,
+                }),
+              })
+            : '',
         ]
           .filter(Boolean)
           .join(' · ')
       : '';
   const runtimeProfileNotes = (diagnostics?.profile ?? [])
     .filter((entry) => entry.note)
-    .map((entry) => `${entry.setting}: ${entry.applied ? '' : 'skipped, '}${entry.note}`)
+    .map((entry) => `${entry.setting}: ${entry.applied ? '' : t('skipped, ')}${entry.note}`)
     .join('\n');
   return (
     <div
@@ -132,13 +145,13 @@ export function GenerationRuntimeBadge({ detailed = false }: { readonly detailed
       <span className="runtime-dot" aria-hidden="true" />
       <span className="global-runtime-copy">
         <b>
-          <span>{runtime?.state === 'starting' ? 'llama.cpp · loading' : 'llama.cpp'}</span>
+          <span>{runtime?.state === 'starting' ? t('llama.cpp · loading') : t('llama.cpp')}</span>
           <em>{compute}</em>
           <span
             className="runtime-install-help"
             tabIndex={0}
             role="img"
-            aria-label="llama.cpp CPU and GPU install commands"
+            aria-label={t('llama.cpp CPU and GPU install commands')}
             title={installTooltip}
           >
             ?
@@ -148,8 +161,8 @@ export function GenerationRuntimeBadge({ detailed = false }: { readonly detailed
           {runtime?.model
             ? shortModel(runtime.model)
             : runtime
-              ? 'no model loaded'
-              : 'status unavailable'}
+              ? t('no model loaded')
+              : t('status unavailable')}
         </span>
         {detailed && runtime?.detail && <small>{runtime.detail}</small>}
         {detailed && runtimeProfile && (
@@ -160,7 +173,7 @@ export function GenerationRuntimeBadge({ detailed = false }: { readonly detailed
       </span>
       {active && (
         <button type="button" disabled={ejecting} onClick={() => void eject()}>
-          {ejecting ? '…' : 'Eject'}
+          {ejecting ? '…' : t('Eject')}
         </button>
       )}
     </div>

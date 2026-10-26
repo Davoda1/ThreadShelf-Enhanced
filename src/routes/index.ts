@@ -9,6 +9,8 @@ import ingestRouter from './ingest.js';
 import insightsRouter from './insights.js';
 import generationRouter from './generation.js';
 import modelCatalogRouter from './model-catalog.js';
+import imageCacheRouter from './image-cache.js';
+import uploadsRouter from './uploads.js';
 
 const router = Router();
 
@@ -22,5 +24,7 @@ router.use(ingestRouter);
 router.use(insightsRouter);
 router.use(generationRouter);
 router.use(modelCatalogRouter);
+router.use(imageCacheRouter);
+router.use(uploadsRouter);
 
 export default router;

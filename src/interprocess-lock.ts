@@ -13,6 +13,8 @@ interface LockOwner {
 export interface InterprocessLockOptions {
   readonly timeoutMs?: number;
   readonly signal?: AbortSignal;
+  /** Collection replacement reservations also exclude ordinary read guards. */
+  readonly exclusiveTransaction?: boolean;
 }
 
 const heldLocks = new AsyncLocalStorage<ReadonlyMap<string, LockOwner>>();
@@ -126,7 +128,7 @@ export const withInterprocessLock = async <T>(
     for (;;) {
       options.signal?.throwIfAborted();
       try {
-        database.exec('BEGIN IMMEDIATE');
+        database.exec(options.exclusiveTransaction ? 'BEGIN EXCLUSIVE' : 'BEGIN IMMEDIATE');
         acquired = true;
         break;
       } catch (error) {

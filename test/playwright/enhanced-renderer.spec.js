@@ -1,3 +1,6 @@
+/* global navigator, window, innerWidth */
+import { Buffer } from 'node:buffer';
+import { URL } from 'node:url';
 import { test, expect } from './fixtures.js';
 
 const chart = { chartType: 'bar', xKey: 'name', series: [{ dataKey: 'value', label: 'Value' }], data: [{ name: 'Alpha', value: 0 }, { name: 'Beta', value: -3 }] };
@@ -25,8 +28,8 @@ async function openSynthetic(page, baseUrl, text = richText) {
 test('rich archive renders locally, preserves source controls and contacts image hosts only after loading', async ({ page, serverContext }) => {
   await page.addInitScript(() => Object.defineProperty(navigator, 'clipboard', { value: { writeText: async value => { window.__lastCopied = value; } } }));
   const remoteRequests = [];
-  await page.route('https://archive-image.example.test/**', route => {
-    remoteRequests.push(route.request().url());
+  await page.route('**/api/image-cache/resource?**', route => {
+    remoteRequests.push(new URL(route.request().url()).searchParams.get('url'));
     return route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6LxkAAAAASUVORK5CYII=', 'base64') });
   });
   await openSynthetic(page, serverContext.baseUrl);
@@ -52,7 +55,7 @@ test('rich archive renders locally, preserves source controls and contacts image
   expect(await page.evaluate(() => window.__lastCopied)).toBe('graph TD\nA[Result (draft)] --> B[Done]');
   await page.getByRole('button', { name: /Showing original Mermaid/ }).click();
   await expect(page.locator('.mermaid-diagram svg')).toBeVisible();
-  await page.getByRole('button', { name: /Load external image/ }).click();
+  await page.getByRole('button', { name: /^Load image/ }).click();
   await expect(page.locator('.archived-image-loaded img')).toHaveCount(1);
   expect(remoteRequests).toEqual(['https://archive-image.example.test/saved.png']);
 });
@@ -76,7 +79,7 @@ test('archive assets and legacy Processor markers display without altering liter
   await expect(page.getByRole('button', { name: /^Load image/ })).toHaveCount(2);
   await expect(page.locator('.archived-image-attachments .archived-image')).toHaveCount(1);
   await expect(page.locator('.mermaid-block')).toHaveAttribute('data-mermaid-state', 'error');
-  await expect(page.locator('.archived-image img')).toHaveCount(0);
+  await expect(page.locator('.archived-image img[src]')).toHaveCount(0);
   await page.getByRole('button', { name: /^Load image/ }).first().click();
   await expect(page.locator('.archived-image-loaded img')).toHaveCount(1);
   expect(requests).toEqual([]);
@@ -85,6 +88,7 @@ test('archive assets and legacy Processor markers display without altering liter
 test('long code, tables and rich layouts remain reachable on a narrow viewport', async ({ page, serverContext }) => {
   await page.setViewportSize({ width: 320, height: 640 });
   await openSynthetic(page, serverContext.baseUrl, richText + '\n\n```text\n' + 'long-token-'.repeat(180) + '\n```\n\nTHE LAST PARAGRAPH');
+  await page.getByRole('button', { name: 'Show more', exact: true }).click();
   await page.locator('.enhanced-markdown').getByText('THE LAST PARAGRAPH').scrollIntoViewIfNeeded();
   await expect(page.locator('.enhanced-markdown').getByText('THE LAST PARAGRAPH')).toBeInViewport();
   const bounds = await page.locator('.enhanced-markdown').evaluate(node => ({ width: node.clientWidth, scroll: node.scrollWidth, right: node.getBoundingClientRect().right, viewport: innerWidth }));

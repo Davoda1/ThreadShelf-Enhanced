@@ -1,3 +1,4 @@
+import { t, useI18n } from '../i18n';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { useUIStore, savedSearchSignature, pinKey } from '../store';
@@ -45,12 +46,31 @@ interface RoleChipDef {
 }
 
 const ROLE_CHIPS: readonly RoleChipDef[] = [
-  { id: 'user', label: 'User', key: 'user' },
-  { id: 'reasoning', label: 'Reasoning', key: 'thinking' },
-  { id: 'response', label: 'Response', key: 'ai' },
+  {
+    id: 'user',
+    get label() {
+      return t('User');
+    },
+    key: 'user',
+  },
+  {
+    id: 'reasoning',
+    get label() {
+      return t('Reasoning');
+    },
+    key: 'thinking',
+  },
+  {
+    id: 'response',
+    get label() {
+      return t('Response');
+    },
+    key: 'ai',
+  },
 ];
 
 function SearchLoading() {
+  useI18n();
   return (
     <div className="result-list" style={{ marginTop: 16 }}>
       {[0, 1, 2].map((i) => (
@@ -61,6 +81,7 @@ function SearchLoading() {
 }
 
 export function SearchPage() {
+  useI18n();
   const navigate = useNavigate();
   const { collection: routeCollection } = useParams({ from: '/search/$collection' });
   const {
@@ -402,7 +423,9 @@ export function SearchPage() {
   const results = useMemo(() => searchData?.results ?? [], [searchData?.results]);
   const canLoadMore = hasQuery && !isSearching && results.length >= resultLimit && resultLimit < 50;
   const conversationLabel =
-    activeColl === 'all' ? 'Conversations' : `${collLabel(activeColl)} conversations`;
+    activeColl === 'all'
+      ? t('Conversations')
+      : t('{collection} conversations', { collection: collLabel(activeColl) });
 
   // Keyboard navigation over the visible list (search results or conversations).
   const navCount = hasQuery ? results.length : visibleConversations.length;
@@ -468,9 +491,11 @@ export function SearchPage() {
             <div className="banner err">
               <span className="ico">{Icons.warn}</span>
               <div className="grow">
-                <b style={{ fontWeight: 500 }}>Backend unreachable.</b>{' '}
+                <b style={{ fontWeight: 500 }}>{t('Backend unreachable.')}</b>{' '}
                 <span style={{ color: 'var(--text-2)' }}>
-                  Run <code>npm start</code> in the project root.
+                  {t('Run ')}
+                  <code>npm start</code>
+                  {t(' in the project root.')}
                 </span>
               </div>
             </div>
@@ -494,8 +519,8 @@ export function SearchPage() {
               }}
               placeholder={
                 searchMode === 'keyword'
-                  ? 'Exact match: identifiers, error strings, code…'
-                  : 'Search by meaning across your archive…'
+                  ? t('Exact match: identifiers, error strings, code…')
+                  : t('Search by meaning across your archive…')
               }
             />
             {inputValue && (
@@ -503,8 +528,8 @@ export function SearchPage() {
                 id="clearSearch"
                 type="button"
                 className="search-clear"
-                aria-label="Clear search"
-                title="Clear search (Esc)"
+                aria-label={t('Clear search')}
+                title={t('Clear search (Esc)')}
                 onClick={clearSearch}
               >
                 {Icons.close}
@@ -513,24 +538,24 @@ export function SearchPage() {
           </div>
 
           <div className="search-toolbar">
-            <div className="mode-toggle" role="group" aria-label="Search mode">
+            <div className="mode-toggle" role="group" aria-label={t('Search mode')}>
               <button
                 type="button"
                 className="mode-btn"
                 data-on={searchMode === 'semantic'}
-                title="Rank by meaning (local embeddings)"
+                title={t('Rank by meaning (local embeddings)')}
                 onClick={() => switchMode('semantic')}
               >
-                Semantic
+                {t('Semantic')}
               </button>
               <button
                 type="button"
                 className="mode-btn"
                 data-on={searchMode === 'keyword'}
-                title="Exact substring match (case-insensitive)"
+                title={t('Exact substring match (case-insensitive)')}
                 onClick={() => switchMode('keyword')}
               >
-                Exact
+                {t('Exact')}
               </button>
             </div>
             <div className="role-chips">
@@ -548,28 +573,28 @@ export function SearchPage() {
               ))}
             </div>
             <label className="origin-filter">
-              <span>origin</span>
+              <span>{t('origin')}</span>
               <select
-                aria-label="Filter by conversation origin"
+                aria-label={t('Filter by conversation origin')}
                 value={originFilter}
                 onChange={(event) => setOriginFilter(event.target.value as OriginFilter)}
               >
-                <option value="all">All</option>
-                <option value="threadshelf">ThreadShelf</option>
-                <option value="archive">Clean archive</option>
+                <option value="all">{t('All')}</option>
+                <option value="threadshelf">{t('ThreadShelf')}</option>
+                <option value="archive">{t('Clean archive')}</option>
               </select>
             </label>
             <label className="model-filter">
-              <span>model</span>
+              <span>{t('model')}</span>
               <input
                 value={modelFilter}
                 onChange={(e) => setModelFilter(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && runSearch()}
-                placeholder="gpt-5, claude, gemini..."
+                placeholder={t('gpt-5, claude, gemini...')}
               />
             </label>
             <label className="date-filter">
-              <span>from</span>
+              <span>{t('from')}</span>
               <input
                 type="date"
                 value={dateFrom}
@@ -578,7 +603,7 @@ export function SearchPage() {
               />
             </label>
             <label className="date-filter">
-              <span>to</span>
+              <span>{t('to')}</span>
               <input
                 type="date"
                 value={dateTo}
@@ -588,8 +613,13 @@ export function SearchPage() {
             </label>
             <span className="toolbar-spacer" />
             <span className="toolbar-hint">
-              <kbd>/</kbd> focus · <kbd>↑↓</kbd> navigate · <kbd>↵</kbd> open · <kbd>Ctrl+K</kbd>{' '}
-              commands
+              <kbd>/</kbd>
+              {t(' focus · ')}
+              <kbd>↑↓</kbd>
+              {t(' navigate · ')}
+              <kbd>↵</kbd>
+              {t(' open · ')}
+              <kbd>Ctrl+K</kbd> {t('commands')}
             </span>
           </div>
 
@@ -613,25 +643,28 @@ export function SearchPage() {
 
               {savedSearches.length > 0 && (
                 <div className="saved-searches">
-                  <span className="ss-label">{Icons.star} Saved</span>
+                  <span className="ss-label">
+                    {Icons.star}
+                    {t(' Saved')}
+                  </span>
                   {savedSearches.map((s) => (
                     <span key={s.id} className="ss-chip">
                       <button
                         type="button"
                         className="ss-run"
-                        title={`Run: ${s.q}`}
+                        title={t('Run: {value0}', { value0: s.q })}
                         onClick={() => runSavedSearch(s)}
                       >
                         <span className="ss-q">{s.q}</span>
                         {s.collection !== 'all' && (
                           <span className="ss-tag">{collLabel(s.collection)}</span>
                         )}
-                        {s.mode === 'keyword' && <span className="ss-tag">exact</span>}
+                        {s.mode === 'keyword' && <span className="ss-tag">{t('exact')}</span>}
                       </button>
                       <button
                         type="button"
                         className="ss-del"
-                        aria-label={`Delete saved search "${s.q}"`}
+                        aria-label={t('Delete saved search "{value0}"', { value0: s.q })}
                         onClick={() => removeSavedSearch(s.id)}
                       >
                         ×
@@ -645,7 +678,8 @@ export function SearchPage() {
                 <>
                   <div className="results-meta-bar">
                     <span className="h">
-                      Pinned <b>{pinnedForScope.length}</b>
+                      {t('Pinned ')}
+                      <b>{pinnedForScope.length}</b>
                     </span>
                   </div>
                   <div className="result-list">
@@ -660,7 +694,7 @@ export function SearchPage() {
                         >
                           <div className="result-head">
                             <span className="r-role" data-role="user">
-                              pinned
+                              {t('pinned')}
                             </span>
                             <span className="r-provider">
                               <span
@@ -674,7 +708,7 @@ export function SearchPage() {
                               role="button"
                               tabIndex={0}
                               data-on="true"
-                              title="Unpin"
+                              title={t('Unpin')}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 togglePinned(p);
@@ -700,7 +734,10 @@ export function SearchPage() {
                               <span className="slash">/</span>
                               <span className="r-source-file">{fileName}</span>
                             </span>
-                            <span className="open-thread">open thread {Icons.arrowRight}</span>
+                            <span className="open-thread">
+                              {t('open thread ')}
+                              {Icons.arrowRight}
+                            </span>
                           </div>
                         </button>
                       );
@@ -714,23 +751,23 @@ export function SearchPage() {
                   {conversationLabel} <b>{conversations.length}</b>
                 </span>
                 <label className="conv-sort">
-                  <span>sort</span>
+                  <span>{t('sort')}</span>
                   <select
                     value={convSort}
                     onChange={(e) => setConvSort(e.target.value as ConversationSort)}
-                    aria-label="Sort conversations"
+                    aria-label={t('Sort conversations')}
                   >
-                    <option value="recent">Recent</option>
-                    <option value="longest">Longest</option>
-                    <option value="title">Title</option>
+                    <option value="recent">{t('Recent')}</option>
+                    <option value="longest">{t('Longest')}</option>
+                    <option value="title">{t('Title')}</option>
                   </select>
                 </label>
                 <input
                   className="conv-filter"
                   value={convFilter}
                   onChange={(e) => setConvFilter(e.target.value)}
-                  placeholder="Filter by title or file…"
-                  aria-label="Filter conversations"
+                  placeholder={t('Filter by title or file…')}
+                  aria-label={t('Filter conversations')}
                 />
               </div>
 
@@ -755,13 +792,13 @@ export function SearchPage() {
                       >
                         <div className="result-head">
                           <span className="r-role" data-role="ai">
-                            thread
+                            {t('thread')}
                           </span>
                           {item.hasThreadShelfTurns && (
                             <span className="threadshelf-turn-badge">
                               {item.createdInThreadShelf
-                                ? 'Created in ThreadShelf'
-                                : 'Continued in ThreadShelf'}
+                                ? t('Created in ThreadShelf')
+                                : t('Continued in ThreadShelf')}
                             </span>
                           )}
                           <span className="r-provider">
@@ -776,7 +813,7 @@ export function SearchPage() {
                             role="button"
                             tabIndex={0}
                             data-on={isPinned}
-                            title={isPinned ? 'Unpin' : 'Pin conversation'}
+                            title={isPinned ? t('Unpin') : t('Pin conversation')}
                             onClick={(e) => {
                               e.stopPropagation();
                               togglePinned(pin);
@@ -805,7 +842,10 @@ export function SearchPage() {
                           {item.turnCount != null && (
                             <>
                               <span className="dot" />
-                              <span>{item.turnCount} turns</span>
+                              <span>
+                                {item.turnCount}
+                                {t(' turns')}
+                              </span>
                             </>
                           )}
                           {lastActive && (
@@ -814,7 +854,10 @@ export function SearchPage() {
                               <span>{lastActive}</span>
                             </>
                           )}
-                          <span className="open-thread">open thread {Icons.arrowRight}</span>
+                          <span className="open-thread">
+                            {t('open thread ')}
+                            {Icons.arrowRight}
+                          </span>
                         </div>
                       </button>
                     );
@@ -826,20 +869,22 @@ export function SearchPage() {
                         className="load-more-button"
                         onClick={() => setConvLimit((value) => value + CONV_PAGE_SIZE)}
                       >
-                        Show more ({conversations.length - convLimit} left)
+                        {t('Show more (')}
+                        {conversations.length - convLimit}
+                        {t(' left)')}
                       </button>
                     </div>
                   )}
                 </div>
               ) : convFilter.trim() ? (
                 <div className="empty">
-                  <h3>No conversations match the filter.</h3>
-                  <p>Try a different phrase or clear the filter box.</p>
+                  <h3>{t('No conversations match the filter.')}</h3>
+                  <p>{t('Try a different phrase or clear the filter box.')}</p>
                 </div>
               ) : activeColl !== 'all' ? (
                 <div className="empty">
-                  <h3>No conversations indexed.</h3>
-                  <p>Index a folder into this collection or switch to another collection.</p>
+                  <h3>{t('No conversations indexed.')}</h3>
+                  <p>{t('Index a folder into this collection or switch to another collection.')}</p>
                 </div>
               ) : null}
             </>
@@ -849,8 +894,8 @@ export function SearchPage() {
 
           {hasQuery && !isSearching && results.length === 0 && (
             <div className="empty">
-              <h3>No results found.</h3>
-              <p>Try another query, broaden your role filters, or index more files.</p>
+              <h3>{t('No results found.')}</h3>
+              <p>{t('Try another query, broaden your role filters, or index more files.')}</p>
             </div>
           )}
 
@@ -858,20 +903,22 @@ export function SearchPage() {
             <>
               <div className="results-meta-bar">
                 <span className="h">
-                  Results <b>{results.length}</b>
+                  {t('Results ')}
+                  <b>{results.length}</b>
                   <span style={{ marginLeft: 14, color: 'var(--text-3)' }}>
-                    in {collLabel(activeColl)}
+                    {t('in ')}
+                    {collLabel(activeColl)}
                   </span>
                 </span>
                 <button
                   type="button"
                   className="save-search"
                   data-on={!!existingSaved}
-                  title={existingSaved ? 'Remove from saved searches' : 'Save this search'}
+                  title={existingSaved ? t('Remove from saved searches') : t('Save this search')}
                   onClick={toggleSaveSearch}
                 >
                   {existingSaved ? Icons.starFilled : Icons.star}
-                  <span>{existingSaved ? 'Saved' : 'Save search'}</span>
+                  <span>{existingSaved ? t('Saved') : t('Save search')}</span>
                 </button>
               </div>
               <div className="result-list" ref={listRef}>
@@ -893,7 +940,7 @@ export function SearchPage() {
                     className="load-more-button"
                     onClick={() => setResultLimit((value) => Math.min(value + 15, 50))}
                   >
-                    Load more
+                    {t('Load more')}
                   </button>
                 </div>
               )}

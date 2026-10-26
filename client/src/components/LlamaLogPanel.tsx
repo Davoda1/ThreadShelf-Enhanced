@@ -1,3 +1,4 @@
+import { t, useI18n, formatNumber } from '../i18n';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import type { GenerationModel, LlamaRuntimeDiagnostics } from '../types';
@@ -9,20 +10,22 @@ interface LlamaLogPanelProps {
   readonly active: boolean;
 }
 
-const gib = (bytes: number): string => `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
+const gib = (bytes: number): string =>
+  `${formatNumber(bytes / 1024 ** 3, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} GiB`;
 
 const placementLabel = (diagnostics: LlamaRuntimeDiagnostics): string => {
   const { offload } = diagnostics;
-  if (offload.mode === 'cpu') return 'CPU only';
-  if (offload.mode === 'gpu') return `GPU ${offload.gpuPercent ?? 100}%`;
+  if (offload.mode === 'cpu') return t('CPU only');
+  if (offload.mode === 'gpu') return `GPU ${formatNumber(offload.gpuPercent ?? 100)}%`;
   if (offload.mode === 'hybrid') {
-    return `GPU ${offload.gpuPercent}% · CPU ${offload.cpuPercent}%`;
+    return `GPU ${formatNumber(offload.gpuPercent ?? 0)}% · CPU ${formatNumber(offload.cpuPercent ?? 0)}%`;
   }
-  if (diagnostics.devices.length > 0) return 'GPU available · placement pending';
-  return 'Compute placement unknown';
+  if (diagnostics.devices.length > 0) return t('GPU available · placement pending');
+  return t('Compute placement unknown');
 };
 
 export function LlamaLogPanel({ model, active }: LlamaLogPanelProps) {
+  useI18n();
   const [diagnostics, setDiagnostics] = useState<LlamaRuntimeDiagnostics | null>(null);
   const [error, setError] = useState('');
   const [open, setOpen] = useState(false);
@@ -69,29 +72,39 @@ export function LlamaLogPanel({ model, active }: LlamaLogPanelProps) {
       <div className="llama-placement">
         <div>
           <strong>
-            {diagnostics ? placementLabel(diagnostics) : 'Inspecting CPU/GPU placement…'}
+            {diagnostics ? placementLabel(diagnostics) : t('Inspecting CPU/GPU placement…')}
           </strong>
           {diagnostics?.offload.gpuLayers !== undefined && (
             <span>
-              {diagnostics.offload.gpuLayers}/{diagnostics.offload.totalLayers} model layers on GPU
+              {formatNumber(diagnostics.offload.gpuLayers)}/
+              {formatNumber(diagnostics.offload.totalLayers ?? 0)}
+              {t(' model layers on GPU')}
             </span>
           )}
           {diagnostics?.devices.length ? (
             <span>
               {diagnostics.devices
-                .map((device) => `${device.id} ${device.name} · ${gib(device.freeBytes)} free`)
+                .map((device) =>
+                  t('{device} · {size} free', {
+                    device: `${device.id} ${device.name}`,
+                    size: gib(device.freeBytes),
+                  }),
+                )
                 .join(' · ')}
             </span>
           ) : diagnostics?.deviceDetectionSupported ? (
-            <span>No accelerator reported by this llama.cpp executable.</span>
+            <span>{t('No accelerator reported by this llama.cpp executable.')}</span>
           ) : (
-            <span>VRAM/device reporting is unavailable for this executable.</span>
+            <span>{t('VRAM/device reporting is unavailable for this executable.')}</span>
           )}
         </div>
         {diagnostics?.offload.deviceBufferMiB && (
           <span className="llama-buffer-split">
             {Object.entries(diagnostics.offload.deviceBufferMiB)
-              .map(([device, mib]) => `${device}: ${mib.toFixed(0)} MiB`)
+              .map(
+                ([device, mib]) =>
+                  `${device}: ${formatNumber(mib, { maximumFractionDigits: 0 })} MiB`,
+              )
               .join(' · ')}
           </span>
         )}
@@ -99,9 +112,13 @@ export function LlamaLogPanel({ model, active }: LlamaLogPanelProps) {
 
       {tooLargeForVram && model?.sizeBytes && (
         <div className="llama-memory-warning">
-          Model file {gib(model.sizeBytes)} exceeds currently reported free VRAM {gib(freeVram)}.
-          Full GPU placement is not possible; auto-fit should use a CPU/GPU mix. Context and compute
-          buffers require additional memory.
+          {t('Model file ')}
+          {gib(model.sizeBytes)}
+          {t(' exceeds currently reported free VRAM ')}
+          {gib(freeVram)}
+          {t(
+            '. Full GPU placement is not possible; auto-fit should use a CPU/GPU mix. Context and compute buffers require additional memory.',
+          )}
         </div>
       )}
 
@@ -111,30 +128,38 @@ export function LlamaLogPanel({ model, active }: LlamaLogPanelProps) {
         onToggle={(event) => setOpen(event.currentTarget.open)}
       >
         <summary>
-          <span>llama.cpp process logs</span>
+          <span>{t('llama.cpp process logs')}</span>
           <span>
-            {active ? 'live' : diagnostics?.source === 'managed' ? 'last process' : 'diagnostics'}
+            {active
+              ? t('live')
+              : diagnostics?.source === 'managed'
+                ? t('last process')
+                : t('diagnostics')}
           </span>
         </summary>
         <div className="llama-log-toolbar">
           <span>
             {diagnostics?.logsTruncated
-              ? 'Oldest output was truncated after 4 MiB.'
-              : 'Complete stdout/stderr. Prompts, answers, and model reasoning are not written to process logs.'}
+              ? t('Oldest output was truncated after 4 MiB.')
+              : t(
+                  'Complete stdout/stderr. Prompts, answers, and model reasoning are not written to process logs.',
+                )}
           </span>
           <button
             className="btn sm"
             disabled={!diagnostics?.logs}
             onClick={() => {
               void copyText(diagnostics?.logs ?? '').then((ok) =>
-                ok ? toast.success('llama.cpp logs copied.') : toast.error('Could not copy logs.'),
+                ok
+                  ? toast.success(t('llama.cpp logs copied.'))
+                  : toast.error(t('Could not copy logs.')),
               );
             }}
           >
-            Copy logs
+            {t('Copy logs')}
           </button>
         </div>
-        {error && <div className="banner err">{error}</div>}
+        {error && <div className="banner err">{t(error)}</div>}
         <pre ref={preRef}>{diagnostics?.logs || 'No managed llama.cpp process logs yet.'}</pre>
       </details>
     </div>

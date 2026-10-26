@@ -1,3 +1,5 @@
+import { useUIStore } from '../store';
+import { t, useI18n } from '../i18n';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useListboxPosition } from './useListboxPosition';
@@ -30,6 +32,7 @@ export function NumberCombobox({
   title,
   placeholder,
 }: NumberComboboxProps) {
+  useI18n();
   const rootRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const listId = `${useId()}-options`;
@@ -116,8 +119,8 @@ export function NumberCombobox({
         tabIndex={-1}
         // Deliberately not derived from `label`: an accessible name containing
         // the field's own name makes every getByLabel(field) query ambiguous.
-        aria-label="Show presets"
-        title="Show presets"
+        aria-label={t('Show presets')}
+        title={t('Show presets')}
         onClick={() => setOpen((current) => !current)}
       >
         ▾
@@ -129,7 +132,7 @@ export function NumberCombobox({
             className="number-combobox-popover"
             id={listId}
             role="listbox"
-            aria-label="Token presets"
+            aria-label={t('Token presets')}
             ref={listRef}
             style={position}
             onPointerDown={(event) => event.stopPropagation()}
@@ -147,7 +150,9 @@ export function NumberCombobox({
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => choose(option)}
               >
-                {optionLabel ? optionLabel(option) : option.toLocaleString()}
+                {optionLabel
+                  ? optionLabel(option)
+                  : option.toLocaleString(useUIStore.getState().locale)}
               </button>
             ))}
           </div>,

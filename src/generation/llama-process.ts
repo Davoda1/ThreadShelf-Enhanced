@@ -37,6 +37,12 @@ let managed: ManagedServer | null = null;
 let lastManaged: ManagedServer | null = null;
 let transition: Promise<string> | null = null;
 let hooksRegistered = false;
+let externalShutdown = false;
+
+/** HTTP server shutdown also flushes durable imports before the process exits. */
+export const manageLlamaShutdownExternally = (): void => {
+  externalShutdown = true;
+};
 let runtimeRevision = 0;
 let activeChatModel: string | null = null;
 let activeChatCount = 0;
@@ -530,10 +536,12 @@ const registerShutdownHooks = (): void => {
   };
   process.once('exit', shutdown);
   process.once('SIGINT', () => {
+    if (externalShutdown) return;
     shutdown();
     process.exit(130);
   });
   process.once('SIGTERM', () => {
+    if (externalShutdown) return;
     shutdown();
     process.exit(143);
   });

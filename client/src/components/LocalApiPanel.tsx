@@ -1,3 +1,4 @@
+import { t, useI18n } from '../i18n';
 import { useCallback, useState } from 'react';
 import { useLocalApiStatusQuery } from '../queries';
 import type { GenerationConfig } from '../types';
@@ -7,9 +8,24 @@ import { copyText } from '../utils';
 type ExampleId = 'curl' | 'openai' | 'anthropic';
 
 const EXAMPLES: readonly { readonly id: ExampleId; readonly label: string }[] = [
-  { id: 'curl', label: 'curl' },
-  { id: 'openai', label: 'OpenAI SDK' },
-  { id: 'anthropic', label: 'Anthropic SDK' },
+  {
+    id: 'curl',
+    get label() {
+      return t('curl');
+    },
+  },
+  {
+    id: 'openai',
+    get label() {
+      return t('OpenAI SDK');
+    },
+  },
+  {
+    id: 'anthropic',
+    get label() {
+      return t('Anthropic SDK');
+    },
+  },
 ];
 
 const ENDPOINTS = [
@@ -96,6 +112,7 @@ export function LocalApiPanel({
   draft,
   onChange,
 }: LocalApiPanelProps) {
+  useI18n();
   const config = generationConfig?.localApi;
   const { data: status, error, isLoading } = useLocalApiStatusQuery();
   const [selectedModel, setSelectedModel] = useState('');
@@ -127,14 +144,14 @@ export function LocalApiPanel({
   return (
     <div className="panel generation-panel">
       <div className="panel-head">
-        <h3>Local model API</h3>
-        <span className="sub">OpenAI · Anthropic compatible</span>
+        <h3>{t('Local model API')}</h3>
+        <span className="sub">{t('OpenAI · Anthropic compatible')}</span>
         <button
           type="button"
           className="btn sm panel-head-action"
           onClick={() => onGuide('status')}
         >
-          Guide: status &amp; connect an app
+          {t('Guide: status & connect an app')}
         </button>
       </div>
       <LocalApiGuide
@@ -145,10 +162,9 @@ export function LocalApiPanel({
       />
       <div className="panel-body local-api">
         <p className="setup-note">
-          Use your local models from any app that speaks the OpenAI or Anthropic API, the same way
-          you would with LM Studio or Ollama. The model named in a request loads on first use and
-          replaces the one in memory. These requests are not saved to your archive, and the master
-          prompt is not added to them.
+          {t(
+            'Use your local models from any app that speaks the OpenAI or Anthropic API, the same way you would with LM Studio or Ollama. The model named in a request loads on first use and replaces the one in memory. These requests are not saved to your archive, and the master prompt is not added to them.',
+          )}
         </p>
 
         <label className="check-field">
@@ -157,31 +173,31 @@ export function LocalApiPanel({
             checked={draft.enabled}
             onChange={(event) => onChange({ enabled: event.target.checked })}
           />
-          Serve the local model API at /v1
+          {t('Serve the local model API at /v1')}
         </label>
 
         <div className="local-api-row">
-          <span className="local-api-label">Base URL</span>
+          <span className="local-api-label">{t('Base URL')}</span>
           <code className="local-api-value">{baseUrl}</code>
           <button type="button" className="btn sm ghost" onClick={() => copy('url', baseUrl)}>
-            {copied === 'url' ? 'copied' : 'copy'}
+            {copied === 'url' ? t('copied') : t('copy')}
           </button>
         </div>
 
         {network?.state === 'listening' &&
           network.urls.map((url) => (
             <div className="local-api-row" key={url}>
-              <span className="local-api-label">Network URL</span>
+              <span className="local-api-label">{t('Network URL')}</span>
               <code className="local-api-value">{url}</code>
               <button type="button" className="btn sm ghost" onClick={() => copy(url, url)}>
-                {copied === url ? 'copied' : 'copy'}
+                {copied === url ? t('copied') : t('copy')}
               </button>
             </div>
           ))}
 
         <div className="local-api-row">
           <label className="local-api-label" htmlFor="local-api-model">
-            Model id
+            {t('Model id')}
           </label>
           {models && models.length > 0 ? (
             <select
@@ -192,18 +208,18 @@ export function LocalApiPanel({
               {models.map((candidate) => (
                 <option key={candidate.id} value={candidate.id}>
                   {candidate.id}
-                  {candidate.loaded ? ' · loaded' : ''}
+                  {candidate.loaded ? t(' · loaded') : ''}
                 </option>
               ))}
             </select>
           ) : (
             <span className="local-api-value muted">
               {isLoading
-                ? 'Loading models…'
+                ? t('Loading models…')
                 : error
                   ? error.message
                   : (status?.modelsError ??
-                    'No GGUF models found yet. Download one or add a model directory.')}
+                    t('No GGUF models found yet. Download one or add a model directory.'))}
             </span>
           )}
           <button
@@ -212,13 +228,13 @@ export function LocalApiPanel({
             disabled={!models?.length}
             onClick={() => copy('model', model)}
           >
-            {copied === 'model' ? 'copied' : 'copy'}
+            {copied === 'model' ? t('copied') : t('copy')}
           </button>
         </div>
 
         <div className="generation-form local-api-access">
           <label>
-            <span>API key (optional)</span>
+            <span>{t('API key (optional)')}</span>
             <div className="local-api-key">
               <input
                 type="text"
@@ -229,10 +245,10 @@ export function LocalApiPanel({
                 onChange={(event) => onChange({ apiKey: event.target.value, clearApiKey: false })}
                 placeholder={
                   config?.apiKeySource === 'env'
-                    ? 'Set by THREADSHELF_API_KEY'
+                    ? t('Set by THREADSHELF_API_KEY')
                     : config?.apiKeyConfigured
-                      ? 'A key is configured · type to replace it'
-                      : 'Empty · no key required'
+                      ? t('A key is configured · type to replace it')
+                      : t('Empty · no key required')
                 }
               />
               {config?.apiKeySource !== 'env' && (
@@ -241,7 +257,7 @@ export function LocalApiPanel({
                   className="btn sm"
                   onClick={() => onChange({ apiKey: generateKey(), clearApiKey: false })}
                 >
-                  Generate
+                  {t('Generate')}
                 </button>
               )}
               {draft.apiKey && (
@@ -250,14 +266,18 @@ export function LocalApiPanel({
                   className="btn sm ghost"
                   onClick={() => copy('key', draft.apiKey)}
                 >
-                  {copied === 'key' ? 'copied' : 'copy'}
+                  {copied === 'key' ? t('copied') : t('copy')}
                 </button>
               )}
             </div>
             <small>
               {keyRequired
-                ? 'Requests must send the key as "Authorization: Bearer <key>" or "x-api-key". Copy a new key before saving: it is not shown again.'
-                : 'No key: any program on this computer can use the API, as with LM Studio and Ollama. Set one if a client insists on a key or other devices connect.'}
+                ? t(
+                    'Requests must send the key as "Authorization: Bearer <key>" or "x-api-key". Copy a new key before saving: it is not shown again.',
+                  )
+                : t(
+                    'No key: any program on this computer can use the API, as with LM Studio and Ollama. Set one if a client insists on a key or other devices connect.',
+                  )}
             </small>
           </label>
           {config?.apiKeySource === 'settings' && !draft.apiKey && (
@@ -267,7 +287,7 @@ export function LocalApiPanel({
                 checked={draft.clearApiKey}
                 onChange={(event) => onChange({ clearApiKey: event.target.checked })}
               />
-              Remove the saved key
+              {t('Remove the saved key')}
             </label>
           )}
 
@@ -277,11 +297,11 @@ export function LocalApiPanel({
               checked={draft.networkAccess}
               onChange={(event) => onChange({ networkAccess: event.target.checked })}
             />
-            Serve on the local network
+            {t('Serve on the local network')}
           </label>
           {draft.networkAccess && (
             <label>
-              <span>Network port</span>
+              <span>{t('Network port')}</span>
               <input
                 type="number"
                 min={1}
@@ -291,8 +311,9 @@ export function LocalApiPanel({
                 onChange={(event) => onChange({ networkPort: event.target.value })}
               />
               <small>
-                Other devices connect to this port, which serves only /v1. Your archive and settings
-                stay reachable from this computer only.
+                {t(
+                  'Other devices connect to this port, which serves only /v1. Your archive and settings stay reachable from this computer only.',
+                )}
                 {!keyRequired && ' Without a key, anyone on your network can use your models.'}
               </small>
             </label>
@@ -300,14 +321,14 @@ export function LocalApiPanel({
           {network?.state === 'error' && <div className="banner err">{network.error}</div>}
         </div>
 
-        <div className="local-api-endpoints" aria-label="Endpoints">
+        <div className="local-api-endpoints" aria-label={t('Endpoints')}>
           {ENDPOINTS.map((endpoint) => (
             <code key={endpoint}>{endpoint}</code>
           ))}
         </div>
 
         <div className="local-api-example">
-          <div className="local-api-tabs" role="tablist" aria-label="Example client">
+          <div className="local-api-tabs" role="tablist" aria-label={t('Example client')}>
             {EXAMPLES.map((option) => (
               <button
                 key={option.id}
@@ -324,7 +345,7 @@ export function LocalApiPanel({
           <pre>
             <code>{code}</code>
             <button type="button" className="btn sm ghost" onClick={() => copy('code', code)}>
-              {copied === 'code' ? 'copied' : 'copy'}
+              {t(copied === 'code' ? 'copied' : 'copy')}
             </button>
           </pre>
         </div>

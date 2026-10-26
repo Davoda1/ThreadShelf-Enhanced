@@ -8,17 +8,21 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const fixturesDir = join(__dirname, '..', 'fixtures');
 
 test.describe('Upload + ingest UI flow', () => {
-  test('can stop an in-progress path index request', async ({ appPage }) => {
+  test('can cancel a pending job submission without claiming that an accepted job was cancelled', async ({
+    appPage,
+  }) => {
     let releaseResponse;
     const responseGate = new Promise((resolve) => {
       releaseResponse = resolve;
     });
-    await appPage.route('**/api/ingest-progress', async (route) => {
+    await appPage.route('**/api/import-jobs', async (route) => {
+      if (route.request().method() !== 'POST') return route.continue();
       await responseGate;
       await route
         .fulfill({
-          contentType: 'application/x-ndjson',
-          body: `${JSON.stringify({ status: 'starting', totalFiles: 10, processedFiles: 0 })}\n`,
+          status: 202,
+          contentType: 'application/json',
+          body: JSON.stringify({ job: { id: 'synthetic-pending-submission', state: 'queued' } }),
         })
         .catch(() => {});
     });
@@ -28,7 +32,7 @@ test.describe('Upload + ingest UI flow', () => {
     await appPage.locator('#ingestBtn').click();
     await expect(appPage.locator('#stopIngestBtn')).toBeVisible();
     await appPage.locator('#stopIngestBtn').click();
-    await expect(appPage.locator('#ingestStatus')).toContainText('Indexing stopped');
+    await expect(appPage.locator('#ingestStatus')).toContainText('Transfer stopped');
     releaseResponse();
   });
 

@@ -1,7 +1,8 @@
 import { watch, type FSWatcher } from 'fs';
 import { stat } from 'fs/promises';
 import { basename, join, resolve } from 'path';
-import { ingestFiles, isExportFileName, type IngestResult } from './ingest.js';
+import { isExportFileName, type IngestResult } from './ingest.js';
+import { createFolderImportJob, waitForImportJob, cancelImportJob } from './import-jobs.js';
 
 // Watch-folder mode: keep a collection indexed as export files change (LM
 // Studio rewrites its conversation files as you chat; AI Studio folders grow).
@@ -76,7 +77,22 @@ export const watchFolder = (
   opts: WatchFolderOptions = {},
 ): FolderWatcher => {
   const resolved = resolve(folderPath);
-  const runIngest = opts.ingest ?? ((files: string[]) => ingestFiles(collection, files));
+  let currentJobId: string | undefined;
+  let closing = false;
+  const runIngest =
+    opts.ingest ??
+    (async (files: string[]) => {
+      const accepted = await createFolderImportJob({ collection, folderPath: resolved, files });
+      currentJobId = accepted.id;
+      if (closing) await cancelImportJob(accepted.id);
+      try {
+        const job = await waitForImportJob(accepted.id);
+        if (!job.result) throw new Error(job.error || `Import ${job.state}`);
+        return job.result;
+      } finally {
+        currentJobId = undefined;
+      }
+    });
 
   const batcher = createChangeBatcher({
     debounceMs: opts.debounceMs ?? 2000,
@@ -108,7 +124,9 @@ export const watchFolder = (
 
   return {
     close: async () => {
+      closing = true;
       watcher.close();
+      if (currentJobId) await cancelImportJob(currentJobId);
       await batcher.settle();
     },
   };

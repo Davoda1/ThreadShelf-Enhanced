@@ -5,6 +5,8 @@ import { useUIStore } from '../store';
 import { useCollectionsQuery } from '../queries';
 import { Topbar } from '../components/Topbar';
 import { SettingsView } from '../components/SettingsView';
+import { ImageCacheSettings } from '../components/ImageCacheSettings';
+import { AppearanceSettings } from '../components/AppearanceSettings';
 import { GenerationSettings } from '../components/GenerationSettings';
 
 export function SettingsPage() {
@@ -31,6 +33,8 @@ export function SettingsPage() {
       <Topbar view="settings" activeColl={activeColl} onMenu={() => setSidebarOpen(true)} />
       <div className="main-scroll">
         <div className="view">
+          <AppearanceSettings />
+          <ImageCacheSettings />
           <GenerationSettings />
         </div>
         <SettingsView

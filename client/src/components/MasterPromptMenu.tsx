@@ -1,3 +1,5 @@
+import { useUIStore } from '../store';
+import { t, useI18n } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { useMasterPromptMutation, useMasterPromptsQuery } from '../queries';
@@ -10,6 +12,7 @@ import { toast } from '../toast';
  * model menu.
  */
 export function MasterPromptMenu() {
+  useI18n();
   const { data } = useMasterPromptsQuery();
   const create = useMasterPromptMutation(api.createMasterPrompt);
   const update = useMasterPromptMutation((input: { id: string; name: string; text: string }) =>
@@ -90,12 +93,12 @@ export function MasterPromptMenu() {
   const save = () => {
     const body = text.trim();
     if (!body) {
-      toast.error('A master prompt cannot be empty.');
+      toast.error(t('A master prompt cannot be empty.'));
       return;
     }
     const done = () => {
       setOpen(false);
-      toast.success('Master prompt saved and active for every new message.');
+      toast.success(t('Master prompt saved and active for every new message.'));
     };
     if (editingId) {
       update.mutate(
@@ -119,22 +122,26 @@ export function MasterPromptMenu() {
         data-active={Boolean(active)}
         aria-expanded={open}
         aria-haspopup="dialog"
-        title={active ? `Master prompt: ${active.name}` : 'No master prompt — click to add one'}
+        title={
+          active
+            ? t('Master prompt: {value0}', { value0: active.name })
+            : t('No master prompt — click to add one')
+        }
         onClick={() => {
           if (!open) edit(activeId);
           setOpen((current) => !current);
         }}
       >
-        {active ? active.name : 'System'}
+        {active ? active.name : t('System')}
       </button>
 
       {open && (
-        <div className="master-prompt-popover" role="dialog" aria-label="Master prompt">
+        <div className="master-prompt-popover" role="dialog" aria-label={t('Master prompt')}>
           <div className="master-prompt-tabs">
             <button
               type="button"
               data-active={!activeId}
-              title="Send no master prompt"
+              title={t('Send no master prompt')}
               disabled={saving}
               onClick={() =>
                 activate.mutate('', {
@@ -142,7 +149,7 @@ export function MasterPromptMenu() {
                 })
               }
             >
-              Off
+              {t('Off')}
             </button>
             {prompts.map((prompt) => (
               <button
@@ -164,8 +171,8 @@ export function MasterPromptMenu() {
             <button
               type="button"
               className="master-prompt-new"
-              title="New master prompt"
-              aria-label="New master prompt"
+              title={t('New master prompt')}
+              aria-label={t('New master prompt')}
               onClick={() => edit('')}
             >
               +
@@ -174,23 +181,26 @@ export function MasterPromptMenu() {
 
           <input
             className="master-prompt-name"
-            aria-label="Master prompt name"
-            placeholder="Name (optional)"
+            aria-label={t('Master prompt name')}
+            placeholder={t('Name (optional)')}
             value={name}
             maxLength={60}
             onChange={(event) => setName(event.target.value)}
           />
           <textarea
             id="masterPromptText"
-            aria-label="Master prompt text"
-            placeholder="Sent as a system message with every request…"
+            aria-label={t('Master prompt text')}
+            placeholder={t('Sent as a system message with every request…')}
             rows={5}
             maxLength={20000}
             value={text}
             onChange={(event) => setText(event.target.value)}
           />
           <div className="master-prompt-foot">
-            <span>{text.trim().length.toLocaleString()} chars · saved locally</span>
+            <span>
+              {text.trim().length.toLocaleString(useUIStore.getState().locale)}
+              {t(' chars · saved locally')}
+            </span>
             {editingId && (
               <button
                 type="button"
@@ -203,11 +213,11 @@ export function MasterPromptMenu() {
                   })
                 }
               >
-                Delete
+                {t('Delete')}
               </button>
             )}
             <button type="button" className="btn sm primary" disabled={saving} onClick={save}>
-              {editingId ? 'Save' : 'Add'}
+              {editingId ? t('Save') : t('Add')}
             </button>
           </div>
         </div>
