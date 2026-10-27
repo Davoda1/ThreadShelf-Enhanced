@@ -8,7 +8,7 @@
 
 Import, search, read and continue AI conversations on your own machine. ThreadShelf Enhanced adds richer rendering, broader export support and responsive layouts to [ThreadShelf v1.3.0](https://github.com/ChrystianSchutz/ThreadShelf/tree/v1.3.0), while preserving its API routes, storage identities and light/dark interface.
 
-[Installation](#installation) · [Configuration](#configuration) · [Import support](#import-support-and-known-limits) · [Background jobs](docs/IMPORT-JOBS.md) · [Compatibility](docs/ENHANCED_COMPATIBILITY.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+[Setup video](#how-to-set-up) · [Installation](#installation) · [Configuration](#configuration) · [Import support](#import-support-and-known-limits) · [Background jobs](docs/IMPORT-JOBS.md) · [Compatibility](docs/ENHANCED_COMPATIBILITY.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
 ## Interface
 
@@ -46,6 +46,14 @@ A single coordinator protects web, CLI, watcher and recovery work. Only one inde
 The existing API, stored identities, embedding model and vector dimensions remain compatible. **Upgrade every process sharing a writable store to 1.3.0 together.** Publication metadata changes the internal storage layout: retain a stopped backup, and never open a 1.3.0-written store with an older server. Prior release tags and assets remain available.
 
 See [import jobs and resource limits](docs/IMPORT-JOBS.md), the [changelog](CHANGELOG.md) and [validation record](docs/ENHANCED_VALIDATION.md) for behavior, recovery and test scope.
+
+## How to set up?
+
+Install ThreadShelf Enhanced on Linux: check prerequisites, download the source, run setup, review configuration, verify the installation, and start, stop, and restart the server.
+
+https://github.com/user-attachments/assets/3018cbe2-b819-45ad-8ada-f3c61d5bfb99
+
+[Interactive terminal recording on asciinema](https://asciinema.org/a/1270050) · [Download the MP4](docs/extras/ThreadShelf-Enhanced-How-to-Set-Up-Linux.mp4) · [Download the asciicast](docs/extras/ThreadShelf-Enhanced-How-to-Set-Up-Linux.cast)
 
 ## Installation
 
