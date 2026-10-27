@@ -61,3 +61,9 @@ Conversation totals, activity over time, model and provider distributions, and t
 This recorded workflow uses simulated import results, synthetic exports and
 generic paths. It illustrates the interactive, combined and flags-only flows;
 current defaults and labels may differ from the recording.
+
+## Linux setup demonstration
+
+Install ThreadShelf Enhanced on Linux, from checking prerequisites and running setup through verifying, starting, stopping, and restarting the server.
+
+[Watch on asciinema](https://asciinema.org/a/1270050) · [Watch the MP4](ThreadShelf-Enhanced-How-to-Set-Up-Linux.mp4) · [Download the asciicast](ThreadShelf-Enhanced-How-to-Set-Up-Linux.cast)
