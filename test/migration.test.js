@@ -221,6 +221,37 @@ test('migration audit rejects an image cache directed into OLD without changing 
   assert.deepEqual(await readdir(target), ['.env'], 'audit must not create a cache or report');
 });
 
+test('migration audit resolves aliased parents of paths that do not exist yet', async (t) => {
+  const root = await temp(t);
+  const source = join(root, 'old');
+  const target = join(root, 'new');
+  const alias = join(root, 'alias');
+  await mkdir(join(source, '.lancedb'), { recursive: true });
+  await mkdir(join(target, '.threadshelf'), { recursive: true });
+  // A junction works without Windows symlink privileges; on POSIX this creates
+  // an ordinary directory symlink. Missing children still need canonical parents.
+  await symlink(source, alias, 'junction');
+  const environment = `THREADSHELF_IMAGE_CACHE_PATH=${join(alias, 'missing', 'cache')}\n`;
+  const vault = JSON.stringify({ vaultPath: join(alias, 'missing', 'notes') });
+  await writeFile(join(target, '.env'), environment);
+  await writeFile(join(target, '.threadshelf', 'obsidian.json'), vault);
+  const audit = run(process.execPath, [
+    join(scripts, 'migrate-installation.mjs'),
+    '--audit-only',
+    '--source',
+    source,
+    '--target',
+    target,
+  ]);
+  assert.equal(audit.status, 2, audit.stderr || audit.stdout);
+  assert.match(audit.stdout, /old-directory-path: \.env:THREADSHELF_IMAGE_CACHE_PATH/);
+  assert.match(audit.stdout, /old-directory-path: obsidian.vaultPath/);
+  assert.equal(await readFile(join(target, '.env'), 'utf8'), environment);
+  assert.equal(await readFile(join(target, '.threadshelf', 'obsidian.json'), 'utf8'), vault);
+  assert.deepEqual(await readdir(source), ['.lancedb']);
+  assert.deepEqual(await readdir(join(target, '.threadshelf')), ['obsidian.json']);
+});
+
 test('migration refuses a custom database layout and nested aliases before copying', async (t) => {
   const root = await temp(t),
     source = join(root, 'old'),

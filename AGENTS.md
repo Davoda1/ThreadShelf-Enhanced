@@ -317,6 +317,11 @@ locale or time zone only when that behavior is what the test is meant to verify.
   `src/server.ts` must also set `COLLECTIONS_PATH` (the manual-collections
   registry defaults to `.collections.json` in the cwd and would otherwise be
   shared across servers and polluted with test collections).
+- Stop every fixture server and IPC child before removing a shared temporary
+  database. Register one cleanup hook that attempts all shutdowns; separate
+  `after` hooks run in registration order and a rejection skips later hooks.
+  Close in-process publication handles before removal on Windows, and compare
+  filesystem paths in canonical form (Windows temporary paths may use short names).
 - `test/shared/helpers.js` builds the "mixed folder" from `test/fixtures/*.json`
   (one subfolder per provider). E2E and Playwright import that helper, so add new
   provider fixtures there once.

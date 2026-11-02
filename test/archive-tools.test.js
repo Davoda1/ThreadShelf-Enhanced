@@ -7,11 +7,13 @@ const root = await mkdtemp(join(tmpdir(), 'archive-tool-test-'));
 process.env.LANCEDB_PATH = join(root, 'db');
 process.env.COLLECTIONS_PATH = join(root, 'collections.json');
 const { replaceThreadsForFile } = await import('../src/store.js');
+const { closeStoragePublication } = await import('../src/storage-publication.js');
 const { addManualCollection } = await import('../src/services/collections.js');
 const { callArchiveTool, archiveSourceHref } = await import('../src/generation/archive-tools.js');
 const { generateKnowledgeChat } = await import('../src/generation/obsidian-agent.js');
 const { setGenerationProviderForTests } = await import('../src/generation/registry.js');
 after(async () => {
+  closeStoragePublication();
   await rm(root, { recursive: true, force: true });
 });
 it('reads only exact stored references, excludes reasoning and pages a long turn without losing its tail', async () => {

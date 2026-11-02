@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { once } from 'node:events';
 import express from 'express';
@@ -78,7 +78,7 @@ describe('Enhanced connected note scopes', () => {
     const other = join(ctx.temporary, 'queued-selection');
     await mkdir(other);
     await Promise.all([saveVaultConfig({ vaultPath: other }), setVaultWritePermission(true)]);
-    assert.equal((await getVaultConfig()).vaultPath, other);
+    assert.equal((await getVaultConfig()).vaultPath, await realpath(other));
     assert.equal((await getVaultConfig()).allowWrites, true);
     assert.equal((await getVaultConfig(first.id)).allowWrites, false);
   });

@@ -14,7 +14,7 @@ import {
 } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { resolve, join, relative, isAbsolute, sep, delimiter } from 'node:path';
+import { resolve, join, relative, isAbsolute, sep, delimiter, dirname, basename } from 'node:path';
 import { parseEnv } from 'node:util';
 let interrupted = false;
 const onSignal = () => {
@@ -60,6 +60,24 @@ target = resolve(target);
 const within = (root, path) => {
   const rel = relative(root, path);
   return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+};
+// Configured model/cache/vault directories may not exist yet. Resolve their
+// nearest existing parent so Windows short names and directory aliases still
+// identify dependencies on OLD. Do not create anything during an audit.
+const canonicalPath = async (path) => {
+  const missing = [];
+  let parent = resolve(path);
+  for (;;) {
+    try {
+      return resolve(await realpath(parent), ...missing);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      const next = dirname(parent);
+      if (next === parent) throw error;
+      missing.unshift(basename(parent));
+      parent = next;
+    }
+  }
 };
 const exists = async (p) => {
   try {
@@ -131,8 +149,11 @@ if (!auditOnly && selected.includes('.env')) {
     );
   for (const [key, expected] of [['LANCEDB_PATH', '.lancedb']]) {
     if (!config[key]) continue;
-    const value = resolve(target, config[key]);
-    if (value !== resolve(target, expected) && value !== resolve(source, expected))
+    const value = await canonicalPath(resolve(target, config[key]));
+    if (
+      relative(value, await canonicalPath(resolve(target, expected))) !== '' &&
+      relative(value, await canonicalPath(resolve(source, expected))) !== ''
+    )
       throw Error(
         `Custom ${key} is outside the supported installation layout. No files were copied; preserve the separately configured data root before continuing.`,
       );
@@ -172,22 +193,16 @@ const auditDependencies = async () => {
   const recordPath = async (value, location) => {
     if (typeof value !== 'string' || !value.trim()) return;
     const path = resolve(target, value.trim());
-    let canonical = path;
-    try {
-      canonical = await realpath(path);
-    } catch {
-      /* Missing directories may be created later. */
-    }
+    const canonical = await canonicalPath(path);
     if (within(source, path) || within(source, canonical))
       issues.push({ kind: 'old-directory-path', location });
-    else if (!within(target, path) || !within(target, canonical))
-      external.push({ kind: 'external-resource', location });
+    else if (!within(target, canonical)) external.push({ kind: 'external-resource', location });
   };
   const visit = async (path, name) => {
     checkInterrupted();
     const info = await lstat(path);
     if (info.isSymbolicLink()) {
-      const direct = resolve(path, '..', await readlink(path));
+      const direct = await canonicalPath(resolve(path, '..', await readlink(path)));
       if (within(source, direct)) issues.push({ kind: 'old-directory-symlink', location: name });
       else {
         try {
@@ -239,7 +254,9 @@ const auditDependencies = async () => {
     if ((env.NODE_OPTIONS || '').includes(source))
       issues.push({ kind: 'old-directory-node-options', location: '.env:NODE_OPTIONS' });
   }
-  const generation = resolve(target, env.GENERATION_CONFIG_PATH || '.threadshelf/generation.json');
+  const generation = await canonicalPath(
+    resolve(target, env.GENERATION_CONFIG_PATH || '.threadshelf/generation.json'),
+  );
   if (within(target, generation) && (await exists(generation))) {
     const config = JSON.parse(await readFile(generation, 'utf8'));
     for (const key of ['executablePath', 'downloadDirectory'])
@@ -253,7 +270,9 @@ const auditDependencies = async () => {
       await recordPath(projector, `generation.llamaCpp.projectorPaths[${index}].projector`);
     }
   }
-  const vaultConfig = resolve(target, env.OBSIDIAN_CONFIG_PATH || '.threadshelf/obsidian.json');
+  const vaultConfig = await canonicalPath(
+    resolve(target, env.OBSIDIAN_CONFIG_PATH || '.threadshelf/obsidian.json'),
+  );
   if (within(target, vaultConfig) && (await exists(vaultConfig))) {
     const config = JSON.parse(await readFile(vaultConfig, 'utf8'));
     await recordPath(config.vaultPath, 'obsidian.vaultPath');

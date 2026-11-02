@@ -135,7 +135,9 @@ jobs:
 
       - name: HTTP API and MCP integration tests
         timeout-minutes: 8
-        run: npm run test:e2e
+        # TAP prints failure details immediately, even if a leaked handle later
+        # prevents the runner from reaching its final summary.
+        run: npm run test:e2e -- --test-reporter=tap
 
       - name: Bounded-memory import storage stress (4096 small rows)
         timeout-minutes: 10

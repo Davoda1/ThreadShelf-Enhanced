@@ -17,6 +17,8 @@
   localized controls, speaker icons, search-row sizing and stable playback layout.
 - Add `scripts/migrate-installation.mjs` with required explicit paths, verified
   copying, rollback on failure and a read-only old-directory dependency audit.
+  The audit resolves Windows short names and directory aliases even when a
+  configured cache, model or vault folder has not been created yet.
 - Update local setup to Node 26.13.0 LTS and npm 12.2.1; apply dependency fixes,
   bounded provider transport and exact browser-origin validation.
 - Refresh README screenshots using isolated, synthetic demonstration content.

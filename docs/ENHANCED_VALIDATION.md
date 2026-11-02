@@ -15,12 +15,12 @@ commit/tag status. The [1.3.0 record](ENHANCED_VALIDATION_1.3.0.md) is historica
 | Repository hygiene | 600 public candidates checked; no populated environment, data stores, downloaded runtimes or credentials included |
 | Lint and server/client TypeScript | Passed |
 | Production client and compiled server builds | Passed |
-| Unit/regression suite | 1,031 passed; three platform-specific skips; 1,034 total |
+| Unit/regression suite | 1,032 passed; three platform-specific skips; 1,035 total |
 | HTTP API and MCP | 59 passed |
 | Chromium browser regressions | 150 passed |
 | Source-packaging regressions | 17 passed |
 | Compiled-server smoke | Unrelated-directory startup, UI, collection/config/speech endpoints and shutdown passed; speech starts disabled |
-| Migration | Synthetic stopped copies, source preservation, refusal of existing data/custom layouts, dependency audits and explicit-path requirements passed |
+| Migration | Synthetic stopped copies, source preservation, refusal of existing data/custom layouts, dependency audits (including aliased parents of missing paths) and explicit-path requirements passed |
 | Documentation screenshots | Ten fresh light/dark images from 24 synthetic conversations; captured with actual storage/search/UI routes |
 
 The local runtime is Node 26.13.0 LTS with npm 12.2.1. Local browser checks use
