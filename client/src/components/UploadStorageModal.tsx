@@ -1,3 +1,4 @@
+import { NativeSelect } from './NativeSelect';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -146,7 +147,7 @@ export function UploadStorageModal({ onClose }: { onClose: () => void }) {
         <div className="modal-body upload-storage-body">
           <div className="upload-storage-toolbar">
             <label htmlFor="upload-storage-collection">{t('Collection')}</label>
-            <select
+            <NativeSelect
               id="upload-storage-collection"
               className="btn sm"
               value={collection}
@@ -165,7 +166,7 @@ export function UploadStorageModal({ onClose }: { onClose: () => void }) {
                   {name}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
             <button
               className="btn sm"
               disabled={busy || files.isFetching || collections.isFetching}

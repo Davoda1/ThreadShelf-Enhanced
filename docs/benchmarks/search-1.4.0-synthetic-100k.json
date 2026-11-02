@@ -1,0 +1,47 @@
+{
+  "node": "v26.13.0",
+  "platform": "linux-x64",
+  "rows": 100000,
+  "dimensions": 384,
+  "casesPassed": 6,
+  "cacheMiB": 63,
+  "peakRssMiB": 911,
+  "measurements": [
+    {
+      "name": "build synthetic 384-dimensional LanceDB",
+      "milliseconds": 2648,
+      "rssMiB": 380
+    },
+    {
+      "name": "complete semantic with rare model after rank 200",
+      "milliseconds": 1738,
+      "rssMiB": 538
+    },
+    {
+      "name": "complete exact scan and top-50 ranking",
+      "milliseconds": 1631,
+      "rssMiB": 545
+    },
+    {
+      "name": "cold hybrid: cosine + lexical cache build",
+      "milliseconds": 4237,
+      "rssMiB": 581
+    },
+    {
+      "name": "warm hybrid: cosine + lexical lookup",
+      "milliseconds": 1744,
+      "rssMiB": 616
+    },
+    {
+      "name": "warm accent-folded Hungarian lexical lookup",
+      "milliseconds": 5,
+      "rssMiB": 616
+    },
+    {
+      "name": "warm title lexical lookup",
+      "milliseconds": 7,
+      "rssMiB": 616
+    }
+  ],
+  "scope": "Synthetic correctness/scaling only. Query vectors are supplied; embedding inference excluded. Not a real-archive relevance benchmark or an upstream comparison."
+}

@@ -1,5 +1,5 @@
 import { Router, type Response } from 'express';
-import { requireLoopback } from './loopback.js';
+import { requireAiManagement } from './feature-access.js';
 import { abortOnDisconnect, isAbortError } from './stream-abort.js';
 import { inspectHardware, judgeFit } from '../generation/hardware.js';
 import {
@@ -31,7 +31,9 @@ const fail = (res: Response, error: unknown): void => {
     return;
   }
   console.error('[/api/generation/catalog]', error);
-  res.status(502).json({ error: error instanceof Error ? error.message : 'Catalog request failed' });
+  res
+    .status(502)
+    .json({ error: error instanceof Error ? error.message : 'Catalog request failed' });
 };
 
 /** NDJSON, matching the ingest and chat streams the client already consumes. */
@@ -45,7 +47,7 @@ const openStream = (res: Response): ((event: unknown) => void) => {
   };
 };
 
-router.get('/api/generation/hardware', requireLoopback, async (_req, res) => {
+router.get('/api/generation/hardware', requireAiManagement, async (_req, res) => {
   try {
     res.json(await inspectHardware());
   } catch (error) {
@@ -53,7 +55,7 @@ router.get('/api/generation/hardware', requireLoopback, async (_req, res) => {
   }
 });
 
-router.get('/api/generation/catalog/search', requireLoopback, async (req, res) => {
+router.get('/api/generation/catalog/search', requireAiManagement, async (req, res) => {
   try {
     const sort = String(req.query.sort || 'downloads') as CatalogSort;
     const [result, hardware] = await Promise.all([
@@ -71,7 +73,7 @@ router.get('/api/generation/catalog/search', requireLoopback, async (req, res) =
   }
 });
 
-router.get('/api/generation/catalog/model', requireLoopback, async (req, res) => {
+router.get('/api/generation/catalog/model', requireAiManagement, async (req, res) => {
   try {
     const id = typeof req.query.id === 'string' ? req.query.id : '';
     const [detail, hardware] = await Promise.all([getCatalogModel(id), inspectHardware()]);
@@ -92,7 +94,7 @@ router.get('/api/generation/catalog/model', requireLoopback, async (req, res) =>
   }
 });
 
-router.post('/api/generation/catalog/download', requireLoopback, async (req, res) => {
+router.post('/api/generation/catalog/download', requireAiManagement, async (req, res) => {
   const controller = abortOnDisconnect(req, res, 'Download cancelled');
   try {
     const plan = await planModelDownload({
@@ -124,7 +126,7 @@ router.post('/api/generation/catalog/download', requireLoopback, async (req, res
   }
 });
 
-router.get('/api/generation/setup/plan', requireLoopback, async (req, res) => {
+router.get('/api/generation/setup/plan', requireAiManagement, async (req, res) => {
   try {
     const variant = String(req.query.variant || '') as LlamaVariant;
     res.json(
@@ -139,7 +141,7 @@ router.get('/api/generation/setup/plan', requireLoopback, async (req, res) => {
   }
 });
 
-router.post('/api/generation/setup/run', requireLoopback, async (req, res) => {
+router.post('/api/generation/setup/run', requireAiManagement, async (req, res) => {
   const controller = abortOnDisconnect(req, res, 'Setup cancelled');
   try {
     // The confirmation flag is the recorded consent for this download.

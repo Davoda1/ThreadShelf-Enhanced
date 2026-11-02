@@ -3,13 +3,13 @@ import { useState, useCallback } from 'react';
 import { Icons } from '../icons';
 import { copyText } from '../utils';
 
-const MCP_COMMAND = 'npm run mcp';
+const MCP_COMMAND = 'npm run mcp --silent';
 
 const MCP_CONFIG = `{
   "mcpServers": {
     "threadshelf": {
       "command": "npm",
-      "args": ["run", "mcp"],
+      "args": ["run", "mcp", "--silent"],
       "cwd": "/path/to/threadshelf"
     }
   }
@@ -47,13 +47,34 @@ export function McpView() {
 
       <div className="panel">
         <div className="panel-head">
+          <h3>{t('Markdown notes')}</h3>
+        </div>
+        <div className="panel-body">
+          <p>
+            {t(
+              'Connect a vault in Settings → Server → Markdown notes. MCP uses the selected vault.',
+            )}
+          </p>
+          <p>
+            <code>obsidian_search</code> · <code>obsidian_read</code> · <code>obsidian_create</code>{' '}
+            · <code>obsidian_edit</code>
+          </p>
+          <p>
+            {t(
+              'Note writes are disabled by default. Enable vault writes explicitly before using create or edit. MCP cannot delete notes.',
+            )}
+          </p>
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-head">
           <h3>{t('Start the server')}</h3>
           <span className="sub">{t('run from project root')}</span>
         </div>
-        <div className="panel-body">
+        <div className="panel-body mcp-code-panel">
           <pre
             style={{
-              position: 'relative',
               fontFamily: 'var(--font-mono)',
               fontSize: 12.5,
               background: 'var(--bg-2)',
@@ -64,14 +85,22 @@ export function McpView() {
             }}
           >
             {MCP_COMMAND}
-            <button
-              className="btn sm ghost"
-              style={{ position: 'absolute', top: 6, right: 6 }}
-              onClick={() => copy('cmd', MCP_COMMAND)}
-            >
-              {t(copied === 'cmd' ? 'copied' : 'copy')}
-            </button>
           </pre>
+          <button
+            className="btn sm ghost"
+            style={{ alignSelf: 'flex-end' }}
+            onClick={() => copy('cmd', MCP_COMMAND)}
+          >
+            <span className="stable-label">
+              <span>{t(copied === 'cmd' ? 'copied' : 'copy')}</span>
+              <span className="stable-label-size" aria-hidden="true">
+                {t('copy')}
+              </span>
+              <span className="stable-label-size" aria-hidden="true">
+                {t('copied')}
+              </span>
+            </span>
+          </button>
         </div>
       </div>
 
@@ -80,10 +109,9 @@ export function McpView() {
           <h3>{t('Claude Desktop config')}</h3>
           <span className="sub">{t('Settings → MCP → Edit config')}</span>
         </div>
-        <div className="panel-body">
+        <div className="panel-body mcp-code-panel">
           <pre
             style={{
-              position: 'relative',
               fontFamily: 'var(--font-mono)',
               fontSize: 12,
               background: 'var(--bg-2)',
@@ -94,14 +122,22 @@ export function McpView() {
             }}
           >
             {MCP_CONFIG}
-            <button
-              className="btn sm ghost"
-              style={{ position: 'absolute', top: 6, right: 6 }}
-              onClick={() => copy('cfg', MCP_CONFIG)}
-            >
-              {t(copied === 'cfg' ? 'copied' : 'copy')}
-            </button>
           </pre>
+          <button
+            className="btn sm ghost"
+            style={{ alignSelf: 'flex-end' }}
+            onClick={() => copy('cfg', MCP_CONFIG)}
+          >
+            <span className="stable-label">
+              <span>{t(copied === 'cfg' ? 'copied' : 'copy')}</span>
+              <span className="stable-label-size" aria-hidden="true">
+                {t('copy')}
+              </span>
+              <span className="stable-label-size" aria-hidden="true">
+                {t('copied')}
+              </span>
+            </span>
+          </button>
         </div>
       </div>
     </div>

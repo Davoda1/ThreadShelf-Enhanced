@@ -1,0 +1,673 @@
+/* Enhanced surfaces around the shared Reader speech controls. */
+.tts-settings-shell,
+.tts-pill {
+  --text: var(--text-0);
+  --muted: var(--text-2);
+  --border: var(--border-0);
+  --input: var(--bg-0);
+  --surface: var(--bg-1);
+  --focus: var(--accent);
+  --accent-text: var(--accent);
+  font-family: var(--font-sans);
+}
+.tts-settings-shell {
+  min-width: 0;
+  line-height: 1.55;
+}
+.tts-settings-shell * {
+  box-sizing: border-box;
+}
+.tts-settings-shell .tts-settings {
+  height: auto;
+  min-height: 0;
+}
+.tts-settings-shell .tts-settings-heading {
+  display: none;
+}
+.tts-settings-shell .tts-subpanels {
+  overflow: visible;
+  padding: 12px 0;
+}
+.tts-settings-shell .tts-subtabs {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 5px;
+  border: 1px solid var(--border-0);
+  border-radius: var(--r-lg);
+  background: var(--bg-0);
+}
+.tts-settings-shell button {
+  font: inherit;
+  cursor: pointer;
+}
+.tts-settings-shell .tts-subtabs button,
+.tts-settings-shell .secondary,
+.tts-settings-shell .icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  color: var(--text-1);
+  background: linear-gradient(180deg, var(--bg-3), var(--bg-1));
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0/0.05),
+    0 2px 0 var(--bg-0);
+}
+.tts-settings-shell .tts-subtabs button {
+  font-size: var(--fs-meta);
+  min-width: 0;
+  padding: 8px 5px;
+}
+.tts-settings-shell .tts-subtabs button[aria-selected='true'] {
+  color: var(--text-0);
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+  box-shadow:
+    inset 0 -2px 0 var(--accent),
+    0 0 12px var(--accent-soft);
+}
+.tts-settings-shell :is(button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.tts-settings-shell button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.tts-settings-shell .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.tts-settings-shell .field > label {
+  color: var(--text-1);
+  font-size: 13px;
+}
+.tts-settings-shell .field-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.tts-settings-shell .select-wrap {
+  position: relative;
+  display: block;
+}
+.tts-settings-shell .select-wrap > svg {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+.tts-settings-shell :is(input:not([type='checkbox'], [type='range']), select, textarea) {
+  width: 100%;
+  min-width: 0;
+  min-height: 37px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  padding: 8px 11px;
+  color: var(--text-0);
+  background: var(--bg-0);
+  font: inherit;
+  box-shadow: inset 0 2px 5px oklch(0 0 0/0.12);
+}
+.tts-settings-shell select {
+  appearance: none;
+  padding-right: 30px;
+}
+.tts-settings-shell .fine,
+.tts-help {
+  color: var(--text-2);
+  font-size: var(--fs-meta);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.tts-settings-shell .tts-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 65px;
+  border-bottom: 1px solid var(--border-0);
+}
+.tts-settings-shell .welcome-video-copy {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.tts-settings-shell .welcome-video-copy .fine {
+  font-size: var(--fs-meta);
+}
+.tts-settings-shell .wave-background-switch-wrap {
+  position: relative;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 22px;
+}
+.tts-settings-shell .wave-background-switch {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.tts-settings-shell .wave-background-switch-track {
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--border-2);
+  border-radius: 20px;
+  background: var(--bg-0);
+  box-shadow: inset 0 2px 4px oklch(0 0 0/0.25);
+}
+.tts-settings-shell .wave-background-switch-thumb {
+  display: block;
+  width: 16px;
+  height: 16px;
+  margin: 2px;
+  border-radius: 50%;
+  background: linear-gradient(var(--text-1), var(--text-2));
+  box-shadow: 0 2px 3px oklch(0 0 0/0.3);
+}
+.tts-settings-shell .wave-background-switch:checked + .wave-background-switch-track {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  box-shadow:
+    0 0 10px var(--accent-soft),
+    inset 0 1px 2px oklch(0 0 0/0.2);
+}
+.tts-settings-shell
+  .wave-background-switch:checked
+  + .wave-background-switch-track
+  .wave-background-switch-thumb {
+  transform: translateX(16px);
+  background: var(--accent);
+}
+.tts-settings-shell .wave-background-switch:focus-visible + .wave-background-switch-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.tts-settings-shell .button-row,
+.tts-settings-shell .manager-toolbar,
+.tts-settings-shell .manager-pagination,
+.tts-install-actions,
+.tts-save-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.tts-save-row {
+  padding: 14px 0;
+  border-top: 1px solid var(--border-0);
+}
+.tts-save-row > .btn {
+  min-width: 190px;
+}
+.tts-settings-shell .tts-test-controls .icon-button {
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  padding: 7px;
+}
+.tts-settings-shell .tts-test-toolbar > .fine,
+.tts-settings-shell .tts-test-meter output,
+.tts-settings-shell .tts-test-seek output,
+.tts-settings-shell .tts-memory-label,
+.tts-settings-shell .tts-cache-entry small {
+  font-size: var(--fs-meta);
+}
+.tts-settings-shell .tts-test-controls > [data-tts-action='test'] {
+  min-width: 110px;
+}
+.tts-settings-shell .tts-test-meter output {
+  min-width: 60px;
+}
+@media (max-width: 450px) {
+  .tts-settings-shell .tts-test-controls {
+    flex-wrap: wrap;
+  }
+  .tts-settings-shell .tts-test-meter {
+    flex: 1 0 100%;
+    min-width: 0;
+    margin-left: 0;
+  }
+}
+.tts-settings-shell .manager-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.tts-settings-shell .manager-stats > div {
+  background: var(--bg-0);
+  border: 1px solid var(--border-0);
+  border-radius: var(--r-md);
+}
+.tts-settings-shell .manager-dialog,
+.tts-install-review {
+  padding: 18px;
+  border: 1px solid var(--accent-border);
+  border-radius: var(--r-lg);
+  background: var(--bg-0);
+}
+.tts-settings-shell .danger {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border: 1px solid var(--danger);
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+}
+.tts-settings-shell .inline-error,
+.tts-error {
+  color: var(--danger);
+}
+.tts-settings-shell .check-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tts-settings-shell input[type='checkbox'] {
+  accent-color: var(--accent);
+}
+.tts-assets {
+  padding: 24px 0 0;
+  border-top: 1px solid var(--border-0);
+}
+.tts-assets > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tts-assets h3 {
+  margin: 0;
+}
+.tts-assets p {
+  font-size: 13px;
+  color: var(--text-2);
+}
+.tts-engine-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.tts-engine-card {
+  padding: 16px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-lg);
+  background: linear-gradient(var(--bg-2), var(--bg-1));
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0/0.05),
+    0 3px 0 var(--bg-0);
+}
+.tts-engine-card > label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.tts-engine-card strong,
+.tts-engine-card small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.tts-engine-card small {
+  font-size: var(--fs-meta);
+  color: var(--text-2);
+  margin-top: 4px;
+}
+.tts-engine-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 15px;
+  min-height: 32px;
+}
+.tts-status-chip {
+  font-size: var(--fs-meta);
+  border: 1px solid var(--border-1);
+  border-radius: 999px;
+  padding: 3px 9px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.tts-status-chip[data-state='ready'] {
+  color: var(--success);
+  border-color: var(--success);
+  background: var(--success-soft);
+}
+.tts-status-chip[data-state='local'] {
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+.tts-install-review dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.tts-install-review dt {
+  color: var(--text-2);
+  font-size: var(--fs-meta);
+}
+.tts-install-review dd {
+  margin: 5px 0;
+  font-variant-numeric: tabular-nums;
+}
+.tts-install-review ul {
+  padding-left: 20px;
+  max-height: 200px;
+  overflow: auto;
+}
+.tts-install-review li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--fs-meta);
+  overflow-wrap: anywhere;
+}
+.tts-install-review li > span:last-child {
+  flex-shrink: 0;
+}
+.tts-install-progress {
+  display: grid;
+  gap: 10px;
+  padding: 16px 0;
+}
+.tts-install-progress progress {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.tts-install-progress[data-state='ready'] {
+  color: var(--success);
+}
+.tts-install-progress[data-state='failed'] {
+  color: var(--danger);
+}
+.tts-install-progress[data-state='cancelled'] {
+  color: var(--warning);
+}
+.tts-install-progress > .btn {
+  justify-self: start;
+  min-width: 150px;
+}
+.tts-read-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  flex: 0 0 32px;
+}
+.tts-read-button[aria-pressed='true'] {
+  color: var(--accent);
+  text-shadow: 0 0 10px var(--accent-soft);
+}
+.tts-pill {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  width: min(760px, calc(100% - 32px));
+  max-width: calc(100% - 32px);
+  border-radius: var(--r-xl);
+  font-size: var(--fs-meta);
+  background: var(--bg-2) !important;
+  border-color: var(--accent-border) !important;
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0/0.09),
+    0 5px 0 var(--bg-0),
+    0 0 20px var(--accent-soft) !important;
+}
+.tts-pill button {
+  min-height: 36px;
+}
+.tts-pill button[data-tts-control='play'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 0 12px var(--accent-soft);
+}
+.tts-pill :is(.tts-pill-label, .tts-pill-status, .tts-pill-time, .tts-pill-rate select) {
+  font-size: var(--fs-meta);
+}
+.tts-pill-label {
+  font-weight: 600;
+}
+.tts-pill-caption {
+  align-items: flex-start;
+}
+.tts-pill-label,
+.tts-pill-status {
+  min-width: 0;
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+.tts-pill-time {
+  min-width: 98px;
+  text-align: right;
+}
+.tts-pill-status {
+  min-height: 16px;
+}
+.tts-pill-rate select {
+  width: 58px;
+}
+.tts-pill button[data-tts-control='pin'][aria-pressed='true'] {
+  color: var(--accent);
+}
+.main.tts-player-visible
+  :is(.thread-inner, .chat-messages, .chat-scroll, .thread-body, .chat-body) {
+  scroll-padding-bottom: max(135px, var(--tts-player-space, 0px));
+  padding-bottom: max(135px, var(--tts-player-space, 0px));
+}
+@media (max-width: 720px) {
+  .tts-settings-shell .field-row,
+  .tts-engine-grid,
+  .tts-settings-shell .tts-toggle-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tts-settings-shell .tts-subtabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .tts-pill {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+    gap: 8px;
+    padding: 12px;
+    width: calc(100% - 24px);
+  }
+  .tts-pill-main {
+    grid-row: 1;
+    grid-column: 1/-1;
+  }
+  .tts-pill-controls {
+    grid-row: 2;
+  }
+  .tts-pill-rate,
+  .tts-pill-volume {
+    grid-row: 2;
+    justify-self: start;
+  }
+  .tts-pill [data-tts-control='pin'],
+  .tts-pill [data-tts-control='settings'],
+  .tts-pill [data-tts-control='close'] {
+    grid-row: 2;
+  }
+  .tts-pill .tts-pill-time,
+  .tts-pill .tts-pill-label {
+    font-size: var(--fs-meta);
+  }
+  .tts-pill .tts-volume-inline {
+    width: 50px;
+  }
+  .tts-pill button {
+    min-width: 28px;
+    width: 28px;
+  }
+  .main.tts-player-visible
+    :is(.thread-inner, .chat-messages, .chat-scroll, .thread-body, .chat-body) {
+    scroll-padding-bottom: max(180px, var(--tts-player-space, 0px));
+    padding-bottom: max(180px, var(--tts-player-space, 0px));
+  }
+}
+
+/* The seek slider and optional controls keep their geometry across transport states. */
+.main .tts-pill input[type='range'] {
+  appearance: none;
+  padding: 0 !important;
+  border: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  height: 18px;
+  --tts-range-color: var(--accent);
+  --tts-range-track: var(--border-1);
+}
+.main .tts-player-visible {
+  position: relative;
+}
+.main.tts-player-visible .chat-conversation {
+  padding-bottom: max(145px, var(--tts-player-space, 0px));
+  scroll-padding-bottom: max(145px, var(--tts-player-space, 0px));
+}
+.tts-turn-actions:has(> .tts-read-button) {
+  display: flex;
+  justify-content: flex-end;
+  margin: 5px 0;
+}
+.tts-turn-actions:empty {
+  display: none;
+}
+@media (max-width: 720px) {
+  .tts-pill {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .tts-pill-main {
+    flex: 1 0 100%;
+    order: 0;
+  }
+  .tts-pill-controls {
+    order: 1;
+  }
+  .tts-pill-rate {
+    order: 2;
+  }
+  .tts-pill-volume {
+    order: 3;
+  }
+  .tts-pill [data-tts-control='pin'] {
+    order: 4;
+    margin-left: auto;
+  }
+  .tts-pill [data-tts-control='settings'] {
+    order: 5;
+  }
+  .tts-pill [data-tts-control='close'] {
+    order: 6;
+    margin-left: auto;
+  }
+  .main.tts-player-visible .chat-conversation {
+    padding-bottom: max(190px, var(--tts-player-space, 0px));
+    scroll-padding-bottom: max(190px, var(--tts-player-space, 0px));
+  }
+}
+
+.tts-network-panel {
+  display: grid;
+  gap: 14px;
+  max-width: 760px;
+}
+.tts-network-panel > h3 {
+  margin: 0;
+}
+.tts-network-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.tts-network-fields > label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.tts-network-stream {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+@media (max-width: 620px) {
+  .tts-network-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.tts-assets > .tts-install-actions > .btn.primary {
+  width: 290px;
+  max-width: 100%;
+  min-height: 40px;
+  justify-content: center;
+}
+.tts-install-review .tts-install-actions > .btn {
+  min-width: 180px;
+  justify-content: center;
+}
+
+.tts-save-row > .btn.primary,
+.tts-assets > .tts-install-actions > .btn.primary {
+  width: 290px;
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+  min-height: 52px;
+  justify-content: center;
+  white-space: normal;
+  line-height: 1.3;
+  flex: 0 0 auto;
+}
+.tts-read-button > svg {
+  flex-shrink: 0;
+}
+.tts-settings-shell .native-select {
+  min-height: 37px;
+  padding: 8px 30px 8px 11px;
+  font: inherit;
+  line-height: 1.4;
+}
+.tts-settings-shell .native-select > select {
+  min-height: 0;
+  padding: 0;
+}
+/* Reader's accessible helper must remain available in the server stylesheet too. */
+.tts-settings .sr-only,
+.tts-pill .sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.tts-network-panel .tts-install-actions > .btn.primary {
+  width: 220px;
+  max-width: 100%;
+  height: auto;
+  min-height: 52px;
+  justify-content: center;
+  white-space: normal;
+}

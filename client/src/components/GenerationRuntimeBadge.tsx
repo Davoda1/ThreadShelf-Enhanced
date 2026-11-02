@@ -6,8 +6,10 @@ import { toast } from '../toast';
 
 const shortModel = (value?: string): string => {
   if (!value) return '';
-  const parts = value.split(/[\\/]/);
-  return parts[parts.length - 1] || value;
+  if (/^[a-z]:[\\/]/i.test(value) || value.startsWith('/') || value.includes('\\')) {
+    return value.replace(/\\/g, '/').split('/').slice(-1)[0] || value;
+  }
+  return value;
 };
 
 export function GenerationRuntimeBadge({ detailed = false }: { readonly detailed?: boolean }) {

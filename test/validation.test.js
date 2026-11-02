@@ -261,6 +261,13 @@ describe('validateTurn / validateTurns', () => {
     assert.strictEqual(validateTurns(turns), turns);
   });
 
+  it('preserves additive local provider provenance', () => {
+    for (const generationProvider of ['strata', 'openai-compatible']) {
+      const turn = {ai:'Synthetic answer',createdInThreadShelf:true,generationProvider};
+      assert.deepStrictEqual(validateTurns([turn]),[turn]);
+    }
+  });
+
   it('rejects malformed ThreadShelf turn provenance', () => {
     assert.throws(
       () => validateTurn({ user: 'Hi', createdInThreadShelf: 'yes' }, { index: 2 }),
@@ -268,7 +275,7 @@ describe('validateTurn / validateTurns', () => {
     );
     assert.throws(
       () => validateTurn({ ai: 'Hi', generationProvider: 'unknown' }, { index: 3 }),
-      /generationProvider.*llama-cpp or openrouter/,
+      /generationProvider.*llama-cpp, openrouter, strata or openai-compatible/,
     );
   });
 

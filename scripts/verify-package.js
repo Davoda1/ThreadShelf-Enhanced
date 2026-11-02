@@ -65,7 +65,12 @@ const waitForHealth = async (baseUrl, child, log) => {
 const stopChild = async (child) => {
   if (child.exitCode !== null) return;
   const exited = new Promise((resolve) => child.once('exit', resolve));
-  child.kill('SIGTERM');
+  if (process.platform === 'win32') {
+    // The npm .cmd launcher owns a child server; stop the complete test tree.
+    spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+  } else {
+    child.kill('SIGTERM');
+  }
   await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 5_000))]);
   if (child.exitCode === null) child.kill('SIGKILL');
 };

@@ -1,12 +1,16 @@
+import { once } from 'events';
+import { generateKnowledgeChat, type KnowledgeToolsOptions } from '../generation/obsidian-agent.js';
+import { redactProviderError } from '../generation/transport.js';
 import { Router } from 'express';
 import { IndexingBusyError, CollectionBusyError } from '../indexing-coordinator.js';
 import {
   getGenerationConfig,
+  getStrataBaseUrl,
   llamaCppConfigChanged,
   updateGenerationConfig,
 } from '../generation/config.js';
-import { browseDirectories, isLoopbackRequest } from '../generation/filesystem-browser.js';
-import { requireLoopback } from './loopback.js';
+import { browseDirectories } from '../generation/filesystem-browser.js';
+import { requireAiManagement } from './feature-access.js';
 import {
   getManagedLlamaStatus,
   getLlamaRuntimeDiagnostics,
@@ -58,7 +62,12 @@ import {
 } from '../validation.js';
 
 const router = Router();
-const providerIds = new Set<GenerationProviderId>(['llama-cpp', 'openrouter']);
+const providerIds = new Set<GenerationProviderId>([
+  'llama-cpp',
+  'openrouter',
+  'strata',
+  'openai-compatible',
+]);
 const openRouterSorts = new Set(['default', 'most-popular', 'newest']);
 
 class GenerationConflictError extends Error {}
@@ -103,11 +112,11 @@ const errorResponse = (res: import('express').Response, error: unknown): void =>
     res.status(409).json({ error: error.message });
     return;
   }
-  console.error('[/api/generation]', error);
-  res.status(502).json({ error: error instanceof Error ? error.message : 'Generation failed' });
+  console.error('[/api/generation]', redactProviderError(error));
+  res.status(502).json({ error: redactProviderError(error) });
 };
 
-router.get('/api/generation/config', requireLoopback, async (_req, res) => {
+router.get('/api/generation/config', requireAiManagement, async (_req, res) => {
   try {
     const [config, statuses] = await Promise.all([
       getGenerationConfig(),
@@ -119,7 +128,7 @@ router.get('/api/generation/config', requireLoopback, async (_req, res) => {
   }
 });
 
-router.put('/api/generation/config', requireLoopback, async (req, res) => {
+router.put('/api/generation/config', requireAiManagement, async (req, res) => {
   try {
     const update = async () => {
       const previous = await getGenerationConfig();
@@ -142,7 +151,7 @@ router.put('/api/generation/config', requireLoopback, async (req, res) => {
 
 // The settings page's view of /v1. It reaches the model list through /api, so
 // it keeps working when the API requires a key or is turned off.
-router.get('/api/generation/local-api', requireLoopback, async (_req, res) => {
+router.get('/api/generation/local-api', requireAiManagement, async (_req, res) => {
   try {
     let models: ReturnType<typeof openAiModel>[] | null = null;
     let modelsError: string | undefined;
@@ -157,22 +166,8 @@ router.get('/api/generation/local-api', requireLoopback, async (_req, res) => {
   }
 });
 
-router.get('/api/generation/directories', async (req, res) => {
+router.get('/api/generation/directories', requireAiManagement, async (req, res) => {
   try {
-    const forwardedFor = [req.headers['x-forwarded-for'], req.headers['x-real-ip']]
-      .flatMap((value) => (Array.isArray(value) ? value : value ? [value] : []))
-      .map(String);
-    if (
-      !isLoopbackRequest(
-        req.socket.remoteAddress,
-        forwardedFor,
-        req.headers.forwarded,
-        req.hostname,
-      )
-    ) {
-      res.status(403).json({ error: 'System folder browsing is available only from localhost' });
-      return;
-    }
     res.json(
       await browseDirectories(typeof req.query.path === 'string' ? req.query.path : undefined),
     );
@@ -202,7 +197,7 @@ router.get('/api/generation/runtime', async (_req, res) => {
   }
 });
 
-router.get('/api/generation/runtime/logs', requireLoopback, async (_req, res) => {
+router.get('/api/generation/runtime/logs', requireAiManagement, async (_req, res) => {
   try {
     res.json(await getLlamaRuntimeDiagnostics());
   } catch (error) {
@@ -210,7 +205,7 @@ router.get('/api/generation/runtime/logs', requireLoopback, async (_req, res) =>
   }
 });
 
-router.post('/api/generation/runtime/eject', requireLoopback, async (req, res) => {
+router.post('/api/generation/runtime/eject', requireAiManagement, async (req, res) => {
   try {
     const result = await withLlamaRuntimeControl(async () => {
       const config = await getGenerationConfig();
@@ -253,7 +248,7 @@ router.post('/api/generation/runtime/eject', requireLoopback, async (req, res) =
   }
 });
 
-router.get('/api/generation/models', requireLoopback, async (req, res) => {
+router.get('/api/generation/models', requireAiManagement, async (req, res) => {
   try {
     const provider = parseProvider(req.query.provider);
     const sort = String(req.query.sort || 'default');
@@ -274,6 +269,20 @@ router.get('/api/generation/models', requireLoopback, async (req, res) => {
             detail: `Using an existing local server at ${config.llamaCpp.baseUrl}.`,
           }
         : getManagedLlamaStatus();
+    } else if (provider === 'strata') {
+      const loaded = models.find((model) => model.loaded);
+      runtime = {
+        state: 'external',
+        model: loaded?.id,
+        contextSize: loaded?.contextLength,
+        detail: `Using the Strata server at ${getStrataBaseUrl()}. Start and stop it outside ThreadShelf.`,
+      };
+    } else if (provider === 'openai-compatible') {
+      const { openAiCompatible } = await getGenerationConfig();
+      runtime = {
+        state: openAiCompatible.local ? 'external' : 'remote',
+        detail: `${openAiCompatible.label}: ${openAiCompatible.baseUrl}. ${openAiCompatible.local ? 'On this server.' : 'Off-device.'}`,
+      };
     } else {
       runtime = {
         state: 'remote',
@@ -286,7 +295,7 @@ router.get('/api/generation/models', requireLoopback, async (req, res) => {
   }
 });
 
-router.get('/api/generation/prompts', requireLoopback, async (_req, res) => {
+router.get('/api/generation/prompts', requireAiManagement, async (_req, res) => {
   try {
     res.json(await listMasterPrompts());
   } catch (error) {
@@ -294,7 +303,7 @@ router.get('/api/generation/prompts', requireLoopback, async (_req, res) => {
   }
 });
 
-router.post('/api/generation/prompts', requireLoopback, async (req, res) => {
+router.post('/api/generation/prompts', requireAiManagement, async (req, res) => {
   try {
     res.status(201).json(await createMasterPrompt(req.body ?? {}));
   } catch (error) {
@@ -303,7 +312,7 @@ router.post('/api/generation/prompts', requireLoopback, async (req, res) => {
 });
 
 // Registered before '/:id' so the literal segment is never read as an id.
-router.put('/api/generation/prompts/active', requireLoopback, async (req, res) => {
+router.put('/api/generation/prompts/active', requireAiManagement, async (req, res) => {
   try {
     res.json(await setActiveMasterPrompt(req.body?.id ?? ''));
   } catch (error) {
@@ -311,7 +320,7 @@ router.put('/api/generation/prompts/active', requireLoopback, async (req, res) =
   }
 });
 
-router.patch('/api/generation/prompts/:id', requireLoopback, async (req, res) => {
+router.patch('/api/generation/prompts/:id', requireAiManagement, async (req, res) => {
   try {
     res.json(await updateMasterPrompt(req.params.id, req.body ?? {}));
   } catch (error) {
@@ -319,7 +328,7 @@ router.patch('/api/generation/prompts/:id', requireLoopback, async (req, res) =>
   }
 });
 
-router.delete('/api/generation/prompts/:id', requireLoopback, async (req, res) => {
+router.delete('/api/generation/prompts/:id', requireAiManagement, async (req, res) => {
   try {
     res.json(await deleteMasterPrompt(req.params.id));
   } catch (error) {
@@ -327,7 +336,7 @@ router.delete('/api/generation/prompts/:id', requireLoopback, async (req, res) =
   }
 });
 
-router.get('/api/generation/threads', requireLoopback, async (_req, res) => {
+router.get('/api/generation/threads', requireAiManagement, async (_req, res) => {
   try {
     res.json({ threads: await listThreadShelfChats() });
   } catch (error) {
@@ -335,7 +344,7 @@ router.get('/api/generation/threads', requireLoopback, async (_req, res) => {
   }
 });
 
-router.post('/api/generation/threads', requireLoopback, async (req, res) => {
+router.post('/api/generation/threads', requireAiManagement, async (req, res) => {
   try {
     const title = normalizeOptionalString(req.body?.title, { field: 'title', maxLength: 200 });
     const turns = req.body?.turns === undefined ? [] : validateTurns(req.body.turns);
@@ -345,7 +354,7 @@ router.post('/api/generation/threads', requireLoopback, async (req, res) => {
   }
 });
 
-router.patch('/api/generation/threads/:id', requireLoopback, async (req, res) => {
+router.patch('/api/generation/threads/:id', requireAiManagement, async (req, res) => {
   try {
     const title = normalizeQuery(req.body?.title, { field: 'title', maxLength: 200 });
     res.json(await renameThreadShelfChat(req.params.id, title));
@@ -354,7 +363,7 @@ router.patch('/api/generation/threads/:id', requireLoopback, async (req, res) =>
   }
 });
 
-router.delete('/api/generation/threads/:id', requireLoopback, async (req, res) => {
+router.delete('/api/generation/threads/:id', requireAiManagement, async (req, res) => {
   try {
     await deleteThreadShelfChat(req.params.id);
     res.json({ ok: true });
@@ -363,7 +372,7 @@ router.delete('/api/generation/threads/:id', requireLoopback, async (req, res) =
   }
 });
 
-router.get('/api/generation/threads/:id', requireLoopback, async (req, res) => {
+router.get('/api/generation/threads/:id', requireAiManagement, async (req, res) => {
   try {
     res.json(await getThreadShelfChat(req.params.id));
   } catch (error) {
@@ -522,13 +531,15 @@ const prepareChatWithLease = async (
   }
 };
 
-router.post('/api/generation/chat', requireLoopback, async (req, res) => {
+router.post('/api/generation/chat', requireAiManagement, async (req, res) => {
   const controller = new AbortController();
   res.once('close', () => {
     if (!res.writableEnded) controller.abort();
   });
   let releaseChat: (() => void) | undefined;
   try {
+    if (req.body?.useObsidian || req.body?.useArchive)
+      throw new BadRequestError('Knowledge tools require the interactive chat transport');
     const leased = await prepareChatWithLease(req.body as Record<string, unknown>);
     const prepared = leased.prepared;
     releaseChat = leased.release;
@@ -553,7 +564,7 @@ router.post('/api/generation/chat', requireLoopback, async (req, res) => {
   }
 });
 
-router.post('/api/generation/chat/stream', requireLoopback, async (req, res) => {
+router.post('/api/generation/chat/stream', requireAiManagement, async (req, res) => {
   const controller = new AbortController();
   res.once('close', () => {
     if (!res.writableEnded) controller.abort();
@@ -563,13 +574,30 @@ router.post('/api/generation/chat/stream', requireLoopback, async (req, res) => 
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
-  const send = (event: Readonly<Record<string, unknown>>): void => {
-    if (!res.destroyed) res.write(`${JSON.stringify(event)}\n`);
+  const send = async (event: Readonly<Record<string, unknown>>): Promise<void> => {
+    controller.signal.throwIfAborted();
+    if (res.destroyed) return;
+    if (!res.write(`${JSON.stringify(event)}\n`))
+      await once(res, 'drain', { signal: controller.signal });
   };
 
   let releaseChat: (() => void) | undefined;
   try {
-    send({
+    for (const key of ['useObsidian', 'useArchive', 'streamOutput']) {
+      if (req.body?.[key] !== undefined && typeof req.body[key] !== 'boolean')
+        throw new BadRequestError(`${key} must be a boolean`);
+    }
+    const vaultId = normalizeOptionalString(req.body?.vaultId, {
+      field: 'vaultId',
+      maxLength: 100,
+    });
+    const toolOptions: KnowledgeToolsOptions = {
+      useObsidian: req.body?.useObsidian === true,
+      useArchive: req.body?.useArchive === true,
+      streamOutput: req.body?.streamOutput !== false,
+      vaultId,
+    };
+    await send({
       type: 'status',
       phase: 'preparing',
       message:
@@ -582,23 +610,35 @@ router.post('/api/generation/chat/stream', requireLoopback, async (req, res) => 
     const leased = await prepareChatWithLease(req.body as Record<string, unknown>);
     const prepared = leased.prepared;
     releaseChat = leased.release;
-    send({
+    await send({
       type: 'status',
       phase: prepared.provider === 'llama-cpp' ? 'loading-model' : 'connecting',
       message:
         prepared.provider === 'llama-cpp'
           ? 'Starting llama.cpp and loading the selected GGUF model. First load can take a while…'
-          : 'Connecting to OpenRouter and waiting for the first token…',
+          : prepared.provider === 'strata'
+            ? 'Sending to Strata and waiting for the response…'
+            : `Connecting to ${prepared.provider} and waiting for the response…`,
       provider: prepared.provider,
       model: prepared.request.model,
     });
     let firstDelta = true;
-    const response = await generateChatStream(
+    const run = (
+      request: ChatRequest,
+      onDelta: Parameters<typeof generateChatStream>[1],
+      signal: AbortSignal,
+    ) =>
+      toolOptions.useObsidian || toolOptions.useArchive
+        ? generateKnowledgeChat(request, onDelta, send, signal, toolOptions)
+        : toolOptions.streamOutput === false
+          ? generateChat(request, signal)
+          : generateChatStream(request, onDelta, signal);
+    const response = await run(
       prepared.request,
-      (delta) => {
+      async (delta) => {
         if (firstDelta) {
           firstDelta = false;
-          send({
+          await send({
             type: 'status',
             phase: 'generating',
             message: 'Generating response…',
@@ -606,12 +646,12 @@ router.post('/api/generation/chat/stream', requireLoopback, async (req, res) => 
             model: delta.model || prepared.request.model,
           });
         }
-        send({ type: 'delta', ...delta });
+        await send({ type: 'delta', ...delta });
       },
       controller.signal,
     );
     if (!prepared.ephemeral) {
-      send({
+      await send({
         type: 'status',
         phase: 'saving',
         message: 'Saving and indexing the completed exchange locally…',
@@ -631,14 +671,15 @@ router.post('/api/generation/chat/stream', requireLoopback, async (req, res) => 
         response,
       );
     }
-    send({ type: 'done', response: { ...response, persistence } });
+    await send({ type: 'done', response: { ...response, persistence } });
     res.end();
   } catch (error) {
     if (!controller.signal.aborted) {
-      console.error('[/api/generation/chat/stream]', error);
-      send({
+      if (req.body?.ephemeral !== true)
+        console.error('[/api/generation/chat/stream]', redactProviderError(error));
+      await send({
         type: 'error',
-        error: error instanceof Error ? error.message : 'Generation failed',
+        error: redactProviderError(error),
       });
       res.end();
     }

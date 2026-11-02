@@ -1,3 +1,4 @@
+import { NativeSelect } from './NativeSelect';
 import { useUIStore } from '../store';
 import { t, useI18n } from '../i18n';
 import { useEffect, useState } from 'react';
@@ -178,8 +179,10 @@ const ACCELERATION_HELP: Record<LlamaAccelerationMode, string> = {
   },
 };
 
-export function GenerationSettings() {
+export function GenerationSettings({ section = 'ai' }: { readonly section?: 'ai' | 'server' }) {
   useI18n();
+  const streaming = useUIStore((state) => state.generationStreaming);
+  const setStreaming = useUIStore((state) => state.setGenerationStreaming);
   const [data, setData] = useState<GenerationConfigResponse | null>(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -198,6 +201,11 @@ export function GenerationSettings() {
   const [speculative, setSpeculative] = useState<LlamaSpeculativeMode>('auto');
   const [reasoningEffort, setReasoningEffort] = useState<LlamaReasoningEffort>('medium');
   const [apiKey, setApiKey] = useState('');
+  const [compatibleUrl, setCompatibleUrl] = useState('');
+  const [compatibleLabel, setCompatibleLabel] = useState('');
+  const [compatibleKey, setCompatibleKey] = useState('');
+  const [clearCompatibleKey, setClearCompatibleKey] = useState(false);
+  const [projectors, setProjectors] = useState('');
   const [enforceZdr, setEnforceZdr] = useState(false);
   const [denyDataCollection, setDenyDataCollection] = useState(false);
   const [persistErrorLogs, setPersistErrorLogs] = useState(true);
@@ -208,28 +216,40 @@ export function GenerationSettings() {
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [guide, setGuide] = useState<GuideTab | null>(null);
 
-  const applyData = (next: GenerationConfigResponse) => {
+  const applyData = (next: GenerationConfigResponse, scope: 'all' | 'ai' | 'server' = 'all') => {
     setData(next);
-    setExecutablePath(next.config.llamaCpp.executablePath ?? '');
-    setBaseUrl(next.config.llamaCpp.baseUrl ?? '');
-    // Only user-configured roots are editable. Conventional and env roots remain runtime-only.
-    setDirectories(joinDirectories(next.config.llamaCpp.modelDirectories));
-    setContextSize(String(next.config.llamaCpp.contextSize));
-    setAcceleration(next.config.llamaCpp.acceleration);
-    setGpuLayers(next.config.llamaCpp.gpuLayers);
-    setSplitMode(next.config.llamaCpp.splitMode);
-    setMainGpu(next.config.llamaCpp.mainGpu);
-    setTensorSplit(next.config.llamaCpp.tensorSplit ?? '');
-    setThreads(next.config.llamaCpp.threads);
-    setFlashAttention(next.config.llamaCpp.flashAttention);
-    setKvCache(next.config.llamaCpp.kvCache ?? 'quality');
-    setSpeculative(next.config.llamaCpp.speculative ?? 'auto');
-    setReasoningEffort(next.config.llamaCpp.reasoningEffort ?? 'medium');
-    setEnforceZdr(next.config.openRouter.enforceZdr);
-    setDenyDataCollection(next.config.openRouter.denyDataCollection);
-    setPersistErrorLogs(next.config.diagnostics?.persistErrorLogs ?? true);
-    setIdleUnloadMinutes(next.config.llamaCpp.idleUnloadMinutes ?? 0);
-    setLocalApi(localApiDraftFrom(next.config.localApi));
+    if (scope !== 'server') {
+      setExecutablePath(next.config.llamaCpp.executablePath ?? '');
+      setBaseUrl(next.config.llamaCpp.baseUrl ?? '');
+      setProjectors(
+        Object.entries(next.config.llamaCpp.projectorPaths ?? {})
+          .map(([model, path]) => `${model} = ${path}`)
+          .join('\n'),
+      );
+      setCompatibleUrl(next.config.openAiCompatible?.baseUrl ?? '');
+      setCompatibleLabel(next.config.openAiCompatible?.label ?? 'OpenAI-compatible');
+      setClearCompatibleKey(false);
+      // Only user-configured roots are editable. Conventional and env roots remain runtime-only.
+      setDirectories(joinDirectories(next.config.llamaCpp.modelDirectories));
+      setContextSize(String(next.config.llamaCpp.contextSize));
+      setAcceleration(next.config.llamaCpp.acceleration);
+      setGpuLayers(next.config.llamaCpp.gpuLayers);
+      setSplitMode(next.config.llamaCpp.splitMode);
+      setMainGpu(next.config.llamaCpp.mainGpu);
+      setTensorSplit(next.config.llamaCpp.tensorSplit ?? '');
+      setThreads(next.config.llamaCpp.threads);
+      setFlashAttention(next.config.llamaCpp.flashAttention);
+      setKvCache(next.config.llamaCpp.kvCache ?? 'quality');
+      setSpeculative(next.config.llamaCpp.speculative ?? 'auto');
+      setReasoningEffort(next.config.llamaCpp.reasoningEffort ?? 'medium');
+      setEnforceZdr(next.config.openRouter.enforceZdr);
+      setDenyDataCollection(next.config.openRouter.denyDataCollection);
+      setIdleUnloadMinutes(next.config.llamaCpp.idleUnloadMinutes ?? 0);
+    }
+    if (scope !== 'ai') {
+      setPersistErrorLogs(next.config.diagnostics?.persistErrorLogs ?? true);
+      setLocalApi(localApiDraftFrom(next.config.localApi));
+    }
   };
 
   useEffect(() => {
@@ -249,18 +269,37 @@ export function GenerationSettings() {
     /^\d+$/.test(contextSize) && parsedContextSize >= 512 && parsedContextSize <= 1_048_576;
 
   const save = async () => {
-    if (!contextSizeValid) {
+    if (!data || saving) return;
+    if (section === 'ai' && !contextSizeValid) {
       setError('Context window must be a whole number from 512 to 1,048,576 tokens.');
       return;
     }
-    if (localApi.networkAccess && !isValidNetworkPort(localApi.networkPort)) {
+    if (
+      section === 'server' &&
+      localApi.networkAccess &&
+      !isValidNetworkPort(localApi.networkPort)
+    ) {
       setError('Network port must be a whole number from 1 to 65,535.');
       return;
     }
     setSaving(true);
     setError('');
     try {
+      const projectorPaths: Record<string, string> = {};
+      for (const line of (section === 'ai' ? projectors : '')
+        .split(/\r?\n/)
+        .map((value) => value.trim())
+        .filter(Boolean)) {
+        const equals = line.indexOf('=');
+        if (equals < 1 || !line.slice(equals + 1).trim())
+          throw new Error('Each vision mapping must use full model path = projector path.');
+        const modelName = line.slice(0, equals).trim();
+        if (Object.prototype.hasOwnProperty.call(projectorPaths, modelName))
+          throw new Error('Each model can have only one vision projector mapping.');
+        projectorPaths[modelName] = line.slice(equals + 1).trim();
+      }
       const llamaCpp = {
+        projectorPaths,
         executablePath,
         baseUrl,
         modelDirectories: directories
@@ -290,6 +329,7 @@ export function GenerationSettings() {
         speculative: saved?.speculative ?? 'auto',
         reasoningEffort: saved?.reasoningEffort ?? 'medium',
         idleUnloadMinutes: saved?.idleUnloadMinutes ?? 0,
+        projectorPaths: saved?.projectorPaths ?? {},
       };
       const llamaCppChanged = Object.entries(llamaCpp).some(
         ([field, value]) =>
@@ -298,27 +338,45 @@ export function GenerationSettings() {
       );
       const next = await api.updateGenerationConfig({
         // Access settings must stay editable while a model is generating.
-        llamaCpp: llamaCppChanged ? llamaCpp : undefined,
-        openRouter: {
-          apiKey: apiKey || undefined,
-          enforceZdr,
-          denyDataCollection,
-        },
-        localApi: {
-          enabled: localApi.enabled,
-          apiKey: localApi.apiKey || undefined,
-          clearApiKey: localApi.clearApiKey || undefined,
-          networkAccess: localApi.networkAccess,
-          networkPort: isValidNetworkPort(localApi.networkPort)
-            ? Number(localApi.networkPort)
+        llamaCpp: section === 'ai' && llamaCppChanged ? llamaCpp : undefined,
+        openRouter:
+          section === 'ai'
+            ? {
+                apiKey: apiKey || undefined,
+                enforceZdr,
+                denyDataCollection,
+              }
             : undefined,
-        },
-        diagnostics: { persistErrorLogs },
+        localApi:
+          section === 'server'
+            ? {
+                enabled: localApi.enabled,
+                apiKey: localApi.apiKey || undefined,
+                clearApiKey: localApi.clearApiKey || undefined,
+                networkAccess: localApi.networkAccess,
+                networkPort: isValidNetworkPort(localApi.networkPort)
+                  ? Number(localApi.networkPort)
+                  : undefined,
+              }
+            : undefined,
+        openAiCompatible:
+          section === 'ai'
+            ? {
+                baseUrl: compatibleUrl,
+                label: compatibleLabel,
+                apiKey: compatibleKey || undefined,
+                clearApiKey: clearCompatibleKey || undefined,
+              }
+            : undefined,
+        diagnostics: section === 'server' ? { persistErrorLogs } : undefined,
       });
-      applyData(next);
+      applyData(next, section);
       void queryClient.invalidateQueries({ queryKey: LOCAL_API_STATUS_KEY });
-      setApiKey('');
-      setModels(null);
+      if (section === 'ai') {
+        setApiKey('');
+        setCompatibleKey('');
+        setModels(null);
+      }
       window.dispatchEvent(new Event('threadshelf:generation-runtime-changed'));
       toast.success(t('Generation settings saved.'));
     } catch (cause) {
@@ -350,364 +408,517 @@ export function GenerationSettings() {
   };
 
   return (
-    <section className="generation-settings" aria-labelledby="generation-settings-title">
+    <section
+      className="generation-settings"
+      data-section={section}
+      aria-labelledby="generation-settings-title"
+    >
       <div className="section-h">
-        <h2 id="generation-settings-title">{t('Conversation generation')}</h2>
+        <h2 id="generation-settings-title">
+          {t(section === 'ai' ? 'Conversation generation' : 'Server access and diagnostics')}
+        </h2>
       </div>
 
-      <div className="banner warn">
+      <div className="banner warn" hidden={section !== 'ai'}>
         {t(
-          'llama.cpp stays local. OpenRouter sends the selected archived conversation and new prompts to OpenRouter and its downstream provider.',
+          'llama.cpp and Strata stay local. OpenRouter and configured non-loopback servers receive selected conversation content and prompts off-device.',
         )}
       </div>
 
       {error && <div className="banner err">{t(error)}</div>}
 
-      <GenerationRuntimeBadge detailed />
-
-      <QuickSetupPanel onCompleted={() => void scanModels()} />
-
-      <div className="panel generation-panel">
-        <div className="panel-head">
-          <h3>{t('llama.cpp wrapper')}</h3>
-          <span className="sub">{t('local · primary engine')}</span>
-          <button
-            type="button"
-            className="btn sm ghost panel-head-action"
-            onClick={() => setGuide('settings')}
-          >
-            {t('What do these settings mean?')}
-          </button>
+      {!data && !error && (
+        <div className="banner info" role="status">
+          {t('Loading settings…')}
         </div>
-        <div className="panel-body generation-form">
-          <label>
-            <span>{t('llama-server executable')}</span>
-            <input
-              value={executablePath}
-              onChange={(event) => setExecutablePath(event.target.value)}
-              placeholder={t('Auto-detect from PATH or .threadshelf/tools')}
-            />
-          </label>
-          <label>
-            <span>{t('Existing local server URL (optional)')}</span>
-            <input
-              value={baseUrl}
-              onChange={(event) => setBaseUrl(event.target.value)}
-              placeholder={t('http://127.0.0.1:8080')}
-            />
-          </label>
-          <label>
-            <span>{t('Model directories — one absolute path per line')}</span>
-            <textarea
-              value={directories}
-              onChange={(event) => setDirectories(event.target.value)}
-              rows={6}
-            />
-            <DirectoryPicker
-              initialPath={directories.split(/\r?\n/).find((path) => path.trim())}
-              onSelect={addDirectory}
-            />
-            {data?.config.llamaCpp.defaultModelDirectories.length ? (
-              <small>
-                {t('Also scanning ')}
-                {data.config.llamaCpp.defaultModelDirectories.length}
+      )}
+      <fieldset className="settings-fields" disabled={!data || saving}>
+        <div className="settings-group" hidden={section !== 'ai'}>
+          <div className="panel">
+            <div className="panel-head">
+              <h3>{t('Response display')}</h3>
+            </div>
+            <div className="panel-body">
+              <label className="check-field">
+                <input
+                  type="checkbox"
+                  checked={streaming}
+                  onChange={(event) => setStreaming(event.target.checked)}
+                />
+                {t('Stream AI responses')}
+              </label>
+              <p className="sub">
                 {t(
-                  ' default or environment-provided model roots. These are not saved in this field.',
+                  'Show text as it arrives. When off, display the complete response together; tool approvals and progress remain available. This preference applies immediately.',
                 )}
-              </small>
-            ) : null}
-          </label>
-          <div className="llama-runtime-config">
-            <label>
-              <span>{t('Acceleration profile')}</span>
-              <select
-                value={acceleration}
-                onChange={(event) => setAcceleration(event.target.value as LlamaAccelerationMode)}
+              </p>
+            </div>
+          </div>
+          <GenerationRuntimeBadge detailed />
+
+          <QuickSetupPanel onCompleted={() => void scanModels()} />
+
+          <div className="panel generation-panel">
+            <div className="panel-head">
+              <h3>{t('llama.cpp wrapper')}</h3>
+              <span className="sub">{t('local · primary engine')}</span>
+              <button
+                type="button"
+                className="btn sm ghost panel-head-action"
+                onClick={() => setGuide('settings')}
               >
-                <option value="auto">{t('Auto-fit (recommended)')}</option>
-                <option value="cpu">{t('CPU only')}</option>
-                <option value="gpu">{t('Single GPU · maximum offload')}</option>
-                <option value="hybrid">{t('CPU + GPU · selected layers')}</option>
-                <option value="multi-gpu">{t('Multi-GPU')}</option>
-              </select>
-              <small>{ACCELERATION_HELP[acceleration]}</small>
-            </label>
-            <label>
-              <span>{t('Context window')}</span>
-              <NumberCombobox
-                id="llamaContextSize"
-                label={t('Context window in tokens')}
-                value={contextSize}
-                onChange={setContextSize}
-                options={CONTEXT_SIZE_PRESETS}
-                optionLabel={(value) =>
-                  CONTEXT_SIZE_LABELS[value] ?? value.toLocaleString(useUIStore.getState().locale)
-                }
-                invalid={!contextSizeValid}
-                title={t('Pick a preset or type any whole number from 512 to 1,048,576 tokens')}
-              />
-              <small>
-                {contextSizeValid
-                  ? t('{value0} tokens{value1}', {
-                      value0: Number(contextSize).toLocaleString(useUIStore.getState().locale),
-                      value1:
-                        parsedContextSize > LONG_CONTEXT_TOKENS
-                          ? ' · Long context: generation slows as the context fills and the KV cache needs much more VRAM. Use the Memory saver KV cache on 24 GB GPUs.'
-                          : '',
-                    })
-                  : t('Enter a whole number from 512 to 1,048,576.')}
-              </small>
-            </label>
-            {acceleration === 'hybrid' && (
+                {t('What do these settings mean?')}
+              </button>
+            </div>
+            <div className="panel-body generation-form">
               <label>
-                <span>{t('GPU layers')}</span>
+                <span>{t('llama-server executable')}</span>
                 <input
-                  type="number"
-                  min={1}
-                  max={999}
-                  value={gpuLayers}
-                  onChange={(event) => setGpuLayers(Number(event.target.value))}
+                  value={executablePath}
+                  onChange={(event) => setExecutablePath(event.target.value)}
+                  placeholder={t('Auto-detect from PATH or .threadshelf/tools')}
                 />
               </label>
-            )}
-            {(acceleration === 'gpu' || (acceleration === 'multi-gpu' && splitMode === 'row')) && (
               <label>
-                <span>{t('Main GPU index')}</span>
+                <span>{t('Existing local server URL (optional)')}</span>
                 <input
-                  type="number"
-                  min={0}
-                  max={31}
-                  value={mainGpu}
-                  onChange={(event) => setMainGpu(Number(event.target.value))}
+                  value={baseUrl}
+                  onChange={(event) => setBaseUrl(event.target.value)}
+                  placeholder={t('http://127.0.0.1:8080')}
                 />
               </label>
-            )}
-            {acceleration === 'multi-gpu' && (
-              <>
+              <label>
+                <span>{t('Model directories — one absolute path per line')}</span>
+                <textarea
+                  value={directories}
+                  onChange={(event) => setDirectories(event.target.value)}
+                  rows={6}
+                />
+                <DirectoryPicker
+                  initialPath={directories.split(/\r?\n/).find((path) => path.trim())}
+                  onSelect={addDirectory}
+                />
+                {data?.config.llamaCpp.defaultModelDirectories.length ? (
+                  <small>
+                    {t('Also scanning ')}
+                    {data.config.llamaCpp.defaultModelDirectories.length}
+                    {t(
+                      ' default or environment-provided model roots. These are not saved in this field.',
+                    )}
+                  </small>
+                ) : null}
+              </label>
+              <div className="llama-runtime-config">
                 <label>
-                  <span>{t('Multi-GPU split')}</span>
-                  <select
-                    value={splitMode}
-                    onChange={(event) => setSplitMode(event.target.value as LlamaSplitMode)}
+                  <span>{t('Acceleration profile')}</span>
+                  <NativeSelect
+                    value={acceleration}
+                    onChange={(event) =>
+                      setAcceleration(event.target.value as LlamaAccelerationMode)
+                    }
                   >
-                    <option value="layer">{t('Layer · balanced default')}</option>
-                    <option value="row">{t('Row · parallel weights')}</option>
-                  </select>
+                    <option value="auto">{t('Auto-fit (recommended)')}</option>
+                    <option value="cpu">{t('CPU only')}</option>
+                    <option value="gpu">{t('Single GPU · maximum offload')}</option>
+                    <option value="hybrid">{t('CPU + GPU · selected layers')}</option>
+                    <option value="multi-gpu">{t('Multi-GPU')}</option>
+                  </NativeSelect>
+                  <small>{ACCELERATION_HELP[acceleration]}</small>
                 </label>
                 <label>
-                  <span>{t('GPU proportions (optional)')}</span>
-                  <input
-                    value={tensorSplit}
-                    onChange={(event) => setTensorSplit(event.target.value)}
-                    placeholder={t('1,1 or 3,1')}
+                  <span>{t('Context window')}</span>
+                  <NumberCombobox
+                    id="llamaContextSize"
+                    label={t('Context window in tokens')}
+                    value={contextSize}
+                    onChange={setContextSize}
+                    options={CONTEXT_SIZE_PRESETS}
+                    optionLabel={(value) =>
+                      CONTEXT_SIZE_LABELS[value] ??
+                      value.toLocaleString(useUIStore.getState().locale)
+                    }
+                    invalid={!contextSizeValid}
+                    title={t('Pick a preset or type any whole number from 512 to 1,048,576 tokens')}
                   />
+                  <small>
+                    {contextSizeValid
+                      ? t('{value0} tokens{value1}', {
+                          value0: Number(contextSize).toLocaleString(useUIStore.getState().locale),
+                          value1:
+                            parsedContextSize > LONG_CONTEXT_TOKENS
+                              ? ' · Long context: generation slows as the context fills and the KV cache needs much more VRAM. Use the Memory saver KV cache on 24 GB GPUs.'
+                              : '',
+                        })
+                      : t('Enter a whole number from 512 to 1,048,576.')}
+                  </small>
                 </label>
-              </>
-            )}
-            <label>
-              <span>{t('CPU threads')}</span>
-              <input
-                type="number"
-                min={-1}
-                max={1024}
-                value={threads}
-                onChange={(event) => setThreads(Number(event.target.value))}
-              />
-              <small>{t('-1 lets llama.cpp choose automatically.')}</small>
-            </label>
-            <label>
-              <span>{t('Flash Attention')}</span>
-              <select
-                value={flashAttention}
-                onChange={(event) => setFlashAttention(event.target.value as LlamaFlashAttention)}
-              >
-                <option value="auto">{t('Auto (recommended)')}</option>
-                <option value="on">{t('On')}</option>
-                <option value="off">{t('Off')}</option>
-              </select>
-            </label>
-            <label>
-              <span>{t('KV cache')}</span>
-              <select
-                value={kvCache}
-                onChange={(event) => setKvCache(event.target.value as LlamaKvCacheProfile)}
-              >
-                <option value="quality">{t('Quality · Q8 (recommended)')}</option>
-                <option value="memory">{t('Memory saver · Q4')}</option>
-                <option value="default">{t('Default · F16')}</option>
-              </select>
-              <small>{KV_CACHE_HELP[kvCache]}</small>
-            </label>
-            <label>
-              <span>{t('Speculative decoding (MTP)')}</span>
-              <select
-                value={speculative}
-                onChange={(event) => setSpeculative(event.target.value as LlamaSpeculativeMode)}
-              >
-                <option value="auto">{t('Auto · draft 2 (recommended)')}</option>
-                <option value="aggressive">{t('Aggressive · draft 3')}</option>
-                <option value="off">{t('Off')}</option>
-              </select>
-              <small>{SPECULATIVE_HELP[speculative]}</small>
-            </label>
-            <label>
-              <span>{t('Reasoning effort')}</span>
-              <select
-                value={reasoningEffort}
-                onChange={(event) => setReasoningEffort(event.target.value as LlamaReasoningEffort)}
-              >
-                <option value="medium">{t('Medium (recommended)')}</option>
-                <option value="low">{t('Low')}</option>
-                <option value="high">{t('High')}</option>
-                <option value="xhigh">{t('XHigh · slow')}</option>
-                <option value="off">{t('Off')}</option>
-                <option value="default">{t('Template default')}</option>
-              </select>
-              <small>{REASONING_HELP[reasoningEffort]}</small>
-            </label>
-            <label>
-              <span>{t('Unload model from memory')}</span>
-              <select
-                value={idleUnloadMinutes}
-                onChange={(event) => setIdleUnloadMinutes(Number(event.target.value))}
-              >
-                {IDLE_UNLOAD_PRESETS.some(
-                  (preset) => preset.minutes === idleUnloadMinutes,
-                ) ? null : (
-                  <option value={idleUnloadMinutes}>
-                    {t('After ')}
-                    {idleUnloadMinutes}
-                    {t(' minutes idle')}
-                  </option>
+                {acceleration === 'hybrid' && (
+                  <label>
+                    <span>{t('GPU layers')}</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={999}
+                      value={gpuLayers}
+                      onChange={(event) => setGpuLayers(Number(event.target.value))}
+                    />
+                  </label>
                 )}
-                {IDLE_UNLOAD_PRESETS.map((preset) => (
-                  <option key={preset.minutes} value={preset.minutes}>
-                    {preset.label}
-                  </option>
-                ))}
-              </select>
-              <small>
+                {(acceleration === 'gpu' ||
+                  (acceleration === 'multi-gpu' && splitMode === 'row')) && (
+                  <label>
+                    <span>{t('Main GPU index')}</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={31}
+                      value={mainGpu}
+                      onChange={(event) => setMainGpu(Number(event.target.value))}
+                    />
+                  </label>
+                )}
+                {acceleration === 'multi-gpu' && (
+                  <>
+                    <label>
+                      <span>{t('Multi-GPU split')}</span>
+                      <NativeSelect
+                        value={splitMode}
+                        onChange={(event) => setSplitMode(event.target.value as LlamaSplitMode)}
+                      >
+                        <option value="layer">{t('Layer · balanced default')}</option>
+                        <option value="row">{t('Row · parallel weights')}</option>
+                      </NativeSelect>
+                    </label>
+                    <label>
+                      <span>{t('GPU proportions (optional)')}</span>
+                      <input
+                        value={tensorSplit}
+                        onChange={(event) => setTensorSplit(event.target.value)}
+                        placeholder={t('1,1 or 3,1')}
+                      />
+                    </label>
+                  </>
+                )}
+                <label>
+                  <span>{t('CPU threads')}</span>
+                  <input
+                    type="number"
+                    min={-1}
+                    max={1024}
+                    value={threads}
+                    onChange={(event) => setThreads(Number(event.target.value))}
+                  />
+                  <small>{t('-1 lets llama.cpp choose automatically.')}</small>
+                </label>
+                <label>
+                  <span>{t('Flash Attention')}</span>
+                  <NativeSelect
+                    value={flashAttention}
+                    onChange={(event) =>
+                      setFlashAttention(event.target.value as LlamaFlashAttention)
+                    }
+                  >
+                    <option value="auto">{t('Auto (recommended)')}</option>
+                    <option value="on">{t('On')}</option>
+                    <option value="off">{t('Off')}</option>
+                  </NativeSelect>
+                </label>
+                <label>
+                  <span>{t('KV cache')}</span>
+                  <NativeSelect
+                    value={kvCache}
+                    onChange={(event) => setKvCache(event.target.value as LlamaKvCacheProfile)}
+                  >
+                    <option value="quality">{t('Quality · Q8 (recommended)')}</option>
+                    <option value="memory">{t('Memory saver · Q4')}</option>
+                    <option value="default">{t('Default · F16')}</option>
+                  </NativeSelect>
+                  <small>{KV_CACHE_HELP[kvCache]}</small>
+                </label>
+                <label>
+                  <span>{t('Speculative decoding (MTP)')}</span>
+                  <NativeSelect
+                    value={speculative}
+                    onChange={(event) => setSpeculative(event.target.value as LlamaSpeculativeMode)}
+                  >
+                    <option value="auto">{t('Auto · draft 2 (recommended)')}</option>
+                    <option value="aggressive">{t('Aggressive · draft 3')}</option>
+                    <option value="off">{t('Off')}</option>
+                  </NativeSelect>
+                  <small>{SPECULATIVE_HELP[speculative]}</small>
+                </label>
+                <label>
+                  <span>{t('Reasoning effort')}</span>
+                  <NativeSelect
+                    value={reasoningEffort}
+                    onChange={(event) =>
+                      setReasoningEffort(event.target.value as LlamaReasoningEffort)
+                    }
+                  >
+                    <option value="medium">{t('Medium (recommended)')}</option>
+                    <option value="low">{t('Low')}</option>
+                    <option value="high">{t('High')}</option>
+                    <option value="xhigh">{t('XHigh · slow')}</option>
+                    <option value="off">{t('Off')}</option>
+                    <option value="default">{t('Template default')}</option>
+                  </NativeSelect>
+                  <small>{REASONING_HELP[reasoningEffort]}</small>
+                </label>
+                <label>
+                  <span>{t('Unload model from memory')}</span>
+                  <NativeSelect
+                    value={idleUnloadMinutes}
+                    onChange={(event) => setIdleUnloadMinutes(Number(event.target.value))}
+                  >
+                    {IDLE_UNLOAD_PRESETS.some(
+                      (preset) => preset.minutes === idleUnloadMinutes,
+                    ) ? null : (
+                      <option value={idleUnloadMinutes}>
+                        {t('After ')}
+                        {idleUnloadMinutes}
+                        {t(' minutes idle')}
+                      </option>
+                    )}
+                    {IDLE_UNLOAD_PRESETS.map((preset) => (
+                      <option key={preset.minutes} value={preset.minutes}>
+                        {preset.label}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                  <small>
+                    {t(
+                      'Frees VRAM and RAM when no chat or API request has used the model for a while. The next request loads it again.',
+                    )}
+                  </small>
+                </label>
+              </div>
+              <div className="setup-note">
+                {t('Safe discovery: ')}
+                <code>npm run setup:llama</code>
+                {t('. Check latest release:')} <code>npm run setup:llama -- -- --check</code>
+                {t('. Nothing downloads until explicit')} <code>--install</code>
+                {t(' or ')}
+                <code>--url</code>
+                {t(' approval.')}
+                <br />
+                {t('GPU profiles require a compatible build. Install explicitly with')}{' '}
+                <code>--variant cuda</code>, <code>vulkan</code>, <code>rocm</code>
+                {t(', or')} <code>sycl</code>
+                {t('; Metal is automatic on supported Macs.')}
+              </div>
+              <div className="generation-actions">
+                <button className="btn primary" onClick={() => setCatalogOpen(true)}>
+                  {t('Download a model…')}
+                </button>
+                <button className="btn" onClick={() => void scanModels()}>
+                  {t('Scan GGUF models')}
+                </button>
+                {models && (
+                  <span>
+                    {models.length.toLocaleString(useUIStore.getState().locale)}
+                    {t(' model files found')}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="settings-group" hidden={section !== 'server'}>
+          <LocalApiPanel
+            generationConfig={data?.config}
+            guide={guide}
+            onGuide={setGuide}
+            draft={localApi}
+            onChange={(patch) => setLocalApi((current) => ({ ...current, ...patch }))}
+          />
+        </div>
+        <div className="settings-group" hidden={section !== 'ai'}>
+          <div className="panel generation-panel">
+            <div className="panel-head">
+              <h3>{t('OpenRouter API')}</h3>
+              <span className="sub">{t('external · opt-in')}</span>
+            </div>
+            <div className="panel-body generation-form">
+              <label>
+                <span>{t('Session API key (or set OPENROUTER_API_KEY in the server .env)')}</span>
+                <input
+                  type="password"
+                  autoComplete="off"
+                  value={apiKey}
+                  onChange={(event) => setApiKey(event.target.value)}
+                  placeholder={
+                    data?.config.openRouter.apiKeyConfigured
+                      ? t('A key is configured')
+                      : t('sk-or-v1-…')
+                  }
+                />
+              </label>
+              <p className="sub">
                 {t(
-                  'Frees VRAM and RAM when no chat or API request has used the model for a while. The next request loads it again.',
+                  'A key entered here stays in server-process memory only. A key in the gitignored .env persists across restarts. Neither value is returned by the API.',
                 )}
-              </small>
-            </label>
+              </p>
+              <label className="check-field">
+                <input
+                  type="checkbox"
+                  checked={enforceZdr}
+                  onChange={(event) => setEnforceZdr(event.target.checked)}
+                />
+                {t('Use ZDR-only routing by default (can exclude many endpoints)')}
+              </label>
+              <label className="check-field">
+                <input
+                  type="checkbox"
+                  checked={denyDataCollection}
+                  onChange={(event) => setDenyDataCollection(event.target.checked)}
+                />
+                {t('Use only providers that deny data collection/training')}
+              </label>
+            </div>
           </div>
-          <div className="setup-note">
-            {t('Safe discovery: ')}
-            <code>npm run setup:llama</code>
-            {t('. Check latest release:')} <code>npm run setup:llama -- -- --check</code>
-            {t('. Nothing downloads until explicit')} <code>--install</code>
-            {t(' or ')}
-            <code>--url</code>
-            {t(' approval.')}
-            <br />
-            {t('GPU profiles require a compatible build. Install explicitly with')}{' '}
-            <code>--variant cuda</code>, <code>vulkan</code>, <code>rocm</code>
-            {t(', or')} <code>sycl</code>
-            {t('; Metal is automatic on supported Macs.')}
+
+          <div className="panel generation-panel">
+            <div className="panel-head">
+              <h3>{t('OpenAI-compatible server')}</h3>
+              <span className="sub">{t('explicit connection · local or LAN')}</span>
+            </div>
+            <div className="panel-body generation-form">
+              <label>
+                <span>{t('Connection name')}</span>
+                <input
+                  value={compatibleLabel}
+                  onChange={(event) => setCompatibleLabel(event.target.value)}
+                  placeholder="Local inference server"
+                  maxLength={80}
+                />
+              </label>
+              <label>
+                <span>{t('API base URL')}</span>
+                <input
+                  type="url"
+                  value={compatibleUrl}
+                  onChange={(event) => setCompatibleUrl(event.target.value)}
+                  placeholder="http://127.0.0.1:1234/v1"
+                />
+              </label>
+              <label>
+                <span>{t('Session API key')}</span>
+                <input
+                  type="password"
+                  autoComplete="off"
+                  value={compatibleKey}
+                  onChange={(event) => {
+                    setCompatibleKey(event.target.value);
+                    setClearCompatibleKey(false);
+                  }}
+                  placeholder={
+                    data?.config.openAiCompatible?.apiKeyConfigured
+                      ? t('A key is configured')
+                      : t('Optional if your server permits it')
+                  }
+                />
+              </label>
+              <label className="check-field">
+                <input
+                  type="checkbox"
+                  checked={clearCompatibleKey}
+                  onChange={(event) => {
+                    setClearCompatibleKey(event.target.checked);
+                    if (event.target.checked) setCompatibleKey('');
+                  }}
+                />
+                {t('Clear the saved session key')}
+              </label>
+              <p className="sub">
+                {t(
+                  'Only loopback addresses count as local. LAN and remote servers receive the selected content off-device. Requests do not follow redirects.',
+                )}
+              </p>
+            </div>
           </div>
-          <div className="generation-actions">
-            <button className="btn primary" onClick={() => setCatalogOpen(true)}>
-              {t('Download a model…')}
-            </button>
-            <button className="btn" onClick={() => void scanModels()}>
-              {t('Scan GGUF models')}
-            </button>
-            {models && (
-              <span>
-                {models.length.toLocaleString(useUIStore.getState().locale)}
-                {t(' model files found')}
+          <div className="panel generation-panel">
+            <div className="panel-head">
+              <h3>{t('Strata')}</h3>
+              <span className="sub">{t('local server preset')}</span>
+            </div>
+            <div className="panel-body">
+              <p>
+                {t(
+                  'Start your Strata server separately, then select Strata in the chat model menu. Configure STRATA_BASE_URL and optional STRATA_API_KEY in the server environment.',
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="panel generation-panel">
+            <div className="panel-head">
+              <h3>{t('Vision projectors')}</h3>
+              <span className="sub">{t('local API')}</span>
+            </div>
+            <div className="panel-body generation-form">
+              <label>
+                <span>{t('Model-to-projector overrides')}</span>
+                <textarea
+                  rows={3}
+                  value={projectors}
+                  onChange={(event) => setProjectors(event.target.value)}
+                  placeholder="/path/to/model.gguf = /path/to/mmproj.gguf"
+                />
+              </label>
+              <p className="sub">
+                {t(
+                  'One full model path = projector path per line. Automatic discovery remains available. Image input is supported through the local API; archived conversations remain compatible with your readers.',
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="settings-group" hidden={section !== 'server'}>
+          <div className="panel generation-panel">
+            <div className="panel-head">
+              <h3>{t('Diagnostics')}</h3>
+              <span className="sub">{t('local error log')}</span>
+            </div>
+            <div className="panel-body generation-form">
+              <label className="check-field">
+                <input
+                  type="checkbox"
+                  checked={persistErrorLogs}
+                  onChange={(event) => setPersistErrorLogs(event.target.checked)}
+                />
+                {t('Save generation errors to .threadshelf/generation-errors.log')}
+              </label>
+              <p className="sub">
+                {t(
+                  'ThreadShelf writes provider/model errors without adding prompts, answers, or reasoning. Private tab-scoped chats are never written, regardless of this setting.',
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="generation-actions">
+          <button
+            className="btn primary settings-save"
+            disabled={saving || !data}
+            onClick={() => void save()}
+          >
+            <span className="stable-label">
+              <span aria-hidden="true" className="stable-label-size">
+                {t('Save generation settings')}
               </span>
-            )}
-          </div>
+              <span>
+                {saving
+                  ? t('Saving…')
+                  : t(section === 'ai' ? 'Save generation settings' : 'Save server settings')}
+              </span>
+            </span>
+          </button>
+          {data?.providers.map((provider) => (
+            <span key={provider.id} className="provider-status" data-ready={provider.available}>
+              {provider.label}: {provider.available ? t('ready') : t('not configured')}
+            </span>
+          ))}
         </div>
-      </div>
-
-      <LocalApiPanel
-        generationConfig={data?.config}
-        guide={guide}
-        onGuide={setGuide}
-        draft={localApi}
-        onChange={(patch) => setLocalApi((current) => ({ ...current, ...patch }))}
-      />
-
-      <div className="panel generation-panel">
-        <div className="panel-head">
-          <h3>{t('OpenRouter API')}</h3>
-          <span className="sub">{t('external · opt-in')}</span>
-        </div>
-        <div className="panel-body generation-form">
-          <label>
-            <span>{t('Session API key (or set OPENROUTER_API_KEY in the server .env)')}</span>
-            <input
-              type="password"
-              autoComplete="off"
-              value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
-              placeholder={
-                data?.config.openRouter.apiKeyConfigured
-                  ? t('A key is configured')
-                  : t('sk-or-v1-…')
-              }
-            />
-          </label>
-          <p className="sub">
-            {t(
-              'A key entered here stays in server-process memory only. A key in the gitignored .env persists across restarts. Neither value is returned by the API.',
-            )}
-          </p>
-          <label className="check-field">
-            <input
-              type="checkbox"
-              checked={enforceZdr}
-              onChange={(event) => setEnforceZdr(event.target.checked)}
-            />
-            {t('Use ZDR-only routing by default (can exclude many endpoints)')}
-          </label>
-          <label className="check-field">
-            <input
-              type="checkbox"
-              checked={denyDataCollection}
-              onChange={(event) => setDenyDataCollection(event.target.checked)}
-            />
-            {t('Use only providers that deny data collection/training')}
-          </label>
-        </div>
-      </div>
-
-      <div className="panel generation-panel">
-        <div className="panel-head">
-          <h3>{t('Diagnostics')}</h3>
-          <span className="sub">{t('local error log')}</span>
-        </div>
-        <div className="panel-body generation-form">
-          <label className="check-field">
-            <input
-              type="checkbox"
-              checked={persistErrorLogs}
-              onChange={(event) => setPersistErrorLogs(event.target.checked)}
-            />
-            {t('Save generation errors to .threadshelf/generation-errors.log')}
-          </label>
-          <p className="sub">
-            {t(
-              'ThreadShelf writes provider/model errors without adding prompts, answers, or reasoning. Private tab-scoped chats are never written, regardless of this setting.',
-            )}
-          </p>
-        </div>
-      </div>
-
-      <div className="generation-actions">
-        <button className="btn primary" disabled={saving} onClick={() => void save()}>
-          {saving ? t('Saving…') : t('Save generation settings')}
-        </button>
-        {data?.providers.map((provider) => (
-          <span key={provider.id} className="provider-status" data-ready={provider.available}>
-            {provider.label}: {provider.available ? t('ready') : t('not configured')}
-          </span>
-        ))}
-      </div>
+      </fieldset>
       <ModelCatalogModal
         open={catalogOpen}
         onClose={() => setCatalogOpen(false)}

@@ -2,7 +2,7 @@
 # ThreadShelf Enhanced: portable, project-local runtime; no sudo required.
 set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-NODE_VERSION="${THREADSHELF_NODE_VERSION:-24.22.1}"
+NODE_VERSION="${THREADSHELF_NODE_VERSION:-26.13.0}"
 NPM_VERSION="${THREADSHELF_NPM_VERSION:-12.2.1}"
 START=0
 RUNTIME_ONLY=0
@@ -12,7 +12,7 @@ while (($#)); do
     --runtime-only) RUNTIME_ONLY=1 ;;
     --node-version) shift; NODE_VERSION="${1:?Missing Node version}" ;;
     --npm-version) shift; NPM_VERSION="${1:?Missing npm version}" ;;
-    --help|-h) echo 'Usage: bash setup-threadshelf.sh [--start] [--runtime-only] [--node-version 24.22.1] [--npm-version 12.2.1]'; exit 0 ;;
+    --help|-h) echo 'Usage: bash setup-threadshelf.sh [--start] [--runtime-only] [--node-version 26.13.0] [--npm-version 12.2.1]'; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
   shift

@@ -303,3 +303,34 @@ test.describe('Chat and generation UI', () => {
     await expect(appPage.locator('#threadOverlay')).toHaveCount(0);
   });
 });
+
+test('selecting the automatically opened chat from the sidebar keeps it visible', async ({
+  page,
+  serverContext,
+}) => {
+  const created = await (
+    await page.request.post(`${serverContext.baseUrl}/api/generation/threads`, {
+      data: {
+        title: 'Same-chat navigation regression',
+        turns: [{ user: 'Synthetic opening message' }, { ai: 'Synthetic answer' }],
+      },
+    })
+  ).json();
+  try {
+    await page.goto(`${serverContext.baseUrl}/chat`);
+    await expect(
+      page.getByRole('heading', { name: 'Same-chat navigation regression', exact: true }),
+    ).toBeVisible();
+    const historyToggle = page.locator('#sidebarChatHistoryToggle');
+    if ((await historyToggle.getAttribute('aria-expanded')) !== 'true') await historyToggle.click();
+    await page.locator('.sb-chat-item', { hasText: 'Same-chat navigation regression' }).click();
+    await expect(page).toHaveURL(/thread=/);
+    await expect(
+      page.getByRole('heading', { name: 'Same-chat navigation regression', exact: true }),
+    ).toBeVisible();
+    await expect(page.locator('#continuePrompt')).toBeVisible();
+    await expect(page.locator('.generated-turn')).toHaveCount(2);
+  } finally {
+    await page.request.delete(`${serverContext.baseUrl}/api/generation/threads/${created.id}`);
+  }
+});

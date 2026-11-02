@@ -8,7 +8,7 @@ feature discussions. Follow [SECURITY.md](SECURITY.md) for vulnerabilities.
 ## Development setup
 
 Use Node 24+ and a compatible npm version. The setup scripts install the pinned
-project-local Node 24.22.1/npm 12.2.1 runtime and build the application; see the
+project-local Node 26.13.0/npm 12.2.1 runtime and build the application; see the
 [installation guide](README.md#installation).
 
 With Node/npm available in your shell:

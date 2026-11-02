@@ -221,7 +221,6 @@
   font-size: 11px;
   color: var(--text-3);
   padding: 0 14px 10px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }

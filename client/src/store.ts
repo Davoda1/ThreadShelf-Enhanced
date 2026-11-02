@@ -1,8 +1,11 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import { safeLocalStorage } from './safe-storage';
 import { normalizeLocale, type Locale } from './i18n/core';
 import type {
   FavoriteGenerationModel,
+  GenerationProviderId,
+  OpenRouterModelSort,
   PinnedConversation,
   RoleFilters,
   SavedSearch,
@@ -19,7 +22,25 @@ export const pinKey = (p: PinnedConversation): string =>
 export const favoriteModelKey = (model: FavoriteGenerationModel): string =>
   `${model.provider}\0${model.id}`;
 
+const GENERATION_PROVIDERS: readonly GenerationProviderId[] = [
+  'llama-cpp',
+  'openrouter',
+  'strata',
+  'openai-compatible',
+];
+
 interface UIState {
+  generationCatalogSort: OpenRouterModelSort;
+  generationFreeOnly: boolean;
+  setGenerationCatalogFilters: (sort: OpenRouterModelSort, freeOnly: boolean) => void;
+  settingsTab: 'ai' | 'server' | 'tts';
+  setSettingsTab: (tab: 'ai' | 'server' | 'tts') => void;
+  generationStreaming: boolean;
+  setGenerationStreaming: (enabled: boolean) => void;
+  generationProvider: GenerationProviderId;
+  setGenerationProvider: (provider: GenerationProviderId) => void;
+  generationModels: Partial<Record<GenerationProviderId, string>>;
+  setGenerationModel: (provider: GenerationProviderId, model: string) => void;
   imageLoadMode: 'click' | 'auto';
   setImageLoadMode: (mode: 'click' | 'auto') => void;
   locale: Locale;
@@ -63,6 +84,19 @@ interface UIState {
 export const useUIStore = create<UIState>()(
   persist(
     (set) => ({
+      generationCatalogSort: 'most-popular',
+      generationFreeOnly: true,
+      setGenerationCatalogFilters: (generationCatalogSort, generationFreeOnly) =>
+        set({ generationCatalogSort, generationFreeOnly }),
+      settingsTab: 'ai',
+      setSettingsTab: (settingsTab) => set({ settingsTab }),
+      generationStreaming: true,
+      setGenerationStreaming: (generationStreaming) => set({ generationStreaming }),
+      generationProvider: 'llama-cpp',
+      setGenerationProvider: (generationProvider) => set({ generationProvider }),
+      generationModels: {},
+      setGenerationModel: (provider, model) =>
+        set((state) => ({ generationModels: { ...state.generationModels, [provider]: model } })),
       imageLoadMode: 'click',
       setImageLoadMode: (mode) => set({ imageLoadMode: mode === 'auto' ? 'auto' : 'click' }),
       locale: 'en',
@@ -141,12 +175,33 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: 'threadshelf:ui',
+      storage: createJSONStorage(() => safeLocalStorage),
       merge: (persisted, current) => {
         const saved =
           persisted && typeof persisted === 'object' ? (persisted as Partial<UIState>) : {};
         return {
           ...current,
           ...saved,
+          generationCatalogSort: ['default', 'most-popular', 'newest'].includes(
+            saved.generationCatalogSort ?? '',
+          )
+            ? saved.generationCatalogSort!
+            : 'most-popular',
+          generationFreeOnly: saved.generationFreeOnly !== false,
+          settingsTab: current.settingsTab,
+          generationStreaming: saved.generationStreaming !== false,
+          generationProvider: GENERATION_PROVIDERS.includes(
+            saved.generationProvider as GenerationProviderId,
+          )
+            ? saved.generationProvider!
+            : current.generationProvider,
+          generationModels: Object.fromEntries(
+            GENERATION_PROVIDERS.flatMap((provider) =>
+              typeof saved.generationModels?.[provider] === 'string'
+                ? [[provider, saved.generationModels[provider]]]
+                : [],
+            ),
+          ),
           locale: normalizeLocale(saved.locale),
           imageLoadMode: saved.imageLoadMode === 'auto' ? 'auto' : 'click',
           richRendering: {
@@ -160,6 +215,11 @@ export const useUIStore = create<UIState>()(
         };
       },
       partialize: (state) => ({
+        generationCatalogSort: state.generationCatalogSort,
+        generationFreeOnly: state.generationFreeOnly,
+        generationStreaming: state.generationStreaming,
+        generationProvider: state.generationProvider,
+        generationModels: state.generationModels,
         imageLoadMode: state.imageLoadMode,
         locale: state.locale,
         richRendering: state.richRendering,

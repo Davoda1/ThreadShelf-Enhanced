@@ -11,9 +11,17 @@
 
 .insights-head {
   display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
   align-items: flex-end;
   justify-content: space-between;
   gap: 10px;
+
+  > div {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
 
   h2 {
     margin: 0;
@@ -31,8 +39,11 @@
 }
 
 .insights-scope {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-width: 0;
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   font-family: var(--font-mono);
@@ -61,7 +72,7 @@
 
 .stat-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5em), 1fr));
   gap: 10px;
 }
 
@@ -73,6 +84,8 @@
   border: 1px solid var(--border-0);
   border-radius: var(--r-md);
   background: var(--bg-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
 
   .stat-label {
     font-family: var(--font-mono);
@@ -210,9 +223,9 @@
 
 .chart-tip {
   position: absolute;
-  bottom: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
+  top: 0;
+  right: 0;
+  max-width: calc(100% - 40px);
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -221,7 +234,8 @@
   border-radius: var(--r-sm);
   background: var(--bg-0);
   box-shadow: 0 4px 14px rgb(0 0 0 / 18%);
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   z-index: 5;
   pointer-events: none;
 
@@ -266,16 +280,16 @@
 
 .bar-row {
   display: grid;
-  grid-template-columns: minmax(90px, 150px) 1fr auto;
+  grid-template-columns: minmax(0, 150px) minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   min-width: 0;
 
   .bar-label {
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
     font-size: 12px;
     color: var(--text-1);
 
@@ -327,7 +341,8 @@
 }
 
 .longest-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 18px 7px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   width: 100%;
@@ -366,15 +381,17 @@
   .l-title {
     flex: 1;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
     font-size: 13px;
     color: var(--text-1);
   }
 
   .l-meta {
-    flex: 0 0 auto;
+    grid-column: 3;
+    min-width: 0;
+    overflow-wrap: anywhere;
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--text-3);

@@ -59,7 +59,7 @@ const searchRoute = createRoute({
     model: typeof search.model === 'string' ? search.model : undefined,
     from: typeof search.from === 'string' ? search.from : undefined,
     to: typeof search.to === 'string' ? search.to : undefined,
-    mode: search.mode === 'keyword' ? 'keyword' : undefined,
+    mode: search.mode === 'keyword' || search.mode === 'hybrid' ? search.mode : undefined,
   }),
 });
 

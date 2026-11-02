@@ -219,7 +219,7 @@ stored thread -> generation registry -> llama.cpp (local) OR OpenRouter (externa
   embed or acquire the manual collection registry lock while holding the thread
   lock. Sidecars under the database's `.threadshelf-locks` directory and beside
   the collection registry must not be unlinked while any writer may use them.
-  All processes sharing a writable store must use 1.3.0 to participate in the
+  All processes sharing a writable store must use 1.4.0 to participate in the
   current job reservations and publication protocol. Copy the whole stopped
   database, including sidecars, and never downgrade a 1.3.0-written store.
 - Rename updates only the title column; appends build turns from the current row
@@ -346,7 +346,9 @@ locale or time zone only when that behavior is what the test is meant to verify.
 
 Optional features and model setup contact these external services:
 
-1. **OpenRouter** — the only surface that sends conversation text off-device.
+1. **Optional AI/speech providers** — OpenRouter, configured remote OpenAI-compatible
+   servers, ElevenLabs and other selected speech APIs can receive selected text.
+   Archive/vault tools may supply additional content only within their enabled scope.
 2. **GitHub Releases** (`ggml-org/llama.cpp`) — release metadata; archives only
    after explicit `--install`/`--url` consent or the setup screen's confirmation.
    Upstream's `/releases/latest` points at a semver release with no binaries, so
@@ -389,7 +391,10 @@ Tags use `v<package.json version>`; `.github/workflows/publish.yml` runs reusabl
 Linux and Windows CI, including dependency security checks, before creating a release
 with the two source archives and one consolidated `SHA256SUM.txt`. Keep previously
 published version tags and assets intact; 1.3.0 is a separate release.
-Only its release job has repository write permission.
+Only its release job has repository write permission. The protected `master`
+branch requires a pull request and passing checks. A tagged candidate may run
+validation while its PR is pending, but publication must verify that the tagged
+commit is an ancestor of `master`. Preserve these gates and automatic branch cleanup.
 
 Run `python3 test/source-release.test.py` for packaging regressions (`python` on
 Windows). CI runs these on both platforms as well as auditing the actual
@@ -432,13 +437,13 @@ conventions.
 
 ## Enhanced fork conventions
 
-ThreadShelf Enhanced 1.3.0 is based on upstream v1.3.0, with Node 24+ required
+ThreadShelf Enhanced 1.4.0 is based on upstream v1.3.0, with Node 24+ required
 for lossless JSON numeric tokens. Distribution is source ZIP/TAR.GZ only. The
 package is private. The source release workflow validates tagged source through
 reusable CI before publishing the source archives and consolidated checksums;
 it never publishes to npm.
 Use setup-threadshelf.sh (Linux) or setup-threadshelf.ps1 (Windows) to install a
-checksum-verified, project-local Node 24.22.1 LTS runtime and npm 12.2.1. Existing
+checksum-verified, project-local Node 26.13.0 LTS runtime and npm 12.2.1. Existing
 .env files are preserved. Version overrides are --node-version / --npm-version
 (PowerShell: -NodeVersion / -NpmVersion); npm compatibility is enforced.
 The root package's allowScripts entries are pinned to reviewed dependency
@@ -474,6 +479,30 @@ The public interactive `manual-importer.sh` remains a separate optional wrapper
 with configurable input, collection, heap/reserve and source-copy settings.
 Its default old-space ceiling is 4096 MiB; the startup check uses bounded work
 headroom plus a reserve and the compiled governor's probe when available.
-Do not add machine-specific launchers, migration scripts or configuration to the
-public edition. Preserve existing public screenshots and importer demonstrations;
-new screenshots must use synthetic content without identifying paths or hosts.
+Do not add machine-specific launchers or configuration to the public edition.
+The portable `scripts/migrate-installation.mjs` requires explicit source and target
+paths and `--stopped` before a verified copy; `--audit-only` is read-only. Keep its
+synthetic regressions and never introduce machine-specific defaults. Preserve
+importer demonstrations; new screenshots must use synthetic content without
+identifying paths, credentials or hosts.
+
+
+## Enhanced 1.4.0 feature boundaries
+
+- `src/routes/feature-access.ts` implements independent `ALLOW_LAN_AI` and
+  `ALLOW_LAN_TTS` flags. Only `1` enables; defaults remain localhost-only and
+  process environment wins over `.env`. These grant full feature management at
+  allowed hosts/origins and are not authentication. Preserve separate `/v1` keys.
+- `src/obsidian/` provides live Markdown vault tools with explicit write policy,
+  revision checks, history and browser approval for chat writes. MCP writes use
+  the configured persistent permission. Never follow links or rewrite vault IDs.
+- `src/generation/archive-tools.ts` supplies bounded archive search/read tools.
+  Provider vision is opt-in; private chat/draft/recovery state stays in memory.
+- `src/search-ranking.ts` and `src/lexical-sidecar.ts` add hybrid retrieval without
+  altering existing Reader v1 modes, identities, totals or cursors.
+- `src/tts/`, `tts/` and `client/src/tts/` provide opt-in server speech. Model
+  downloads require explicit review, are hash verified and transactionally installed.
+  Missing CPU engines cannot be tested. Never send response-only access metadata
+  back as settings. Preserve pinned/API recordings and private no-cache behavior.
+- Settings tabs are AI Models, Server and Text-to-Speech. New controls must keep
+  readable localized labels, stable action dimensions and bounded panel scrolling.

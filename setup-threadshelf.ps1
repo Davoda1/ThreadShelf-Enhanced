@@ -1,7 +1,7 @@
 # ThreadShelf Enhanced: project-local runtime; administrator rights not required.
 [CmdletBinding()]
 param(
-    [string]$NodeVersion = '24.22.1',
+    [string]$NodeVersion = '26.13.0',
     [string]$NpmVersion = '12.2.1',
     [switch]$Start,
     [switch]$RuntimeOnly

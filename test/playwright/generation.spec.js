@@ -57,7 +57,9 @@ test.describe('Experimental generation UI', () => {
     await expect(page.getByLabel('Context window')).toHaveValue('8192');
     await expect(page.getByLabel(/ZDR-only routing by default/)).not.toBeChecked();
     await expect(page.getByLabel(/providers that deny data collection/)).not.toBeChecked();
+    await page.locator('#settings-tab-server').click();
     await expect(page.getByLabel(/Save generation errors/)).toBeChecked();
+    await page.locator('#settings-tab-ai').click();
     await expect(page.getByRole('button', { name: 'Browse system folders…' })).toBeVisible();
     await expect(page.getByText('no model loaded').first()).toBeVisible();
   });
@@ -113,25 +115,47 @@ test.describe('Experimental generation UI', () => {
       });
     });
     await page.goto(`${serverContext.baseUrl}/chat?private=viewport-test`);
+    const expectPopoverFits = async (popoverSelector, triggerSelector, placementSelector) => {
+      const popover = page.locator(popoverSelector);
+      const trigger = page.locator(triggerSelector);
+      const placementRoot = page.locator(placementSelector);
+      await expect(popover).toBeVisible();
+      await expect(placementRoot).toHaveAttribute('data-popover-placement', /^(up|down)$/);
+      // Additional wrapping help can move the composer. Either placement is
+      // valid when its chosen-side gap and viewport boundaries are preserved.
+      await expect
+        .poll(async () => {
+          const [box, anchor, placement] = await Promise.all([
+            popover.boundingBox(),
+            trigger.boundingBox(),
+            placementRoot.getAttribute('data-popover-placement'),
+          ]);
+          if (!box || !anchor) return -1;
+          return Math.floor(
+            placement === 'up'
+              ? anchor.y - (box.y + box.height)
+              : box.y - (anchor.y + anchor.height),
+          );
+        })
+        .toBeGreaterThanOrEqual(6);
+      await expect
+        .poll(async () => {
+          const box = await popover.boundingBox();
+          const viewport = page.viewportSize();
+          return Boolean(
+            box &&
+            viewport &&
+            box.x >= 12 &&
+            box.y >= 10 &&
+            box.x + box.width <= viewport.width - 12 &&
+            box.y + box.height <= viewport.height - 10,
+          );
+        })
+        .toBe(true);
+    };
     // Model and generation settings live in a popover off the composer.
     await page.locator('#modelMenuButton').click();
-    await expect(page.locator('.model-popover')).toBeVisible();
-    await expect(page.locator('.model-menu')).toHaveAttribute('data-popover-placement', 'down');
-    await expect
-      .poll(async () => {
-        const [popover, trigger] = await Promise.all([
-          page.locator('.model-popover').boundingBox(),
-          page.locator('#modelMenuButton').boundingBox(),
-        ]);
-        return Math.floor((popover?.y ?? 0) - ((trigger?.y ?? 0) + (trigger?.height ?? 0)));
-      })
-      .toBeGreaterThanOrEqual(6);
-    await expect
-      .poll(async () => {
-        const popover = await page.locator('.model-popover').boundingBox();
-        return Math.floor(560 - ((popover?.y ?? 0) + (popover?.height ?? Number.MAX_SAFE_INTEGER)));
-      })
-      .toBeGreaterThanOrEqual(10);
+    await expectPopoverFits('.model-popover', '#modelMenuButton', '.model-menu');
     await expect(page.getByLabel('Generation model')).toHaveValue('Loaded model');
     await expect(page.locator('.model-runtime')).toContainText('Loaded');
     await page.getByLabel('Context window in tokens').click();
@@ -159,16 +183,7 @@ test.describe('Experimental generation UI', () => {
 
     await page.locator('#modelMenuButton').click();
     await page.locator('#masterPromptButton').click();
-    await expect(page.locator('.master-prompt-popover')).toBeVisible();
-    await expect(page.locator('.master-prompt')).toHaveAttribute('data-popover-placement', 'down');
-    const masterPromptBox = await page.locator('.master-prompt-popover').boundingBox();
-    expect(masterPromptBox?.x ?? 0).toBeGreaterThanOrEqual(12);
-    expect(
-      940 - ((masterPromptBox?.x ?? 0) + (masterPromptBox?.width ?? 940)),
-    ).toBeGreaterThanOrEqual(12);
-    expect(
-      560 - ((masterPromptBox?.y ?? 0) + (masterPromptBox?.height ?? 560)),
-    ).toBeGreaterThanOrEqual(10);
+    await expectPopoverFits('.master-prompt-popover', '#masterPromptButton', '.master-prompt');
   });
 
   test('changes llama.cpp context in chat and revalidates the answer budget', async ({

@@ -3,10 +3,10 @@
 An upload has two stages. First the browser transfers files to the server. Keep
 the tab open until the server confirms receipt. The accepted job then belongs
 to the server: closing the browser, changing pages or losing the connection does
-not cancel parsing/indexing. The **Add data** page reads persistent job state and
+not cancel parsing/indexing. The Indexing page reads persistent job state and
 offers explicit cancellation and retry.
 
-Folder imports, the command-line importer and watchers use the same job and
+Folder imports, the optional manual importer and watchers use the same job and
 coordination layer. One index operation runs per database; additional jobs wait.
 Only one HTTP server may use that database, even on a different port. These are
 operating-system locks, not a check that merely looks for a process name.
@@ -18,9 +18,7 @@ mutations return a busy response; existing published conversations remain
 readable. Clear does not immediately delete the old collection. Files are
 validated and normalized into a private disk spool, rows and vectors are built
 in bounded batches, and a small durable manifest publishes the matching archive
-generation and vector table together. Other collection writes receive a busy
-response until the replacement finishes. Deleting a collection cancels queued
-imports and refuses an active import, preventing later jobs from recreating it.
+generation and vector table together.
 
 Unsupported files, auxiliary metadata and empty exports are skipped with diagnostics.
 A mixed folder or ZIP can still import supported conversations. An empty auxiliary
@@ -28,9 +26,7 @@ file does not veto a clear import containing other valid conversations; the vali
 selection becomes the replacement. Recognized but malformed
 exports, failed integrity checks, no valid conversations or cancellation before
 publication preserve the previous collection. A completed publication cannot be
-undone by closing the browser or pressing cancel afterward. An update import
-without `--clear` can retain earlier successful files when a later file fails;
-inspect the job result before retrying.
+undone by closing the browser or pressing cancel afterward.
 
 Interrupted jobs retain validated inputs/checkpoints. Recovery verifies input
 hashes rather than trusting the saved percentage. Repeated interruption stops
@@ -42,10 +38,7 @@ markers. Never remove SQLite sidecars or staging files while processes are activ
 ## Finished-job history
 
 Completed, failed and cancelled jobs can be removed individually or cleared in
-bulk. In the **Import jobs** header, **Clear all** removes finished jobs across
-all collections; **Clear** on a finished job's card removes that one entry.
-Both actions ask for confirmation. API clients can also clear finished history
-for one collection. Bulk clearing covers the entire
+bulk for one collection or all collections. Bulk clearing covers the entire
 matching finished history, including entries outside the current list's display
 limit. Queued, running, paused and interrupted jobs are protected; cancel active
 work through its explicit job action first.
@@ -76,25 +69,19 @@ separate backup of originals you want to retain. This cleanup is independent of
 finished-job history removal and the optional external-image cache.
 
 Queued, running, paused and interrupted imports block cleanup for their
-collection. Jobs in other collections also block it if their incomplete input
-snapshot still depends on the selected uploads. A failed or cancelled folder
-import with that dependency blocks cleanup until retried successfully or removed
-from finished history to abandon its retry. Successful jobs and fully snapshotted
-finished jobs do not block cleanup. Active CLI/watcher indexing and conflicting
-collection mutations are also protected.
-
-Cleanup removes regular files only and leaves empty directories intact. Temporary
-upload-transfer directories, symbolic links, unsafe portable filenames and paths
-outside the selected collection are excluded. Storage configured to overlap
-protected database, configuration, runtime, model or cache locations cannot be
-cleaned through this feature. Traversal and pagination are bounded; a page or
-selected-file deletion accepts at most 200 files.
+collection. A failed or cancelled folder import also blocks it when its input
+snapshot is incomplete and its source folder overlaps those uploads. In that
+case, retry the import or remove its finished history entry to abandon that
+retry before deleting the files. Successful jobs and fully snapshotted finished
+jobs do not block cleanup. Active CLI/watcher indexing and conflicting collection
+mutations are also protected. Temporary upload-transfer directories and paths
+outside the selected collection are excluded from management.
 
 ## Pending-index search safeguard
 
 Search must exclude pending replacements and unreadable stored rows until their
-index state is safe. That exclusion expression is limited to 65,536 UTF-16 code units instead of
-growing with an unlimited backlog.
+index state is safe. That exclusion expression has a bounded 64 KiB-sized budget
+(65,536 JavaScript string units), instead of growing with an unlimited backlog.
 If it exceeds the budget, search reports that the collection has too many pending
 or invalid index entries (`INDEX_RECOVERY_REQUIRED` internally). It does not return
 partial results as a successful search, and it does not delete the archive.
@@ -116,8 +103,8 @@ guard. The import-job Retry action and saved-edit index recovery are separate.
 
 ## Memory and disk
 
-A JavaScript heap limit is not a whole-system memory limit: the OS, native
-allocations and other applications also need memory. The governor checks process
+The 16 GB system target includes the OS and native memory: a 4 GiB JavaScript
+heap limit alone is not a whole-system memory limit. The governor checks process
 resident memory, heap headroom and available host/container memory. Clean
 reclaimable file cache is accounted for separately from dirty, mapped and shared
 pages. Under pressure batches shrink, processing waits for headroom, or the job
@@ -127,14 +114,8 @@ Defaults reserve approximately 15% of effective system memory (512 MiB–2 GiB)
 and cap an import process's resident-memory budget at 45% of effective RAM,
 up to 6 GiB. Optional environment settings are `THREADSHELF_MEMORY_RESERVE_MB`
 and `THREADSHELF_PROCESS_MEMORY_MB`. `EMBED_BATCH_SIZE` remains the requested
-maximum batch size. The optional public `manual-importer.sh` defaults to a 4096 MiB
-old-space ceiling; `--heap-mb` changes it. Its default `--reserve-mb` is the greater
-of 2048 MiB and 25% of that ceiling. Startup checks require up to 1024 MiB of work
-headroom plus the reserve. When the compiled memory governor is available, the
-wrapper uses its effective host/container and reclaimable-cache accounting;
-older installations fall back to Node's available-memory estimate. These startup
-checks do not reserve RAM or replace the governor's ongoing process/RSS checks.
-See `bash manual-importer.sh --help` for all wrapper options.
+maximum batch size. The manual importer defaults to a 4 GiB heap ceiling;
+`THREADSHELF_MANUAL_HEAP_MB` overrides it. A ceiling does not reserve that much RAM.
 
 Streaming removes the whole-folder memory requirement, but individual records
 and formats that require whole-document parsing still have explicit safety limits.

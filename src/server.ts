@@ -10,6 +10,7 @@ import { startIndexRecovery } from './store.js';
 import { withServerInstance } from './indexing-coordinator.js';
 import { startImportJobs } from './import-jobs.js';
 import { startMemoryWatcher } from './memory-governor.js';
+import { disposeTts } from './tts/service.js';
 import {
   manageLlamaShutdownExternally,
   stopManagedLlamaServer,
@@ -21,6 +22,9 @@ const app = express();
 // Mounted ahead of the app-wide body parser: inference requests carry whole
 // conversations (and base64 images), so /v1 parses JSON with its own limit.
 app.use('/v1', createLocalApiRouter('local'));
+// A 512 KiB UTF-8 note can exceed 3 MiB once JSON control characters are escaped.
+// Scope this allowance to notes; the core 512 KiB API and 32 MiB /v1 limits stay intact.
+app.use('/api/obsidian', express.json({ limit: '4mb' }));
 app.use(express.json({ limit: '512kb' }));
 
 // Package assets resolve against the installed module, never process.cwd():
@@ -40,7 +44,7 @@ app.use('/api', (_req, res) => {
 });
 
 app.get(/.*/, (_req, res, next) => {
-  res.sendFile(join(PUBLIC, 'index.html'), (err) => {
+  res.sendFile(join(PUBLIC, 'index.html'), { dotfiles: 'allow' }, (err) => {
     if (err) next(err);
   });
 });
@@ -94,6 +98,7 @@ try {
               stopJobs(),
               stopLocalApiNetworkListener(),
               stopManagedLlamaServer(),
+              disposeTts(),
             ]);
             resolveServer();
           } catch (error) {

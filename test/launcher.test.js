@@ -28,7 +28,7 @@ const environment = (overrides = {}) => {
 };
 const run = (file, args = [], overrides = {}, cwd) =>
   spawnSync('bash', [file, ...args], { env: environment(overrides), encoding: 'utf8', cwd });
-const installation = async (t, version = '24.22.1') => {
+const installation = async (t, version = '26.13.0') => {
   const temporary = await mkdtemp(join(tmpdir(), 'enhanced-launcher-'));
   t.after(() => rm(temporary, { recursive: true, force: true }));
   const root = join(temporary, 'installed app');
@@ -61,7 +61,7 @@ test('launcher help and version work before installation', linux, () => {
   assert.equal(help.status, 0, help.stderr);
   assert.match(help.stdout, /--index FOLDER COLLECTION/);
   assert.match(help.stdout, /THREADSHELF_ENHANCED_DIR/);
-  assert.equal(run(launcher, ['--version'], overrides).stdout.trim(), 'threadshelf-enhanced 1.3.0');
+  assert.equal(run(launcher, ['--version'], overrides).stdout.trim(), 'threadshelf-enhanced 1.4.0');
 });
 
 test(

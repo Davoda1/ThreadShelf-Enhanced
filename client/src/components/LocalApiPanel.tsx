@@ -1,3 +1,5 @@
+import { StableLabel } from './StableLabel';
+import { NativeSelect } from './NativeSelect';
 import { t, useI18n } from '../i18n';
 import { useCallback, useState } from 'react';
 import { useLocalApiStatusQuery } from '../queries';
@@ -180,7 +182,10 @@ export function LocalApiPanel({
           <span className="local-api-label">{t('Base URL')}</span>
           <code className="local-api-value">{baseUrl}</code>
           <button type="button" className="btn sm ghost" onClick={() => copy('url', baseUrl)}>
-            {copied === 'url' ? t('copied') : t('copy')}
+            <StableLabel
+              current={copied === 'url' ? t('copied') : t('copy')}
+              labels={[t('copy'), t('copied')]}
+            />
           </button>
         </div>
 
@@ -190,7 +195,10 @@ export function LocalApiPanel({
               <span className="local-api-label">{t('Network URL')}</span>
               <code className="local-api-value">{url}</code>
               <button type="button" className="btn sm ghost" onClick={() => copy(url, url)}>
-                {copied === url ? t('copied') : t('copy')}
+                <StableLabel
+                  current={copied === url ? t('copied') : t('copy')}
+                  labels={[t('copy'), t('copied')]}
+                />
               </button>
             </div>
           ))}
@@ -200,7 +208,7 @@ export function LocalApiPanel({
             {t('Model id')}
           </label>
           {models && models.length > 0 ? (
-            <select
+            <NativeSelect
               id="local-api-model"
               value={model}
               onChange={(event) => setSelectedModel(event.target.value)}
@@ -211,7 +219,7 @@ export function LocalApiPanel({
                   {candidate.loaded ? t(' · loaded') : ''}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           ) : (
             <span className="local-api-value muted">
               {isLoading
@@ -228,7 +236,10 @@ export function LocalApiPanel({
             disabled={!models?.length}
             onClick={() => copy('model', model)}
           >
-            {copied === 'model' ? t('copied') : t('copy')}
+            <StableLabel
+              current={copied === 'model' ? t('copied') : t('copy')}
+              labels={[t('copy'), t('copied')]}
+            />
           </button>
         </div>
 
@@ -266,7 +277,10 @@ export function LocalApiPanel({
                   className="btn sm ghost"
                   onClick={() => copy('key', draft.apiKey)}
                 >
-                  {copied === 'key' ? t('copied') : t('copy')}
+                  <StableLabel
+                    current={copied === 'key' ? t('copied') : t('copy')}
+                    labels={[t('copy'), t('copied')]}
+                  />
                 </button>
               )}
             </div>
@@ -344,10 +358,13 @@ export function LocalApiPanel({
           </div>
           <pre>
             <code>{code}</code>
-            <button type="button" className="btn sm ghost" onClick={() => copy('code', code)}>
-              {t(copied === 'code' ? 'copied' : 'copy')}
-            </button>
           </pre>
+          <button type="button" className="btn sm ghost" onClick={() => copy('code', code)}>
+            <StableLabel
+              current={t(copied === 'code' ? 'copied' : 'copy')}
+              labels={[t('copy'), t('copied')]}
+            />
+          </button>
         </div>
       </div>
     </div>

@@ -55,7 +55,7 @@ test('Mermaid repairs are deterministic alternate display sources', () => {
 });
 
 test('image loading accepts only explicit safe URLs, never local files or executable payloads', () => {
-  for (const unsafe of ['javascript:alert(1)', 'file:///home/tester/private.png', 'sandbox:/tmp/pic.png', '//tracker.test/x', 'https://user:pass@example.com/x', 'data:image/svg+xml,<svg/>', 'cute cats']) assert.equal(safeImageUrl(unsafe), null);
+  for (const unsafe of ['javascript:alert(1)', 'file:///home/example/private.png', 'sandbox:/tmp/pic.png', '//tracker.test/x', 'https://user:pass@example.com/x', 'data:image/svg+xml,<svg/>', 'cute cats']) assert.equal(safeImageUrl(unsafe), null);
   for (const safe of ['https://example.com/picture.png', '/images/saved.png', 'data:image/png;base64,aGVsbG8=']) assert.equal(safeImageUrl(safe), safe);
 });
 

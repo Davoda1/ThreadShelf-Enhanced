@@ -25,6 +25,35 @@ const localHosts = (): Set<string> => {
   );
 };
 
+/** Browser origins include the scheme and port. A trusted host alone is not
+ * enough: a different local web app must not drive this server's management API.
+ * Native desktop clients omit Origin and keep their existing access contract. */
+const browserOriginRejection = (req: Request): string | undefined => {
+  const origin = req.headers.origin;
+  if (!origin) return undefined;
+  try {
+    const parsed = new URL(origin);
+    if (
+      !['http:', 'https:'].includes(parsed.protocol) ||
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== '/' ||
+      parsed.search ||
+      parsed.hash ||
+      origin !== parsed.origin
+    )
+      return 'Invalid origin';
+    // Express does not trust forwarded headers; do not infer HTTPS from one.
+    const protocol = req.protocol || 'http';
+    const expected = new URL(`${protocol}://${req.headers.host}`).origin;
+    if (parsed.origin === expected) return undefined;
+    const explicit = (process.env.ALLOWED_ORIGINS || '').split(',').map((value) => value.trim());
+    return explicit.includes(parsed.origin) ? undefined : 'Forbidden origin';
+  } catch {
+    return 'Invalid origin';
+  }
+};
+
 /**
  * Why a request must be refused as not addressed to this local server, or
  * undefined when it is acceptable. Checking `Host` and `Origin` defeats DNS
@@ -34,14 +63,7 @@ export const localOriginRejection = (req: Request): string | undefined => {
   const allowedHosts = localHosts();
   if (!allowedHosts.has(normalizeRequestHost(req.headers.host))) return 'Forbidden host';
 
-  const origin = req.headers.origin;
-  if (!origin) return undefined;
-  try {
-    const originHost = normalizeRequestHost(new URL(origin).host);
-    return allowedHosts.has(originHost) ? undefined : 'Forbidden origin';
-  } catch {
-    return 'Invalid origin';
-  }
+  return browserOriginRejection(req);
 };
 
 /**
@@ -59,13 +81,7 @@ export const networkOriginRejection = (req: Request): string | undefined => {
     host === `${machine}.local` ||
     host === `${machine}.lan`;
   if (!allowed(normalizeRequestHost(req.headers.host))) return 'Forbidden host';
-  const origin = req.headers.origin;
-  if (!origin) return undefined;
-  try {
-    return allowed(normalizeRequestHost(new URL(origin).host)) ? undefined : 'Forbidden origin';
-  } catch {
-    return 'Invalid origin';
-  }
+  return browserOriginRejection(req);
 };
 
 export const requireLocalOrigin: RequestHandler = (req, res, next) => {

@@ -94,8 +94,9 @@
     font-size: 15px;
   }
   .topbar {
-    height: 52px;
-    padding: 0 12px;
+    height: auto;
+    min-height: 52px;
+    padding: 8px 12px;
   }
   .topbar {
     gap: 8px;
@@ -126,7 +127,8 @@
 
   .model-filter {
     width: 100%;
-    grid-template-columns: auto 1fr;
+    flex-basis: 100%;
+    grid-template-columns: auto minmax(0, 1fr);
   }
 
   .role-chips {

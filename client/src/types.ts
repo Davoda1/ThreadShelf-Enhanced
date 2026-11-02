@@ -1,6 +1,6 @@
 export type View = 'search' | 'chat' | 'insights' | 'indexing' | 'mcp' | 'settings';
 
-export type SearchMode = 'semantic' | 'keyword';
+export type SearchMode = 'semantic' | 'keyword' | 'hybrid';
 
 export interface Provider {
   readonly label: string;
@@ -208,7 +208,7 @@ export interface RoleFilters {
   ai: boolean;
 }
 
-export type GenerationProviderId = 'llama-cpp' | 'openrouter';
+export type GenerationProviderId = 'llama-cpp' | 'openrouter' | 'strata' | 'openai-compatible';
 export type OpenRouterModelSort = 'default' | 'most-popular' | 'newest';
 export type LlamaAccelerationMode = 'auto' | 'cpu' | 'gpu' | 'hybrid' | 'multi-gpu';
 export type LlamaSplitMode = 'layer' | 'row';
@@ -450,6 +450,7 @@ export interface GenerationConfig {
     readonly executablePath?: string;
     readonly baseUrl?: string;
     readonly modelDirectories: readonly string[];
+    readonly projectorPaths?: Readonly<Record<string, string>>;
     readonly defaultModelDirectories: readonly string[];
     readonly contextSize: number;
     readonly acceleration: LlamaAccelerationMode;
@@ -470,6 +471,12 @@ export interface GenerationConfig {
     readonly enforceZdr: boolean;
     readonly denyDataCollection: boolean;
   };
+  readonly openAiCompatible?: {
+    readonly baseUrl: string;
+    readonly label: string;
+    readonly apiKeyConfigured: boolean;
+    readonly local: boolean;
+  };
   readonly localApi?: {
     readonly enabled: boolean;
     readonly apiKeyConfigured: boolean;
@@ -488,6 +495,8 @@ export interface GenerationConfigResponse {
 }
 
 export interface ContinuationMessage {
+  readonly turnIndex?: number;
+  readonly reasoningTurnIndex?: number;
   readonly role: 'user' | 'assistant';
   readonly content: string;
   readonly reasoning?: string;
@@ -498,6 +507,10 @@ export interface ContinuationMessage {
 }
 
 interface GenerationChatCommonInput {
+  readonly useObsidian?: boolean;
+  readonly vaultId?: string;
+  readonly useArchive?: boolean;
+  readonly streamOutput?: boolean;
   readonly provider: GenerationProviderId;
   readonly model: string;
   readonly prompt: string;
@@ -558,6 +571,13 @@ export interface GenerationResponse {
 }
 
 export type GenerationStreamEvent =
+  | { readonly type: 'vault-approval'; readonly approval: import('./obsidian').VaultApproval }
+  | {
+      readonly type: 'vault-tool';
+      readonly name: string;
+      readonly state: 'running' | 'done' | 'error';
+      readonly detail?: string;
+    }
   | {
       readonly type: 'status';
       readonly phase: 'preparing' | 'loading-model' | 'connecting' | 'generating' | 'saving';

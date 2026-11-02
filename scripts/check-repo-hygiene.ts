@@ -27,6 +27,8 @@ const allowedJson = [
   /^client\/(?:package|tsconfig)\.json$/i,
   /^client\/src\/enhanced-renderer\/licenses\/dependencies\.json$/,
   /^scripts\/renderer-build\/package(?:-lock)?\.json$/,
+  /^tts\/cpu\/(?:assets|support|windows-runtime)-manifest\.json$/,
+  /^docs\/benchmarks\/search-1\.4\.0-synthetic-100k\.json$/,
   /^test\/fixture\.json$/i,
   /^test\/fixtures\/.+\.json$/i,
 ];
@@ -65,6 +67,7 @@ for (const rawPath of files) {
 
 const textExtensions = new Set([
   '',
+  '.cjs',
   '.css',
   '.example',
   '.html',
@@ -94,6 +97,10 @@ for (const path of files) {
     continue;
   }
   if (content.includes('\0')) continue;
+
+  if (/\/workspace\/scratch\//.test(content)) {
+    violations.push(`${path}: execution-host workspace path`);
+  }
 
   if (/github_pat_[A-Za-z0-9_]{30,}|gh[pousr]_[A-Za-z0-9]{30,}/.test(content)) {
     violations.push(`${path}: value resembling a GitHub credential`);

@@ -2,7 +2,8 @@
 
 The bounded rich-content parser, rich layout and chart rendering, chart inspection,
 code-language adapters (including Fish), citation binding, math delimiter repair,
-and deterministic Mermaid repair are adapted from **ThreadShelf Local Reader**, Copyright (c) 2026 davoda1, MIT.
+and deterministic Mermaid repair are adapted from **ThreadShelf Local Reader
+3.3.0**, supplied source revision 9, Copyright (c) 2026 davoda1, MIT.
 
 `renderer.js` adapts the same Reader's Markdown sanitizer, code controls, Mermaid
 fallback/copy/original-versus-repaired controls and clipboard fallback. Its React
@@ -11,12 +12,12 @@ explicit image loading were added for ThreadShelf Enhanced. All adaptations are
 transient display operations; no archive source is rewritten.
 
 Legacy `cite`, `entity`, image and URL marker payload contracts also follow the
-**ChatGPT Export Processor GUI** source (MIT; notice in `licenses/`).
+supplied **ChatGPT Export Processor GUI 1.1.0** source (MIT; notice in `licenses/`).
 They enter the same bounded display parser, including code-fence protection;
 unsupported markers remain source. This is not a wholesale Processor conversion.
 
 The image controller, size-aware layout and six placeholder designs are adapted
-from **ThreadShelf Local Reader** (MIT, same retained
+from the supplied **ThreadShelf Local Reader 4.0.0 revision 5** (MIT, same retained
 Reader notice): Corner aperture and Soft horizon for unavailable sources, compact
 and wide download-arrow controls, and compact and wide failed-load artwork.
 `markdown-images.js` and `markdown-images.css` retain that geometry and lifecycle.

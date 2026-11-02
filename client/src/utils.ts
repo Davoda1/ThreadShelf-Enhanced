@@ -27,29 +27,11 @@ export const fmtModel = (m: string | undefined): string => {
   return value;
 };
 
-const middleEllipsis = (value: string, maxLength: number): string => {
-  if (value.length <= maxLength) return value;
-  const available = Math.max(2, maxLength - 1);
-  const start = Math.ceil(available * 0.42);
-  return `${value.slice(0, start)}…${value.slice(-(available - start))}`;
-};
+// Keep complete identities in the wrapping UI. Local models still use their
+// portable filename; provider namespaces and explicitly shown paths stay intact.
+export const compactPath = (value: string | undefined): string => value ?? '';
 
-export const compactPath = (value: string | undefined, maxLength = 25): string => {
-  if (!value) return '';
-  const normalized = value.replace(/\//g, '\\');
-  if (normalized.length <= maxLength) return normalized;
-  const root = /^[A-Za-z]:\\/.exec(normalized)?.[0] ?? '';
-  const parts = normalized.split('\\').filter(Boolean);
-  const leaf = parts[parts.length - 1] ?? normalized;
-  return middleEllipsis(`${root}…\\${leaf}`, maxLength);
-};
-
-export const compactModel = (value: string | undefined, maxLength = 30): string => {
-  if (!value) return '';
-  const parts = value.replace(/^models\//, '').split(/[\\/]/);
-  const leaf = parts[parts.length - 1] || value;
-  return middleEllipsis(leaf.replace(/\.gguf$/i, ''), maxLength);
-};
+export const compactModel = (value: string | undefined): string => fmtModel(value);
 
 export const fmtTime = (ms: number): string => {
   const s = Math.floor(ms / 1000);

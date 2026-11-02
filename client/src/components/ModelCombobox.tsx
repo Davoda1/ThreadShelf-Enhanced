@@ -49,7 +49,7 @@ export function ModelCombobox({
   const favoriteModels = useUIStore((state) => state.favoriteGenerationModels);
   const toggleFavorite = useUIStore((state) => state.toggleFavoriteGenerationModel);
   const [open, setOpen] = useState(false);
-  const position = useListboxPosition(rootRef, open, 420);
+  const position = useListboxPosition(rootRef, open, 420, 280);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const selected = models.find((model) => model.id === value);
@@ -115,7 +115,7 @@ export function ModelCombobox({
           disabled={disabled}
           value={open ? query : (selected?.name ?? '')}
           title={selected?.path || selected?.id}
-          placeholder={disabled ? t('No models available') : t('Type to find a model…')}
+          placeholder={disabled ? t('No models available') : t('Search…')}
           onFocus={() => {
             setOpen(true);
             setQuery('');
@@ -210,9 +210,9 @@ export function ModelCombobox({
                       {favorite ? '★' : '☆'}
                     </button>
                     <span className="model-option-copy">
-                      <strong title={model.name}>{compactModel(model.name, 38)}</strong>
+                      <strong title={model.name}>{compactModel(model.name)}</strong>
                       <span title={model.path || model.id}>
-                        {compactPath(model.path || model.id, 44)}
+                        {compactPath(model.path || model.id)}
                       </span>
                     </span>
                     {compactModelMeta(model) && (

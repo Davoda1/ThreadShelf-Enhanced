@@ -42,7 +42,11 @@
   display: flex;
   align-items: center;
   padding: 0 16px 0 18px;
-  gap: 14px;
+  gap: 10px 14px;
+  flex-wrap: wrap;
+  padding-block: 10px;
+  max-height: 45dvh;
+  overflow: auto;
   background: var(--thread-bar-bg);
   backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border-0);
@@ -52,15 +56,14 @@
   z-index: 5;
 
   .title-preview {
-    flex: 1;
+    flex: 1 1 180px;
     min-width: 0;
     font-size: 14px;
     font-weight: 500;
     letter-spacing: -0.01em;
     color: var(--text-0);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   .bar-meta {
@@ -70,10 +73,12 @@
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--text-2);
-    flex: 0 0 auto;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
     padding-right: 12px;
     border-right: 1px solid var(--border-0);
-    height: 22px;
+    min-height: 22px;
 
     .pdot {
       width: 6px;
@@ -86,17 +91,19 @@
   }
 
   .bar-model {
+    min-width: 0;
     color: var(--text-1);
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   .path-crumb {
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--text-3);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
     flex: 0 1 auto;
     max-width: 340px;
 
@@ -197,14 +204,20 @@
     margin-top: 6px;
 
     .item {
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
       display: inline-flex;
       align-items: baseline;
       gap: 6px;
     }
     .k {
+      flex: 0 0 auto;
       color: var(--text-4);
     }
     .v {
+      min-width: 0;
+      overflow-wrap: anywhere;
       color: var(--text-1);
     }
     .v.match {
@@ -228,6 +241,8 @@
 
 .role-toggles {
   display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   gap: 2px;
   padding: 2px;
   background: var(--bg-1);
@@ -239,8 +254,11 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 22px;
-  padding: 0 8px;
+  min-height: 22px;
+  height: auto;
+  min-width: 0;
+  padding: 3px 8px;
+  overflow-wrap: anywhere;
   border-radius: 4px;
   color: var(--text-3);
   font-size: 11.5px;
@@ -647,8 +665,11 @@
 
 .show-more {
   margin-top: 10px;
-  height: 30px;
-  padding: 0 11px;
+  min-height: 30px;
+  height: auto;
+  max-width: 100%;
+  padding: 4px 11px;
+  overflow-wrap: anywhere;
   border-radius: var(--r-sm);
   border: 1px solid var(--border-0);
   background: var(--bg-1);

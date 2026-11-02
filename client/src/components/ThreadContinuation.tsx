@@ -1,3 +1,7 @@
+import { NativeSelect } from './NativeSelect';
+import { continuationSpeechIndex } from '../tts/identity';
+import { ReadAloud } from '../tts/ReadAloud';
+import { speechSource, TtsScope } from '../tts/runtime';
 import { t, useI18n, formatNumber, formatDate } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -22,8 +26,14 @@ import { ModelCombobox } from './ModelCombobox';
 import { NumberCombobox } from './NumberCombobox';
 import { LlamaLogPanel } from './LlamaLogPanel';
 import { useCollectionLock } from '../import-jobs';
+import { useUIStore } from '../store';
+import { usePrivateChatStore, type InterruptedGeneration } from '../private-chat-memory';
+import { ObsidianChatControls, VaultDeleteApproval } from './ObsidianPanel';
+import type { VaultApproval } from '../obsidian';
 
 interface ThreadContinuationProps {
+  readonly baseTurnIndex?: number;
+  readonly initialTurnCount?: number;
   readonly sourceFile?: string;
   readonly collection?: string;
   readonly conversationKey?: string;
@@ -47,17 +57,14 @@ const modelLabel = (model: GenerationModel): string => {
   return `${model.loaded ? '● ' : ''}${model.name}${size}`;
 };
 
-interface InterruptedGeneration {
-  readonly id: string;
-  readonly prompt: string;
-  readonly content: string;
-  readonly reasoning: string;
-  readonly model: string;
-  readonly provider: GenerationProviderId;
-  readonly error: string;
-  readonly stopped: boolean;
-  readonly createdAt: string;
-}
+const emptyModelsMessage = (provider: GenerationProviderId): string =>
+  provider === 'llama-cpp'
+    ? 'No GGUF models found. Download one from the model menu or add a directory in Settings.'
+    : provider === 'strata'
+      ? 'Strata returned no model. Start its local server and load a model.'
+      : provider === 'openai-compatible'
+        ? 'The compatible server returned no models. Check its connection in AI Models settings.'
+        : 'OpenRouter returned no models.';
 
 const CONTEXT_SIZE_OPTIONS = [4096, 8192, 16_384, 32_768, 65_536, 131_072] as const;
 
@@ -91,6 +98,8 @@ const attemptTranscript = (attempt: InterruptedGeneration): string =>
     .join('\n\n');
 
 export function ThreadContinuation({
+  baseTurnIndex = 0,
+  initialTurnCount = 0,
   sourceFile,
   collection,
   conversationKey,
@@ -107,16 +116,40 @@ export function ThreadContinuation({
   showThreadShelfTurns = true,
 }: ThreadContinuationProps) {
   useI18n();
+  const [initialSpeechCounts] = useState(() => ({
+    messages: initialMessages.length,
+    turns: initialTurnCount,
+  }));
   const queryClient = useQueryClient();
   const masterPrompt = useActiveMasterPromptText();
   const [config, setConfig] = useState<GenerationConfigResponse | null>(null);
-  const [provider, setProvider] = useState<GenerationProviderId>('llama-cpp');
+  const [provider, setProvider] = useState<GenerationProviderId>(
+    () => useUIStore.getState().generationProvider,
+  );
+  const rememberProvider = useUIStore((state) => state.setGenerationProvider);
+  const rememberModel = useUIStore((state) => state.setGenerationModel);
+  const streamOutput = useUIStore((state) => state.generationStreaming);
+  const setStreamOutput = useUIStore((state) => state.setGenerationStreaming);
   const [models, setModels] = useState<GenerationModel[]>([]);
   const [runtime, setRuntime] = useState<GenerationRuntimeStatus | null>(null);
   const [model, setModel] = useState('');
-  const [openRouterSort, setOpenRouterSort] = useState<OpenRouterModelSort>('most-popular');
-  const [freeOnly, setFreeOnly] = useState(true);
-  const [prompt, setPrompt] = useState('');
+  const [openRouterSort, setOpenRouterSort] = useState<OpenRouterModelSort>(
+    () => useUIStore.getState().generationCatalogSort,
+  );
+  const [freeOnly, setFreeOnly] = useState(() => useUIStore.getState().generationFreeOnly);
+  const privateDraft = usePrivateChatStore((state) => state.session.draft);
+  const setPrivateDraft = usePrivateChatStore((state) => state.setDraft);
+  const privateAttempts = usePrivateChatStore((state) => state.session.interruptedGenerations);
+  const addPrivateAttempt = usePrivateChatStore((state) => state.addInterruptedGeneration);
+  const dismissPrivateAttempt = usePrivateChatStore((state) => state.dismissInterruptedGeneration);
+  const [savedPrompt, setSavedPrompt] = useState('');
+  const prompt = ephemeral ? privateDraft : savedPrompt;
+  const setPrompt = (value: string) => (ephemeral ? setPrivateDraft(value) : setSavedPrompt(value));
+  const [useObsidian, setUseObsidian] = useState(false);
+  const [vaultId, setVaultId] = useState('');
+  const [useArchive, setUseArchive] = useState(false);
+  const [vaultApproval, setVaultApproval] = useState<VaultApproval | null>(null);
+  const [toolActivity, setToolActivity] = useState<string[]>([]);
   const [continuation, setContinuation] = useState<ContinuationMessage[]>([...initialMessages]);
   const [loadingModels, setLoadingModels] = useState(true);
   const [sending, setSending] = useState(false);
@@ -146,17 +179,20 @@ export function ThreadContinuation({
     threadId ||
     `${collection ?? 'chat'}:${sourceFile ?? 'new'}:${conversationKey ?? ''}`
   }`;
-  const [interruptedGenerations, setInterruptedGenerations] = useState<InterruptedGeneration[]>(
-    () => loadInterruptedGenerations(interruptedStorageKey),
+  const [storedAttempts, setStoredAttempts] = useState<InterruptedGeneration[]>(() =>
+    ephemeral ? [] : loadInterruptedGenerations(interruptedStorageKey),
   );
 
+  const interruptedGenerations = ephemeral ? privateAttempts : storedAttempts;
+
   useEffect(() => {
+    if (ephemeral) return;
     try {
-      sessionStorage.setItem(interruptedStorageKey, JSON.stringify(interruptedGenerations));
+      sessionStorage.setItem(interruptedStorageKey, JSON.stringify(storedAttempts));
     } catch {
       // The current in-memory transcript remains available if session storage is full or blocked.
     }
-  }, [interruptedGenerations, interruptedStorageKey]);
+  }, [ephemeral, storedAttempts, interruptedStorageKey]);
 
   useEffect(() => {
     onRecoveryChanged?.(interruptedGenerations.length > 0);
@@ -201,11 +237,17 @@ export function ThreadContinuation({
 
   useEffect(() => {
     const controller = new AbortController();
+    const initialProvider = useUIStore.getState().generationProvider;
     void Promise.all([
       api.generationConfig(controller.signal),
-      api.generationModels('llama-cpp', { signal: controller.signal }),
+      api.generationModels(initialProvider, {
+        signal: controller.signal,
+        sort: useUIStore.getState().generationCatalogSort,
+        freeOnly: useUIStore.getState().generationFreeOnly,
+      }),
     ])
       .then(([nextConfig, response]) => {
+        if (controller.signal.aborted) return;
         setConfig(nextConfig);
         const configuredContext = nextConfig.config.llamaCpp?.contextSize ?? 8192;
         setContextSize(String(configuredContext));
@@ -214,19 +256,24 @@ export function ThreadContinuation({
         setModels(response.models);
         setRuntime(response.runtime);
         setModel(
-          response.models.find((candidate) => candidate.loaded)?.id ?? response.models[0]?.id ?? '',
+          response.models.find(
+            (candidate) => candidate.id === useUIStore.getState().generationModels[initialProvider],
+          )?.id ??
+            response.models.find((candidate) => candidate.loaded)?.id ??
+            response.models[0]?.id ??
+            '',
         );
         if (response.models.length === 0) {
-          setError(
-            'No GGUF models found. Download one from the model menu or add a directory in Settings.',
-          );
+          setError(emptyModelsMessage(initialProvider));
         }
       })
       .catch((cause: unknown) => {
         if (cause instanceof DOMException && cause.name === 'AbortError') return;
         setError(cause instanceof Error ? cause.message : 'Could not load generation settings.');
       })
-      .finally(() => setLoadingModels(false));
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingModels(false);
+      });
     return () => {
       controller.abort();
       requestController.current?.abort();
@@ -303,6 +350,9 @@ export function ThreadContinuation({
             )
           : undefined;
         if (preferred) return preferred.id;
+        const remembered = useUIStore.getState().generationModels[selectedProvider];
+        if (remembered && response.models.some((candidate) => candidate.id === remembered))
+          return remembered;
         const loaded = response.models.find((candidate) => candidate.loaded);
         if (loaded) return loaded.id;
         return response.models.some((candidate) => candidate.id === current)
@@ -310,11 +360,7 @@ export function ThreadContinuation({
           : (response.models[0]?.id ?? '');
       });
       if (response.models.length === 0) {
-        setError(
-          selectedProvider === 'llama-cpp'
-            ? 'No GGUF models found. Download one here or add a directory in Settings.'
-            : 'OpenRouter returned no models.',
-        );
+        setError(emptyModelsMessage(selectedProvider));
       }
     } catch (cause) {
       setModels([]);
@@ -333,6 +379,14 @@ export function ThreadContinuation({
 
   const isThreadShelfChat = Boolean(threadId);
   const isStandaloneChat = isThreadShelfChat || ephemeral || draftSaved;
+  const ttsSource = speechSource(
+    collection || 'threadshelf_conversations',
+    sourceFile ||
+      (ephemeral
+        ? `private:${attemptScope || 'session'}`
+        : `threadshelf://chat/${threadId || createdThreadId || attemptScope || 'draft'}`),
+    conversationKey || threadId || createdThreadId || '',
+  );
   const collectionLock = useCollectionLock(
     ephemeral ? '' : collection || (isStandaloneChat ? 'threadshelf_conversations' : ''),
   );
@@ -365,14 +419,21 @@ export function ThreadContinuation({
     onModelChanged?.(selectedModel?.name || runtime?.model || model);
   }, [model, onModelChanged, runtime?.model, selectedModel?.name]);
 
+  useEffect(() => {
+    if (model && models.some((candidate) => candidate.id === model)) rememberModel(provider, model);
+  }, [model, models, provider, rememberModel]);
+
   const changeProvider = (next: GenerationProviderId) => {
     setProvider(next);
+    rememberProvider(next);
     setModels([]);
     setRuntime(null);
     setModel('');
     setError('');
     setProgress(
-      next === 'llama-cpp' ? 'Discovering local GGUF models…' : 'Loading live OpenRouter models…',
+      next === 'llama-cpp'
+        ? 'Discovering local GGUF models…'
+        : 'Loading models from the selected provider…',
     );
     void loadModels(next, { sort: openRouterSort, freeOnly });
   };
@@ -466,12 +527,20 @@ export function ThreadContinuation({
     setProgress(
       provider === 'llama-cpp'
         ? 'Preparing llama.cpp. The first model load can take a while…'
-        : 'Preparing an OpenRouter request…',
+        : provider === 'openrouter'
+          ? 'Preparing an OpenRouter request…'
+          : 'Preparing the selected provider request…',
     );
     const controller = new AbortController();
     requestController.current = controller;
+    setVaultApproval(null);
+    setToolActivity([]);
     try {
       const common = {
+        streamOutput,
+        useObsidian,
+        vaultId: vaultId || undefined,
+        useArchive,
         provider,
         model,
         prompt: text,
@@ -492,7 +561,13 @@ export function ThreadContinuation({
                 conversationKey,
               },
         (event: GenerationStreamEvent) => {
-          if (event.type === 'status') {
+          if (event.type === 'vault-approval') {
+            setVaultApproval(event.approval);
+            setProgress('Waiting for your decision about the note change…');
+          } else if (event.type === 'vault-tool') {
+            setToolActivity((current) => [...current, `${event.name}: ${event.state}`].slice(-24));
+            if (event.state !== 'running') setVaultApproval(null);
+          } else if (event.type === 'status') {
             setProgress(event.message);
             if (event.model) setStreamedModel(event.model);
           } else if (event.type === 'delta') {
@@ -540,9 +615,9 @@ export function ThreadContinuation({
               detail: 'The local model is loaded and ready.',
             }
           : {
-              state: 'remote',
+              state: providerIsExternal ? 'remote' : 'external',
               model: response.model,
-              detail: 'The response ran through OpenRouter.',
+              detail: `The response ran through ${providerLabel}.`,
             },
       );
       if (provider === 'llama-cpp') {
@@ -551,7 +626,7 @@ export function ThreadContinuation({
         );
       }
       window.dispatchEvent(new Event('threadshelf:generation-runtime-changed'));
-      if (response.persistence?.warning) toast.info(response.persistence.warning);
+      if (response.persistence?.warning) toast.warning(response.persistence.warning);
       onCompleted?.();
     } catch (cause) {
       const stopped = controller.signal.aborted;
@@ -571,7 +646,8 @@ export function ThreadContinuation({
         stopped,
         createdAt: new Date().toISOString(),
       };
-      setInterruptedGenerations((current) => [...current, attempt].slice(-8));
+      if (ephemeral) addPrivateAttempt(attempt);
+      else setStoredAttempts((current) => [...current, attempt].slice(-8));
       if (stopped) {
         toast.info('Generation stopped.');
       } else {
@@ -580,6 +656,7 @@ export function ThreadContinuation({
     } finally {
       if (requestController.current === controller) requestController.current = null;
       setSending(false);
+      setVaultApproval(null);
       setPendingUser('');
       setStreamedContent([]);
       setStreamedReasoning([]);
@@ -587,13 +664,25 @@ export function ThreadContinuation({
     }
   };
 
+  const providerStatus = config?.providers.find((candidate) => candidate.id === provider);
+  const providerIsExternal = providerStatus
+    ? !providerStatus.local
+    : provider === 'openrouter' || provider === 'openai-compatible';
+  const providerLabel =
+    providerStatus?.label ??
+    {
+      'llama-cpp': 'llama.cpp',
+      openrouter: 'OpenRouter',
+      strata: 'Strata',
+      'openai-compatible': 'Compatible server',
+    }[provider];
   const runtimeModel = runtime?.model ? compactModel(runtime.model) : undefined;
   const modelStatusName =
-    compactModel(selectedModel?.name || runtime?.model || model, 24) ||
+    compactModel(selectedModel?.name || runtime?.model || model) ||
     (loadingModels ? t('Loading models…') : t('Select a model'));
   const modelDotState = sending
     ? 'loading'
-    : provider === 'openrouter'
+    : providerIsExternal
       ? 'remote'
       : selectedModel?.loaded || runtime?.state === 'ready'
         ? 'ready'
@@ -601,8 +690,16 @@ export function ThreadContinuation({
 
   return (
     <div className="thread-continuation">
+      {isStandaloneChat && <TtsScope sourceId={ttsSource} private={ephemeral} />}
       {(isStandaloneChat || showThreadShelfTurns) &&
         continuation.map((message, index) => {
+          const ordinal = continuationSpeechIndex(
+            continuation,
+            index,
+            baseTurnIndex,
+            initialSpeechCounts.messages,
+            initialSpeechCounts.turns,
+          );
           const priorAssistants = continuation
             .slice(0, index)
             .filter((candidate) => candidate.role === 'assistant');
@@ -640,9 +737,26 @@ export function ThreadContinuation({
                     )}
                   </div>
                 )}
+                <div className="tts-turn-actions">
+                  <ReadAloud
+                    text={message.content}
+                    sourceId={ttsSource}
+                    messageId={`${ordinal}:${message.role === 'user' ? 'user' : 'ai'}`}
+                    role={message.role === 'user' ? 'user' : 'ai'}
+                    private={ephemeral}
+                    label={`${t(message.role === 'user' ? 'User' : 'Response')} · ${ordinal + 1}`}
+                  />
+                </div>
                 {message.reasoning && (
                   <details className="generated-reasoning">
                     <summary>{t('Model reasoning')}</summary>
+                    <ReadAloud
+                      text={message.reasoning}
+                      sourceId={ttsSource}
+                      messageId={`${message.reasoningTurnIndex ?? ordinal - 1}:thinking`}
+                      role="thinking"
+                      private={ephemeral}
+                    />
                     <Markdown
                       text={message.reasoning}
                       role="thinking"
@@ -787,9 +901,11 @@ export function ThreadContinuation({
                   className="btn sm ghost"
                   aria-label={t('Dismiss failed generation')}
                   onClick={() =>
-                    setInterruptedGenerations((current) =>
-                      current.filter((candidate) => candidate.id !== attempt.id),
-                    )
+                    ephemeral
+                      ? dismissPrivateAttempt(attempt.id)
+                      : setStoredAttempts((current) =>
+                          current.filter((candidate) => candidate.id !== attempt.id),
+                        )
                   }
                 >
                   {' '}
@@ -934,6 +1050,23 @@ export function ThreadContinuation({
       )}
 
       <div className="continue-card">
+        {toolActivity.length > 0 && (
+          <details className="vault-activity">
+            <summary>{t('Tool activity')}</summary>
+            <ul>
+              {toolActivity.map((activity, index) => (
+                <li key={index}>{activity}</li>
+              ))}
+            </ul>
+          </details>
+        )}
+        {vaultApproval && (
+          <VaultDeleteApproval
+            key={vaultApproval.id}
+            approval={vaultApproval}
+            onDecision={() => setVaultApproval(null)}
+          />
+        )}
         {collectionLock && (
           <div className="banner" role="status">
             <span>{t('Collection replacement in progress. Changes are temporarily blocked.')}</span>{' '}
@@ -955,6 +1088,8 @@ export function ThreadContinuation({
         )}
         <textarea
           id="continuePrompt"
+          aria-label={isStandaloneChat ? t('Message…') : t('Follow-up…')}
+          aria-describedby="composer-keyboard-help"
           value={prompt}
           onChange={(event) => setPrompt(event.target.value)}
           onKeyDown={(event) => {
@@ -963,15 +1098,14 @@ export function ThreadContinuation({
               void send();
             }
           }}
-          placeholder={
-            isStandaloneChat
-              ? t('Message… (Enter to send, Shift+Enter for a new line)')
-              : t('Ask a follow-up… (Enter to send, Shift+Enter for a new line)')
-          }
+          placeholder={isStandaloneChat ? t('Message…') : t('Follow-up…')}
           maxLength={100_000}
           rows={isStandaloneChat ? 2 : 3}
           disabled={sending}
         />
+        <p id="composer-keyboard-help" className="composer-keyboard-help">
+          {t('Enter to send, Shift+Enter for a new line')}
+        </p>
         <div className="composer-bar">
           <div className="model-menu" ref={modelMenuRef}>
             <button
@@ -986,9 +1120,7 @@ export function ThreadContinuation({
             >
               <span className="runtime-dot" aria-hidden="true" />
               <span className="model-status-name">{modelStatusName}</span>
-              {provider === 'openrouter' && (
-                <span className="off-device-chip">{t('off-device')}</span>
-              )}
+              {providerIsExternal && <span className="off-device-chip">{t('off-device')}</span>}
               <span className="model-status-chevron" aria-hidden="true">
                 ▾
               </span>
@@ -1010,6 +1142,7 @@ export function ThreadContinuation({
                     role="tab"
                     aria-selected={provider === 'llama-cpp'}
                     data-active={provider === 'llama-cpp'}
+                    disabled={sending || loadingModels}
                     onClick={() => provider !== 'llama-cpp' && changeProvider('llama-cpp')}
                   >
                     {' '}
@@ -1020,10 +1153,37 @@ export function ThreadContinuation({
                     role="tab"
                     aria-selected={provider === 'openrouter'}
                     data-active={provider === 'openrouter'}
+                    disabled={sending || loadingModels}
                     onClick={() => provider !== 'openrouter' && changeProvider('openrouter')}
                   >
                     {' '}
                     {t('OpenRouter · external')}{' '}
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={provider === 'strata'}
+                    data-active={provider === 'strata'}
+                    disabled={sending || loadingModels}
+                    onClick={() => provider !== 'strata' && changeProvider('strata')}
+                  >
+                    {t('Strata · local')}
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={provider === 'openai-compatible'}
+                    data-active={provider === 'openai-compatible'}
+                    disabled={sending || loadingModels}
+                    onClick={() =>
+                      provider !== 'openai-compatible' && changeProvider('openai-compatible')
+                    }
+                  >
+                    {t(
+                      config?.config.openAiCompatible?.local
+                        ? 'Compatible · local'
+                        : 'Compatible · off-device',
+                    )}
                   </button>
                 </div>
 
@@ -1065,19 +1225,20 @@ export function ThreadContinuation({
                 {provider === 'openrouter' && (
                   <div className="model-catalog-filters" aria-label={t('OpenRouter model filters')}>
                     <span>{t('Catalog')}</span>
-                    <select
+                    <NativeSelect
                       aria-label={t('Sort OpenRouter models')}
                       value={openRouterSort}
                       onChange={(event) => {
                         const next = event.target.value as OpenRouterModelSort;
                         setOpenRouterSort(next);
+                        useUIStore.getState().setGenerationCatalogFilters(next, freeOnly);
                         void loadModels('openrouter', { sort: next, freeOnly });
                       }}
                     >
                       <option value="most-popular">{t('Most popular this week')}</option>
                       <option value="newest">{t('Latest')}</option>
                       <option value="default">{t('Default')}</option>
-                    </select>
+                    </NativeSelect>
                     <label>
                       <input
                         type="checkbox"
@@ -1085,6 +1246,7 @@ export function ThreadContinuation({
                         onChange={(event) => {
                           const next = event.target.checked;
                           setFreeOnly(next);
+                          useUIStore.getState().setGenerationCatalogFilters(openRouterSort, next);
                           void loadModels('openrouter', { sort: openRouterSort, freeOnly: next });
                         }}
                       />{' '}
@@ -1114,6 +1276,7 @@ export function ThreadContinuation({
                     {runtime?.detail && <span>{t(runtime.detail)}</span>}
                   </div>
                   {runtime &&
+                    provider === 'llama-cpp' &&
                     (runtime.state === 'starting' ||
                       runtime.state === 'ready' ||
                       (runtime.state === 'external' && Boolean(runtime.model))) && (
@@ -1202,17 +1365,24 @@ export function ThreadContinuation({
             <span className="composer-hint">
               {provider === 'llama-cpp'
                 ? t('Loopback-only llama-server')
-                : t('Sent off-device via OpenRouter')}
+                : provider === 'strata'
+                  ? t('Loopback-only Strata server')
+                  : providerIsExternal
+                    ? t('Sent off-device via {value0}', { value0: providerLabel })
+                    : t('Local provider · {value0}', { value0: providerLabel })}
             </span>
             {sending ? (
-              <button className="btn danger" onClick={() => requestController.current?.abort()}>
+              <button
+                className="btn danger composer-send"
+                onClick={() => requestController.current?.abort()}
+              >
                 {' '}
                 {t('Stop')}{' '}
               </button>
             ) : (
               <button
                 id="continueSend"
-                className="btn primary"
+                className="btn primary composer-send"
                 disabled={!prompt.trim() || !model || Boolean(collectionLock)}
                 onClick={() => void send()}
               >
@@ -1221,6 +1391,44 @@ export function ThreadContinuation({
             )}
           </div>
         </div>
+        <div className="composer-preferences">
+          <label className="check-field">
+            <input
+              type="checkbox"
+              checked={streamOutput}
+              disabled={sending}
+              onChange={(event) => setStreamOutput(event.target.checked)}
+            />
+            {t('Stream response')}
+          </label>
+          <label className="check-field">
+            <input
+              type="checkbox"
+              checked={useArchive}
+              disabled={sending}
+              onChange={(event) => setUseArchive(event.target.checked)}
+            />
+            {t('Search archive with AI')}
+          </label>
+        </div>
+        {useArchive && (
+          <p className="composer-tool-note">
+            {t(
+              providerIsExternal
+                ? 'Matching archive excerpts may be sent to the selected external provider.'
+                : 'The model can search and read archive excerpts to cite its sources.',
+            )}
+          </p>
+        )}
+        <ObsidianChatControls
+          enabled={useObsidian}
+          onChange={setUseObsidian}
+          sending={sending}
+          external={providerIsExternal}
+          ephemeral={ephemeral}
+          vaultId={vaultId}
+          onVaultChange={setVaultId}
+        />
       </div>
       <ModelCatalogModal
         open={catalogOpen}

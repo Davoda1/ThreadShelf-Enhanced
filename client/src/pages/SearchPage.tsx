@@ -1,3 +1,4 @@
+import { NativeSelect } from '../components/NativeSelect';
 import { t, useI18n } from '../i18n';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
@@ -119,7 +120,7 @@ export function SearchPage() {
   const [dateFrom, setDateFrom] = useState(urlFrom ?? '');
   const [dateTo, setDateTo] = useState(urlTo ?? '');
   const [searchMode, setSearchMode] = useState<SearchMode>(
-    urlMode === 'keyword' ? 'keyword' : 'semantic',
+    urlMode === 'keyword' || urlMode === 'hybrid' ? urlMode : 'semantic',
   );
   const [resultLimit, setResultLimit] = useState(15);
   const [selectedIdx, setSelectedIdx] = useState(-1);
@@ -218,7 +219,7 @@ export function SearchPage() {
         setSubmittedQuery(nextUrlQuery);
         setDateFrom(urlFrom ?? '');
         setDateTo(urlTo ?? '');
-        setSearchMode(urlMode === 'keyword' ? 'keyword' : 'semantic');
+        setSearchMode(urlMode === 'keyword' || urlMode === 'hybrid' ? urlMode : 'semantic');
       }, 0);
       return () => window.clearTimeout(id);
     }
@@ -263,7 +264,7 @@ export function SearchPage() {
               model: modelFilter.trim() || undefined,
               from: dateFrom.trim() || undefined,
               to: dateTo.trim() || undefined,
-              mode: mode === 'keyword' ? 'keyword' : undefined,
+              mode: mode === 'semantic' ? undefined : mode,
             }
           : {},
         replace: true,
@@ -392,7 +393,7 @@ export function SearchPage() {
           model: s.model,
           from: s.from,
           to: s.to,
-          mode: s.mode === 'keyword' ? 'keyword' : undefined,
+          mode: s.mode === 'semantic' ? undefined : s.mode,
         },
       });
     },
@@ -505,6 +506,7 @@ export function SearchPage() {
             <span className="search-ico">{Icons.searchLg}</span>
             <input
               id="searchInput"
+              aria-label={t('Search archive')}
               ref={inputRef}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
@@ -517,11 +519,7 @@ export function SearchPage() {
                   clearSearch();
                 }
               }}
-              placeholder={
-                searchMode === 'keyword'
-                  ? t('Exact match: identifiers, error strings, code…')
-                  : t('Search by meaning across your archive…')
-              }
+              placeholder={t('Search…')}
             />
             {inputValue && (
               <button
@@ -538,61 +536,75 @@ export function SearchPage() {
           </div>
 
           <div className="search-toolbar">
-            <div className="mode-toggle" role="group" aria-label={t('Search mode')}>
-              <button
-                type="button"
-                className="mode-btn"
-                data-on={searchMode === 'semantic'}
-                title={t('Rank by meaning (local embeddings)')}
-                onClick={() => switchMode('semantic')}
-              >
-                {t('Semantic')}
-              </button>
-              <button
-                type="button"
-                className="mode-btn"
-                data-on={searchMode === 'keyword'}
-                title={t('Exact substring match (case-insensitive)')}
-                onClick={() => switchMode('keyword')}
-              >
-                {t('Exact')}
-              </button>
-            </div>
-            <div className="role-chips">
-              {ROLE_CHIPS.map((r) => (
+            <div className="search-controls-row">
+              <div className="mode-toggle" role="group" aria-label={t('Search mode')}>
                 <button
-                  key={r.id}
-                  className="role-chip"
-                  data-role={r.id}
-                  data-on={roles[r.key]}
-                  onClick={() => toggleRole(r.key)}
+                  type="button"
+                  className="mode-btn"
+                  data-on={searchMode === 'hybrid'}
+                  aria-pressed={searchMode === 'hybrid'}
+                  title={t('Combine meaning, words, titles and identifiers')}
+                  onClick={() => switchMode('hybrid')}
                 >
-                  <span className="dot" />
-                  {r.label}
+                  {t('Hybrid')}
                 </button>
-              ))}
+                <button
+                  type="button"
+                  className="mode-btn"
+                  data-on={searchMode === 'semantic'}
+                  aria-pressed={searchMode === 'semantic'}
+                  title={t('Rank by meaning (local embeddings)')}
+                  onClick={() => switchMode('semantic')}
+                >
+                  {t('Semantic')}
+                </button>
+                <button
+                  type="button"
+                  className="mode-btn"
+                  data-on={searchMode === 'keyword'}
+                  aria-pressed={searchMode === 'keyword'}
+                  title={t('Exact substring match (case-insensitive)')}
+                  onClick={() => switchMode('keyword')}
+                >
+                  {t('Exact')}
+                </button>
+              </div>
+              <div className="role-chips">
+                {ROLE_CHIPS.map((r) => (
+                  <button
+                    key={r.id}
+                    className="role-chip"
+                    data-role={r.id}
+                    data-on={roles[r.key]}
+                    onClick={() => toggleRole(r.key)}
+                  >
+                    <span className="dot" />
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+              <label className="origin-filter">
+                <span>{t('origin')}</span>
+                <NativeSelect
+                  aria-label={t('Filter by conversation origin')}
+                  value={originFilter}
+                  onChange={(event) => setOriginFilter(event.target.value as OriginFilter)}
+                >
+                  <option value="all">{t('All')}</option>
+                  <option value="threadshelf">{t('ThreadShelf')}</option>
+                  <option value="archive">{t('Clean archive')}</option>
+                </NativeSelect>
+              </label>
+              <label className="model-filter">
+                <span>{t('model')}</span>
+                <input
+                  value={modelFilter}
+                  onChange={(e) => setModelFilter(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && runSearch()}
+                  placeholder={t('Filter…')}
+                />
+              </label>
             </div>
-            <label className="origin-filter">
-              <span>{t('origin')}</span>
-              <select
-                aria-label={t('Filter by conversation origin')}
-                value={originFilter}
-                onChange={(event) => setOriginFilter(event.target.value as OriginFilter)}
-              >
-                <option value="all">{t('All')}</option>
-                <option value="threadshelf">{t('ThreadShelf')}</option>
-                <option value="archive">{t('Clean archive')}</option>
-              </select>
-            </label>
-            <label className="model-filter">
-              <span>{t('model')}</span>
-              <input
-                value={modelFilter}
-                onChange={(e) => setModelFilter(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && runSearch()}
-                placeholder={t('gpt-5, claude, gemini...')}
-              />
-            </label>
             <label className="date-filter">
               <span>{t('from')}</span>
               <input
@@ -659,7 +671,11 @@ export function SearchPage() {
                         {s.collection !== 'all' && (
                           <span className="ss-tag">{collLabel(s.collection)}</span>
                         )}
-                        {s.mode === 'keyword' && <span className="ss-tag">{t('exact')}</span>}
+                        {s.mode !== 'semantic' && (
+                          <span className="ss-tag">
+                            {t(s.mode === 'keyword' ? 'exact' : 'hybrid')}
+                          </span>
+                        )}
                       </button>
                       <button
                         type="button"
@@ -752,7 +768,8 @@ export function SearchPage() {
                 </span>
                 <label className="conv-sort">
                   <span>{t('sort')}</span>
-                  <select
+                  <NativeSelect
+                    reserveWidth
                     value={convSort}
                     onChange={(e) => setConvSort(e.target.value as ConversationSort)}
                     aria-label={t('Sort conversations')}
@@ -760,13 +777,13 @@ export function SearchPage() {
                     <option value="recent">{t('Recent')}</option>
                     <option value="longest">{t('Longest')}</option>
                     <option value="title">{t('Title')}</option>
-                  </select>
+                  </NativeSelect>
                 </label>
                 <input
                   className="conv-filter"
                   value={convFilter}
                   onChange={(e) => setConvFilter(e.target.value)}
-                  placeholder={t('Filter by title or file…')}
+                  placeholder={t('Filter…')}
                   aria-label={t('Filter conversations')}
                 />
               </div>
@@ -918,7 +935,15 @@ export function SearchPage() {
                   onClick={toggleSaveSearch}
                 >
                   {existingSaved ? Icons.starFilled : Icons.star}
-                  <span>{existingSaved ? t('Saved') : t('Save search')}</span>
+                  <span className="stable-label">
+                    <span>{existingSaved ? t('Saved') : t('Save search')}</span>
+                    <span className="stable-label-size" aria-hidden="true">
+                      {t('Saved')}
+                    </span>
+                    <span className="stable-label-size" aria-hidden="true">
+                      {t('Save search')}
+                    </span>
+                  </span>
                 </button>
               </div>
               <div className="result-list" ref={listRef}>

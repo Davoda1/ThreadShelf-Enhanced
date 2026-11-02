@@ -19,7 +19,7 @@ concurrency:
 
 env:
   ONNXRUNTIME_NODE_INSTALL: skip
-  THREADSHELF_NODE_VERSION: 24.22.1
+  THREADSHELF_NODE_VERSION: 26.13.0
   THREADSHELF_NPM_VERSION: 12.2.1
 
 jobs:
@@ -375,7 +375,10 @@ jobs:
           if zip_count != len(zip_names) or tar_count != len(tar_names) or len(tar_entries) != tar_count or zip_entries != tar_entries:
               raise SystemExit('Source archive bytes, regular files or permissions differ.')
           required = ['README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', '.env.example',
-                      'setup-threadshelf.sh', 'setup-threadshelf.ps1', 'threadshelf-enhanced']
+                      'setup-threadshelf.sh', 'setup-threadshelf.ps1', 'threadshelf-enhanced',
+                      'scripts/migrate-installation.mjs', 'docs/MIGRATION.md', 'docs/TTS.md',
+                      'tts/cpu/assets-manifest.json', 'tts/cpu/support-manifest.json',
+                      'tts/cpu/windows-runtime-manifest.json']
           if not all(prefix + '/' + name in zip_names for name in required):
               raise SystemExit('Required source files or notices are missing.')
           excluded = {'.env', '.git', '.local', 'node_modules', '.lancedb', '.uploads', '.threadshelf',

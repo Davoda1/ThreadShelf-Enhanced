@@ -9,12 +9,16 @@ function findTool(name) {
 }
 
 describe('MCP — protocol surface', () => {
-  it('declares the five expected tools', () => {
+  it('preserves archive tools and adds the four scoped note tools without deletion', () => {
     const names = TOOL_DEFINITIONS.map((tool) => tool.name).sort();
     assert.deepStrictEqual(names, [
       'get_stats',
       'list_collections',
       'list_files',
+      'obsidian_create',
+      'obsidian_edit',
+      'obsidian_read',
+      'obsidian_search',
       'read_thread',
       'search',
     ]);

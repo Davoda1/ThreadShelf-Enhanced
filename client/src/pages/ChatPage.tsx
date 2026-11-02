@@ -16,62 +16,33 @@ import { fmtRelative } from '../utils';
 import { confirmDialog, toast } from '../toast';
 import { Topbar } from '../components/Topbar';
 import { ThreadContinuation } from '../components/ThreadContinuation';
+import { usePrivateChatStore } from '../private-chat-memory';
+import { clearLegacyPrivateStorage } from '../safe-storage';
 
 const PRIVATE_SESSION_ID = 'private-session';
 const DRAFT_SAVED_ID = 'draft-saved';
-const PRIVATE_SESSION_KEY = 'threadshelf:private-chat';
-const PRIVATE_RECOVERY_PREFIX = 'threadshelf:interrupted-generations:';
-
-interface PrivateSession {
-  readonly createdAt: string;
-  readonly messages: readonly ContinuationMessage[];
-  readonly hasRecovery: boolean;
-}
-
-const newPrivateSession = (): PrivateSession => ({
-  createdAt: new Date().toISOString(),
-  messages: [],
-  hasRecovery: false,
-});
-
 const newDraftScope = (): string =>
   globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
-
-const loadPrivateSession = (): PrivateSession => {
-  try {
-    const parsed = JSON.parse(sessionStorage.getItem(PRIVATE_SESSION_KEY) ?? '') as PrivateSession;
-    if (!parsed?.createdAt || !Array.isArray(parsed.messages)) return newPrivateSession();
-    if (
-      parsed.messages.some(
-        (message) =>
-          !message ||
-          !['user', 'assistant'].includes(message.role) ||
-          typeof message.content !== 'string',
-      )
-    ) {
-      return newPrivateSession();
-    }
-    return { ...parsed, hasRecovery: parsed.hasRecovery === true };
-  } catch {
-    return newPrivateSession();
-  }
-};
 
 const continuationFromTurns = (turns: readonly ThreadTurn[]): ContinuationMessage[] => {
   const messages: ContinuationMessage[] = [];
   let reasoning: string | undefined;
-  for (const turn of turns) {
+  let reasoningTurnIndex: number | undefined;
+  for (const [turnIndex, turn] of turns.entries()) {
     if (turn.user !== undefined) {
-      messages.push({ role: 'user', content: turn.user, model: turn.model });
+      messages.push({ role: 'user', content: turn.user, model: turn.model, turnIndex });
       reasoning = undefined;
     } else if (turn.thinking !== undefined) {
       reasoning = turn.thinking;
+      reasoningTurnIndex = turnIndex;
     } else if (turn.ai !== undefined) {
       messages.push({
         role: 'assistant',
         content: turn.ai,
         model: turn.model,
         reasoning,
+        turnIndex,
+        reasoningTurnIndex,
       });
       reasoning = undefined;
     }
@@ -98,7 +69,9 @@ export function ChatPage() {
   const activeColl = useUIStore((state) => state.activeColl);
   const setSidebarOpen = useUIStore((state) => state.setSidebarOpen);
   const [threads, setThreads] = useState<ThreadShelfChatSummary[]>([]);
-  const [privateSession, setPrivateSession] = useState(loadPrivateSession);
+  const privateSession = usePrivateChatStore((state) => state.session);
+  const setPrivateMessages = usePrivateChatStore((state) => state.setMessages);
+  const clearPrivateSession = usePrivateChatStore((state) => state.clear);
   const [activeId, setActiveId] = useState(() =>
     chatSearch.draft
       ? DRAFT_SAVED_ID
@@ -106,7 +79,7 @@ export function ChatPage() {
         ? PRIVATE_SESSION_ID
         : chatSearch.thread
           ? chatSearch.thread
-          : privateSession.messages.length || privateSession.hasRecovery
+          : privateSession.messages.length || privateSession.interruptedGenerations.length
             ? PRIVATE_SESSION_ID
             : '',
   );
@@ -132,19 +105,7 @@ export function ChatPage() {
     [queryClient],
   );
 
-  useEffect(() => {
-    if (privateSession.messages.length || privateSession.hasRecovery) {
-      sessionStorage.setItem(PRIVATE_SESSION_KEY, JSON.stringify(privateSession));
-    } else {
-      sessionStorage.removeItem(PRIVATE_SESSION_KEY);
-    }
-  }, [privateSession]);
-
-  const handlePrivateRecoveryChanged = useCallback((hasRecovery: boolean) => {
-    setPrivateSession((current) =>
-      current.hasRecovery === hasRecovery ? current : { ...current, hasRecovery },
-    );
-  }, []);
+  useEffect(() => clearLegacyPrivateStorage(), []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -209,7 +170,7 @@ export function ChatPage() {
   }, [chatSearch.private, openPrivateChat]);
 
   useEffect(() => {
-    if (!chatSearch.thread) return undefined;
+    if (!chatSearch.thread || chatSearch.thread === activeId) return undefined;
     const timeout = window.setTimeout(() => {
       setChat(undefined);
       setEditingTitle(false);
@@ -217,7 +178,7 @@ export function ChatPage() {
       setActiveId(chatSearch.thread ?? '');
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [chatSearch.thread]);
+  }, [chatSearch.thread, activeId]);
 
   useEffect(() => {
     document.querySelector<HTMLElement>('.main-scroll')?.scrollTo({ top: 0 });
@@ -285,7 +246,11 @@ export function ChatPage() {
   };
 
   const clearPrivateChat = async () => {
-    if (privateSession.messages.length || privateSession.hasRecovery) {
+    if (
+      privateSession.messages.length ||
+      privateSession.interruptedGenerations.length ||
+      privateSession.draft
+    ) {
       const confirmed = await confirmDialog({
         title: t('Delete this private chat?'),
         message: 'This unsaved session and its recovery attempts will be removed from this tab.',
@@ -294,9 +259,7 @@ export function ChatPage() {
       });
       if (!confirmed) return;
     }
-    sessionStorage.removeItem(`${PRIVATE_RECOVERY_PREFIX}${privateSession.createdAt}`);
-    setPrivateSession(newPrivateSession());
-    sessionStorage.removeItem(PRIVATE_SESSION_KEY);
+    clearPrivateSession();
     setChat(undefined);
     setActiveId(threads[0]?.id ?? '');
     toast.success(t('Private chat deleted.'));
@@ -432,7 +395,7 @@ export function ChatPage() {
                   <div className="chat-hero-actions">
                     <span className="chat-storage-status">
                       {isPrivate
-                        ? t('Not saved or indexed · removed when this tab closes')
+                        ? t('Not saved or indexed · removed on reload or when this tab closes')
                         : isDraft
                           ? t('Not saved yet · a chat is created on your first message')
                           : chat?.updatedAt
@@ -483,7 +446,7 @@ export function ChatPage() {
                   <ThreadContinuation
                     key={
                       isPrivate
-                        ? privateSession.createdAt
+                        ? privateSession.id
                         : isDraft
                           ? `draft:${draftAttemptScope}`
                           : chat!.id
@@ -491,7 +454,7 @@ export function ChatPage() {
                     threadId={isPrivate || isDraft ? undefined : chat!.id}
                     attemptScope={
                       isPrivate
-                        ? privateSession.createdAt
+                        ? privateSession.id
                         : isDraft
                           ? `draft:${draftAttemptScope}`
                           : chat!.id
@@ -500,16 +463,8 @@ export function ChatPage() {
                     draftSaved={isDraft}
                     onCreateThread={isDraft ? handleCreateDraftThread : undefined}
                     initialMessages={messages}
-                    onMessagesChanged={
-                      isPrivate
-                        ? (nextMessages) =>
-                            setPrivateSession((current) => ({
-                              ...current,
-                              messages: nextMessages,
-                            }))
-                        : undefined
-                    }
-                    onRecoveryChanged={isPrivate ? handlePrivateRecoveryChanged : undefined}
+                    initialTurnCount={isPrivate || isDraft ? undefined : chat?.turns.length}
+                    onMessagesChanged={isPrivate ? setPrivateMessages : undefined}
                     onCompleted={
                       isPrivate
                         ? undefined

@@ -29,6 +29,14 @@ same-origin requests and does not enable cross-origin access by default.
 The optional model API has separate access settings; its API key does not add
 authentication to the archive UI/API.
 
+`ALLOW_LAN_AI=1` and `ALLOW_LAN_TTS=1` independently grant full AI or speech
+management through allowed hosts and browser origins. They default to disabled,
+require restart, and are not authentication or subnet restrictions. AI permission
+includes model setup, filesystem browsing and connected Markdown vaults. Speech
+permission includes provider/credential management, saved recordings and playback.
+Keep both off unless all clients reaching the allowed address are trusted or an
+authenticated access boundary is in place. Separate `/v1` key settings remain intact.
+
 ## Imports and rendering
 
 Imported HTML is parsed as data rather than executed. Local media resolution is
@@ -45,14 +53,23 @@ Managed `llama-server` processes bind to an ephemeral loopback port. Configured
 llama.cpp URLs must be loopback-only, and GGUF files must be under configured
 model roots.
 
-OpenRouter is an explicit external integration. Sending a continuation transmits
-the selected thread's user/assistant turns and prompt to OpenRouter and its
-routed provider; archived thinking is excluded. The UI labels this provider as
-external. Optional routing and data-collection controls do not make the request
-local.
+OpenRouter, configured remote OpenAI-compatible generation servers and selected
+speech APIs are explicit off-device integrations. They receive the selected text
+and optional image/tool context needed for the request; archived thinking is not
+silently replayed as conversation context. llama.cpp and local Strata remain local.
+Read the provider's policy before sending sensitive material.
 
-Prefer `OPENROUTER_API_KEY`. Keys entered in Settings remain in process memory;
-they are not returned by the API or persisted in generation configuration.
+Generation provider keys are session/environment settings and are not returned by
+the API. Optional saved speech keys use AES-256-GCM with a passphrase-derived
+scrypt key. The passphrase is never stored; saved keys are locked on restart.
+Private chats/drafts/recovery remain in browser memory and bypass speech caches.
+
+Markdown-vault access is opt-in. Reads are bounded and constrained to allowed
+Markdown paths; writes require enabled policy and revision checks, retain history,
+and require browser approval when proposed by chat. MCP create/edit use persistent
+vault write permission and do not show a browser approval prompt. Keep this
+permission disabled for read-only clients. External providers may receive note or
+archive snippets when the corresponding tool scope is enabled.
 
 The MCP server gives connected clients access to indexed local chat data. Configure
 it only in clients you trust. Initial dependency, runtime and model downloads use

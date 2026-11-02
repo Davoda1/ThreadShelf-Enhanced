@@ -1,3 +1,6 @@
+import { StableLabel } from './StableLabel';
+import { ReadAloud } from '../tts/ReadAloud';
+import { speechSource, TtsScope } from '../tts/runtime';
 import { t, useI18n, formatNumber } from '../i18n';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -56,7 +59,7 @@ function CopyBtn({ text }: { readonly text: string }) {
   };
   return (
     <button className="copy-turn" onClick={handleCopy}>
-      {copied ? t('copied') : t('copy')}
+      <StableLabel current={copied ? t('copied') : t('copy')} labels={[t('copy'), t('copied')]} />
     </button>
   );
 }
@@ -343,6 +346,7 @@ export function ThreadReader({
         </div>
       )}
 
+      <TtsScope sourceId={speechSource(resolvedCollection, sourceFile, conversationKey)} />
       {turns && (
         <div id="threadContent" className="thread-inner" ref={innerRef}>
           <div className="thread-hero">
@@ -498,6 +502,15 @@ export function ThreadReader({
                         eager
                       />
                     )}
+                    {isOpen && (
+                      <ReadAloud
+                        text={text}
+                        sourceId={speechSource(resolvedCollection, sourceFile, conversationKey)}
+                        messageId={`${i}:thinking`}
+                        role="thinking"
+                        label={`${t('Reasoning')} · ${i + 1}`}
+                      />
+                    )}
                   </div>
                 );
               }
@@ -541,6 +554,13 @@ export function ThreadReader({
                       ) : (
                         <CopyBtn text={text} />
                       )}
+                      <ReadAloud
+                        text={text}
+                        sourceId={speechSource(resolvedCollection, sourceFile, conversationKey)}
+                        messageId={`${i}:${role}`}
+                        role={role}
+                        label={`${t(role === 'ai' ? 'Response' : role === 'thinking' ? 'Reasoning' : 'User')} · ${i + 1}`}
+                      />
                       {onSimilar && (
                         <button
                           className="copy-turn"
@@ -581,6 +601,7 @@ export function ThreadReader({
             })}
 
             <ThreadContinuation
+              baseTurnIndex={turns.length}
               sourceFile={sourceFile}
               collection={resolvedCollection}
               conversationKey={conversationKey}

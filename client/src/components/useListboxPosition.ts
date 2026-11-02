@@ -6,6 +6,7 @@ export function useListboxPosition(
   anchor: RefObject<HTMLElement | null>,
   open: boolean,
   heightLimit: number,
+  minimumWidth = 0,
 ): CSSProperties {
   const [position, setPosition] = useState<CSSProperties>({ visibility: 'hidden' });
 
@@ -22,7 +23,7 @@ export function useListboxPosition(
       const below = Math.max(0, bottom - rect.bottom - 5);
       const above = Math.max(0, rect.top - top - 5);
       const down = below >= Math.min(heightLimit, above);
-      const width = Math.min(rect.width, Math.max(0, right - left));
+      const width = Math.min(Math.max(rect.width, minimumWidth), Math.max(0, right - left));
       setPosition({
         position: 'fixed',
         zIndex: 120,
@@ -51,7 +52,7 @@ export function useListboxPosition(
       window.visualViewport?.removeEventListener('scroll', update);
       observer.disconnect();
     };
-  }, [anchor, open, heightLimit]);
+  }, [anchor, open, heightLimit, minimumWidth]);
 
   return position;
 }

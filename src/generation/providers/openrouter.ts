@@ -1,3 +1,4 @@
+import { readProviderJson } from '../transport.js';
 import { getGenerationConfig, getOpenRouterApiKey } from '../config.js';
 import { openAiCompatibleChat, openAiCompatibleChatStream } from '../openai-compatible.js';
 import type { GenerationModel, GenerationModelListOptions, GenerationProvider } from '../types.js';
@@ -74,9 +75,12 @@ export const createOpenRouterProvider = (fetchImpl: typeof fetch = fetch): Gener
     if (options.sort && options.sort !== 'default') url.searchParams.set('sort', options.sort);
     const response = await fetchImpl(url, {
       headers: { Authorization: `Bearer ${key}`, 'User-Agent': 'ThreadShelf' },
+      redirect: 'error',
       signal: AbortSignal.timeout(30_000),
     });
-    const payload = (await response.json().catch(() => ({}))) as OpenRouterModelsResponse;
+    const payload = (await readProviderJson(response).catch(
+      () => ({}),
+    )) as OpenRouterModelsResponse;
     if (!response.ok) {
       throw new Error(
         payload.error?.message || `OpenRouter models request failed (${response.status})`,

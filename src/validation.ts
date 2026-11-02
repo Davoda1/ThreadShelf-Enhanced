@@ -209,6 +209,13 @@ export const normalizeSearchMode = (
   throw new ValidationError(`Invalid ${field}: expected "semantic" or "keyword"`, { field });
 };
 
+/** Additive web/CLI mode. Reader v1 keeps its original two-mode contract. */
+export type EnhancedSearchMode = SearchMode | 'hybrid';
+export const normalizeEnhancedSearchMode = (value: unknown): EnhancedSearchMode =>
+  typeof value === 'string' && value.trim().toLowerCase() === 'hybrid'
+    ? 'hybrid'
+    : normalizeSearchMode(value);
+
 export const normalizeBoolean = (
   value: unknown,
   { defaultValue = false, field = 'flag' }: { defaultValue?: boolean; field?: string } = {},
@@ -238,7 +245,7 @@ export interface Turn {
   readonly model?: string;
   readonly createdAt?: string;
   readonly createdInThreadShelf?: boolean;
-  readonly generationProvider?: 'llama-cpp' | 'openrouter';
+  readonly generationProvider?: 'llama-cpp' | 'openrouter' | 'strata' | 'openai-compatible';
   /** Original source message and provider metadata; never interpreted as executable code. */
   readonly raw?: unknown;
   readonly metadata?: Record<string, unknown>;
@@ -293,10 +300,12 @@ export const validateTurn = (turn: unknown, { index }: { index?: number } = {}):
   }
   if (
     t.generationProvider !== undefined &&
-    !['llama-cpp', 'openrouter'].includes(String(t.generationProvider))
+    !['llama-cpp', 'openrouter', 'strata', 'openai-compatible'].includes(
+      String(t.generationProvider),
+    )
   ) {
     throw new ValidationError(
-      `Invalid turn at index ${index}: generationProvider must be llama-cpp or openrouter`,
+      `Invalid turn at index ${index}: generationProvider must be llama-cpp, openrouter, strata or openai-compatible`,
     );
   }
   const normalized: NormalizedTurn = {

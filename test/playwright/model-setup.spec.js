@@ -7,7 +7,9 @@ import { test, expect } from './fixtures.js';
  */
 
 const HARDWARE = {
-  devices: [{ id: 'CUDA0', name: 'NVIDIA GeForce RTX 3090 Ti', totalBytes: 2.5e10, freeBytes: 2.4e10 }],
+  devices: [
+    { id: 'CUDA0', name: 'NVIDIA GeForce RTX 3090 Ti', totalBytes: 2.5e10, freeBytes: 2.4e10 },
+  ],
   detectionSource: 'llama.cpp',
   totalRamBytes: 1.02e11,
   freeRamBytes: 7e10,
@@ -25,7 +27,9 @@ const planWith = (overrides = {}) => ({
     url: 'https://github.com/ggml-org/llama.cpp/releases/download/b10566/llama-b10566-bin-win-cuda-13.3-x64.zip',
     sha256: 'c3e2336c1427e8bd7b5beb3c8618d2f7a268bc5fb6ec3f28c1e06cdb78d2e80a',
     sizeBytes: 146_800_640,
-    companions: [{ url: 'https://example.test/cudart.zip', sha256: 'a'.repeat(64), sizeBytes: 391_118_848 }],
+    companions: [
+      { url: 'https://example.test/cudart.zip', sha256: 'a'.repeat(64), sizeBytes: 391_118_848 },
+    ],
     destination: 'C:\\ThreadShelf\\.threadshelf\\tools',
     releaseUrl: 'https://github.com/ggml-org/llama.cpp/releases/tag/b10566',
   },
@@ -35,7 +39,9 @@ const planWith = (overrides = {}) => ({
     quant: 'Q4_K_M',
     totalBytes: 18_560_000_000,
     directory: 'C:\\ThreadShelf\\.threadshelf\\models\\unsloth__Qwen3-Coder-30B-A3B-Instruct-GGUF',
-    files: [{ url: 'https://example.test/model.gguf', sha256: 'b'.repeat(64), sizeBytes: 18_560_000_000 }],
+    files: [
+      { url: 'https://example.test/model.gguf', sha256: 'b'.repeat(64), sizeBytes: 18_560_000_000 },
+    ],
     license: 'apache-2.0',
     contextLength: 262_144,
     fit: 'fits',
@@ -48,7 +54,11 @@ const planWith = (overrides = {}) => ({
 
 const mockPlan = async (page, plan) => {
   await page.route('**/api/generation/setup/plan*', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(plan) });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(plan),
+    });
   });
 };
 
@@ -83,7 +93,9 @@ test.describe('Quick setup screen', () => {
 
     await expect(appPage.locator('.quick-setup-destination')).toContainText('.threadshelf');
     // One button, and it names the total it is about to fetch.
-    await expect(appPage.getByRole('button', { name: /Download and install/ })).toContainText('18 GB');
+    await expect(appPage.getByRole('button', { name: /Download and install/ })).toContainText(
+      '18 GB',
+    );
   });
 
   test('does not advertise a transfer for a model that is already on disk', async ({
@@ -100,7 +112,9 @@ test.describe('Quick setup screen', () => {
     );
     await openGenerationSettings(appPage, serverContext.baseUrl);
 
-    await expect(appPage.locator('.quick-setup-steps li').nth(1)).toContainText('already downloaded');
+    await expect(appPage.locator('.quick-setup-steps li').nth(1)).toContainText(
+      'already downloaded',
+    );
     const button = appPage.getByRole('button', { name: /Download and install/ });
     await expect(button).toContainText('513 MB');
     await expect(button).not.toContainText('18 GB');
@@ -139,7 +153,8 @@ test.describe('Quick setup screen', () => {
         status: 409,
         contentType: 'application/json',
         body: JSON.stringify({
-          error: 'The setup plan changed since it was shown. Review the new plan and confirm again.',
+          error:
+            'The setup plan changed since it was shown. Review the new plan and confirm again.',
           plan: planWith({
             runtime: { ...planWith().runtime, tag: 'b10577' },
             fingerprint: 'plan-two',
@@ -216,9 +231,30 @@ test.describe('Model catalog browser', () => {
       trustedPublisher: !gated,
       projectors: [],
       quants: [
-        { label: 'Q4_K_M', totalBytes: 2_500_000_000, shards: 1, recommended: true, fit: 'fits', files: [] },
-        { label: 'Q8_0', totalBytes: 4_300_000_000, shards: 1, recommended: false, fit: 'tight', files: [] },
-        { label: 'BF16', totalBytes: 90_000_000_000, shards: 1, recommended: false, fit: 'too-large', files: [] },
+        {
+          label: 'Q4_K_M',
+          totalBytes: 2_500_000_000,
+          shards: 1,
+          recommended: true,
+          fit: 'fits',
+          files: [],
+        },
+        {
+          label: 'Q8_0',
+          totalBytes: 4_300_000_000,
+          shards: 1,
+          recommended: false,
+          fit: 'tight',
+          files: [],
+        },
+        {
+          label: 'BF16',
+          totalBytes: 90_000_000_000,
+          shards: 1,
+          recommended: false,
+          fit: 'too-large',
+          files: [],
+        },
       ],
     },
     hardware: HARDWARE,
@@ -227,10 +263,18 @@ test.describe('Model catalog browser', () => {
 
   const mockCatalog = async (page, gated = false) => {
     await page.route('**/api/generation/catalog/search*', async (route) => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(SEARCH) });
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(SEARCH),
+      });
     });
     await page.route('**/api/generation/catalog/model*', async (route) => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(detail(gated)) });
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(detail(gated)),
+      });
     });
   };
 
@@ -274,6 +318,103 @@ test.describe('Model catalog browser', () => {
     // Every download button in the gated repository stays disabled.
     const buttons = appPage.locator('.catalog-quant button');
     await expect(buttons.first()).toBeDisabled();
+  });
+
+  test('vision projector download is explicit and shows companion file sizes', async ({
+    appPage,
+    serverContext,
+  }) => {
+    await mockPlan(appPage, planWith());
+    await mockCatalog(appPage);
+    const model = detail(false);
+    model.model.projectors = [
+      { path: 'mmproj-F16.gguf', sizeBytes: 268_435_456 },
+      { path: 'mmproj-F32.gguf', sizeBytes: 536_870_912 },
+    ];
+    await appPage.route('**/api/generation/catalog/model*', (route) =>
+      route.fulfill({ json: model }),
+    );
+    const downloads = [];
+    await appPage.route('**/api/generation/catalog/download', async (route) => {
+      downloads.push(route.request().postDataJSON());
+      await route.fulfill({
+        contentType: 'application/x-ndjson',
+        body: `${JSON.stringify({ type: 'done', primaryPath: '/isolated/model.gguf' })}\n`,
+      });
+    });
+    await openGenerationSettings(appPage, serverContext.baseUrl);
+    await appPage.getByRole('button', { name: /Download a model/ }).click();
+    const dialog = appPage.getByRole('dialog', { name: 'Download a model' });
+    await dialog.locator('.catalog-item-head').first().click();
+    const projector = dialog.getByLabel('Include vision projector');
+    await expect(projector).not.toBeChecked();
+    await expect(dialog.locator('.catalog-projector')).toContainText('256 MB');
+    await expect(dialog.locator('.catalog-projector')).toContainText('512 MB');
+    await dialog.locator('.catalog-quant button').first().click();
+    await expect.poll(() => downloads.length).toBe(1);
+    expect(downloads[0]).toMatchObject({ includeProjector: false, quant: 'Q4_K_M' });
+    await expect(dialog.locator('.catalog-quant-size').first()).toHaveText('2.3 GB');
+    await projector.check();
+    await expect(dialog.locator('.catalog-quant-size').first()).toHaveText('2.6 GB');
+    await dialog.locator('.catalog-quant button').first().click();
+    await expect.poll(() => downloads.length).toBe(2);
+    expect(downloads[1]).toMatchObject({ includeProjector: true, quant: 'Q4_K_M' });
+    await dialog.locator('.catalog-item-head').first().click();
+    await dialog.locator('.catalog-item-head').first().click();
+    await expect(projector).not.toBeChecked();
+  });
+
+  test('catalog download and close controls keep their dimensions in every interface language', async ({
+    appPage,
+    serverContext,
+  }) => {
+    await appPage.setViewportSize({ width: 680, height: 650 });
+    await mockPlan(appPage, planWith());
+    await mockCatalog(appPage);
+    let finishDownload;
+    await appPage.route('**/api/generation/catalog/download', async (route) => {
+      await new Promise((resolve) => (finishDownload = resolve));
+      await route.fulfill({
+        contentType: 'application/x-ndjson',
+        body: `${JSON.stringify({ type: 'done', primaryPath: '/isolated/model.gguf' })}\n`,
+      });
+    });
+    await appPage.goto(`${serverContext.baseUrl}/settings`);
+    const openLabels = {
+      en: 'Download a model…',
+      hu: 'Modell letöltése…',
+      de: 'Modell herunterladen…',
+      ja: 'モデルをダウンロード…',
+      fr: 'Télécharger un modèle…',
+      ru: 'Скачать модель…',
+    };
+    for (const locale of ['en', 'hu', 'de', 'ja', 'fr', 'ru']) {
+      await appPage.locator('#settings-tab-server').click();
+      await appPage.locator('#interface-language').selectOption(locale);
+      await appPage.locator('#settings-tab-ai').click();
+      await appPage.getByRole('button', { name: openLabels[locale], exact: true }).click();
+      const dialog = appPage.locator('.catalog-modal');
+      await dialog.locator('.catalog-item-head').first().click();
+      const quant = dialog.locator('.catalog-quant button').first();
+      const footer = dialog.locator('.modal-foot button');
+      const before = { quant: await quant.boundingBox(), footer: await footer.boundingBox() };
+      finishDownload = undefined;
+      await quant.click();
+      await expect.poll(() => typeof finishDownload).toBe('function');
+      await expect(quant).toBeDisabled();
+      const during = { quant: await quant.boundingBox(), footer: await footer.boundingBox() };
+      try {
+        for (const control of ['quant', 'footer']) {
+          expect(during[control].width, `${locale}/${control}`).toBe(before[control].width);
+          expect(during[control].height, `${locale}/${control}`).toBe(before[control].height);
+        }
+      } finally {
+        finishDownload();
+      }
+      await expect(quant).toBeEnabled();
+      await footer.click();
+      await expect(dialog).toHaveCount(0);
+    }
   });
 
   test('opens the catalog from chat and selects the model after downloading it', async ({

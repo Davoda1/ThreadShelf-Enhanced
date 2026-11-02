@@ -10,12 +10,12 @@ MCP is useful when you want Cursor, Claude Desktop, or another MCP-aware client 
 - Authentication: none
 - Language: TypeScript
 - License: MIT
-- Runtime: Node.js 20.19+
+- Runtime: Node.js 24+; the setup pins project-local Node.js 26.13.0 LTS
 - Install: clone the repository and run `npm ci`
 - Start: `npm run mcp`
 - Data location: local LanceDB / ThreadShelf archive
 - Network service required for archive search: no
-- MCP tools: 5
+- MCP tools: 9
 
 The tools are:
 
@@ -24,6 +24,30 @@ The tools are:
 - `get_stats`
 - `search`
 - `read_thread`
+- `obsidian_search`
+- `obsidian_read`
+- `obsidian_create`
+- `obsidian_edit`
+
+## Markdown note tools
+
+Connect folders under **Settings → Server → Markdown notes**. MCP uses the active
+folder and rechecks its current per-folder write policy. Notes remain live files;
+no separate conversation database records or embeddings are created.
+
+| Tool              | Arguments                        | Behavior                                                                      |
+| ----------------- | -------------------------------- | ----------------------------------------------------------------------------- |
+| `obsidian_search` | `query`, optional `limit` (1–30) | Live lexical matches with relative paths, headings, line numbers and snippets |
+| `obsidian_read`   | `path`                           | Read a relative `.md` file and its SHA-256 revision                           |
+| `obsidian_create` | `path`, `content`                | Create a new note without overwriting; requires writes enabled                |
+| `obsidian_edit`   | `path`, `content`, `revision`    | Replace exactly the revision previously read; retains recovery history        |
+
+There is no MCP delete tool: deletion requires the interactive web chat's browser
+approval. MCP create/edit follow the explicit persistent write permission, rather
+than a browser prompt. Keep that permission off if connected tools should only
+read notes. Hidden paths, links, traversal and unsafe files are rejected. Model
+reads above 60,000 characters are marked truncated and carry no editable revision.
+See [Live Markdown notes](NOTES.md) for scan limits and recovery.
 
 ## What MCP Uses
 
@@ -41,13 +65,13 @@ one of those versions during `initialize`.
 
 ## Install and start
 
-From a clean clone:
+From the unpacked Enhanced source root, run `bash setup-threadshelf.sh` on Linux
+or `setup-threadshelf.ps1` on Windows to install local dependencies and build.
+Use the Enhanced repository or release source for this guide.
+For Linux x64, the built stdio entry point can be started without global Node/npm:
 
 ```bash
-git clone https://github.com/ChrystianSchutz/ThreadShelf.git
-cd ThreadShelf
-npm ci
-npm run mcp
+.local/node-v26.13.0-linux-x64/bin/node dist/mcp/server.js
 ```
 
 If ThreadShelf is already installed, start the server from the repository root:
@@ -61,7 +85,7 @@ The server communicates over stdio. It is not an HTTP server and should not be o
 ## Tested MCP clients
 
 The automated compatibility test starts the real ThreadShelf process over stdio,
-initializes an MCP session, confirms that `tools/list` returns all five tools, and
+initializes an MCP session, confirms that `tools/list` returns all nine tools, and
 calls `list_collections` and `get_stats` against an isolated LanceDB directory.
 
 Claude Desktop and Cursor are documented configuration targets. Claude Desktop,
@@ -110,7 +134,13 @@ Different clients use slightly different config files, but the shape usually loo
 }
 ```
 
-If a client does not support `cwd`, use an absolute repository path and run `tsx mcp/server.ts`.
+For the project-local installation, prefer the absolute path to its local
+Node executable as `command`, with the absolute built `dist/mcp/server.js` path
+as its sole argument. On Windows the executable is
+`.local/node-v26.13.0-win-x64/node.exe`; on Linux x64 it is
+`.local/node-v26.13.0-linux-x64/bin/node`. This also works for clients without
+`cwd` and avoids relying on a global Node version. The built entry point is
+created by the setup script.
 
 ## Tools
 

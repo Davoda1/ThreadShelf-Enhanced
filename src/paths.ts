@@ -96,6 +96,8 @@ const LAYOUT = {
   tools: { repo: ['.threadshelf', 'tools'], user: ['tools'] },
   modelCache: { repo: ['.threadshelf', 'model-cache'], user: ['model-cache'] },
   imageCache: { repo: ['.threadshelf', 'image-cache'], user: ['image-cache'] },
+  tts: { repo: ['.threadshelf', 'tts'], user: ['tts'] },
+  obsidianConfig: { repo: ['.threadshelf', 'obsidian.json'], user: ['obsidian.json'] },
   env: { repo: ['.env'], user: ['.env'] },
 } as const;
 

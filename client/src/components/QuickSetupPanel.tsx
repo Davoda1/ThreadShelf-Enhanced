@@ -1,3 +1,4 @@
+import { NativeSelect } from './NativeSelect';
 import { t, useI18n } from '../i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, QuickSetupPlanChangedError } from '../api';
@@ -148,7 +149,7 @@ export function QuickSetupPanel({ onCompleted }: QuickSetupPanelProps) {
       <div className="panel-body quick-setup">
         <label className="quick-setup-variant">
           <span>{t('Accelerator')}</span>
-          <select
+          <NativeSelect
             value={variant}
             onChange={(event) => setVariant(event.target.value)}
             disabled={running}
@@ -158,7 +159,7 @@ export function QuickSetupPanel({ onCompleted }: QuickSetupPanelProps) {
                 {option.label}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </label>
 
         {loading && (

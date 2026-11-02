@@ -1,3 +1,4 @@
+import { NativeSelect } from './NativeSelect';
 import { useUIStore } from '../store';
 import { LOCALES, localeNames, useI18n, type Locale } from '../i18n';
 
@@ -17,7 +18,7 @@ export function AppearanceSettings() {
         <label className="field-label" htmlFor="interface-language">
           {t('Interface language')}
         </label>
-        <select
+        <NativeSelect
           id="interface-language"
           value={locale}
           onChange={(event) => setLocale(event.target.value as Locale)}
@@ -27,7 +28,7 @@ export function AppearanceSettings() {
               {localeNames[language]}
             </option>
           ))}
-        </select>
+        </NativeSelect>
         <p className="muted">
           {t(
             'Only the interface language changes. Your conversations stay in their original language.',
@@ -36,14 +37,14 @@ export function AppearanceSettings() {
         <label className="field-label" htmlFor="image-load-mode">
           {t('External images')}
         </label>
-        <select
+        <NativeSelect
           id="image-load-mode"
           value={imageLoadMode}
           onChange={(event) => setImageLoadMode(event.target.value === 'auto' ? 'auto' : 'click')}
         >
           <option value="click">{t('Click to load')}</option>
           <option value="auto">{t('Load automatically')}</option>
-        </select>
+        </NativeSelect>
         <p className="muted">
           {t(
             'Images open inside the conversation. Loading an external image contacts its source website.',

@@ -5,6 +5,7 @@ test('language and independent rich-render switches persist without changing rol
   serverContext: { baseUrl },
 }) => {
   await page.goto(`${baseUrl}/settings`);
+  await page.locator('#settings-tab-server').click();
   await expect(page.locator('#interface-language')).toHaveValue('en');
   await expect(page.locator('#rich-rendering-user')).toHaveAttribute('role', 'switch');
   await expect(page.locator('#rich-rendering-user')).toHaveAttribute('aria-checked', 'false');
@@ -22,6 +23,7 @@ test('language and independent rich-render switches persist without changing rol
   await expect(page.locator('#appearance-heading')).toHaveText('Megjelenés és nyelv');
   await page.locator('#image-load-mode').selectOption('auto');
   await page.reload();
+  await page.locator('#settings-tab-server').click();
   await expect(page.locator('#interface-language')).toHaveValue('hu');
   await expect(page.locator('#rich-rendering-user')).toHaveAttribute('aria-checked', 'true');
   await expect(page.locator('#rich-rendering-thinking')).toHaveAttribute('aria-checked', 'true');
@@ -37,6 +39,7 @@ test('all six languages update settings and navigation with no horizontal overfl
 }) => {
   await page.setViewportSize({ width: 680, height: 700 });
   await page.goto(`${baseUrl}/settings`);
+  await page.locator('#settings-tab-server').click();
   const headings = {
     en: 'Appearance and language',
     hu: 'Megjelenés és nyelv',
@@ -80,6 +83,7 @@ test('legacy saved preferences retain their data and receive safe new defaults',
       );
   });
   await page.goto(`${baseUrl}/settings`);
+  await page.locator('#settings-tab-server').click();
   await expect(page.locator('#interface-language')).toHaveValue('en');
   await expect(page.locator('#image-load-mode')).toHaveValue('click');
   await expect(page.locator('#rich-rendering-ai')).toHaveAttribute('aria-checked', 'true');
@@ -117,6 +121,7 @@ test('image cache settings save limits and clear collection copies independently
     await route.fulfill({ json: cache });
   });
   await page.goto(`${baseUrl}/settings`);
+  await page.locator('#settings-tab-server').click();
   await page.locator('#image-cache-enabled').click();
   await expect(page.locator('#image-cache-enabled')).toBeChecked();
   await page.locator('#image-cache-limit').fill('256');
