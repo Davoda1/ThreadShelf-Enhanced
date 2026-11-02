@@ -175,7 +175,8 @@ export function CommandPalette({
               setActiveIdx(0);
             }}
             onKeyDown={handleKeyDown}
-            placeholder={t('Search commands, collections, or actions…')}
+            aria-label={t('Search commands, collections, or actions…')}
+            placeholder={t('Search…')}
           />
           <kbd>ESC</kbd>
         </div>

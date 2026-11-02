@@ -11,6 +11,8 @@ import generationRouter from './generation.js';
 import modelCatalogRouter from './model-catalog.js';
 import imageCacheRouter from './image-cache.js';
 import uploadsRouter from './uploads.js';
+import obsidianRouter from './obsidian.js';
+import ttsRouter from './tts.js';
 
 const router = Router();
 
@@ -26,5 +28,7 @@ router.use(generationRouter);
 router.use(modelCatalogRouter);
 router.use(imageCacheRouter);
 router.use(uploadsRouter);
+router.use(obsidianRouter);
+router.use('/api/tts', ttsRouter);
 
 export default router;

@@ -1,5 +1,32 @@
 # Changelog
 
+## ThreadShelf Enhanced 1.4.0 — 2026-11-02
+
+- Add independent hybrid lexical/semantic search, complete candidate filtering and
+  a rebuildable local lexical cache without changing the Reader pagination API.
+- Add bounded archive tools, live Markdown vaults with revision/history safeguards,
+  scoped writes and explicit browser approval for chat-driven note changes.
+- Add Strata and configurable OpenAI-compatible providers, opt-in API vision and
+  streaming controls; private chats, drafts and recovery remain in memory.
+- Add optional server text-to-speech with reviewed Pocket/Kokoro installation,
+  streaming and buffered playback, selected API providers, encrypted saved keys,
+  pinned recordings and cache preferences. Missing CPU voices cannot be tested.
+- Add independent `ALLOW_LAN_AI` and `ALLOW_LAN_TTS` environment flags, off by
+  default, with unchanged host/origin checks and separate model-API key policy.
+- Refresh settings into AI Models, Server and Text-to-Speech tabs; improve
+  localized controls, speaker icons, search-row sizing and stable playback layout.
+- Add `scripts/migrate-installation.mjs` with required explicit paths, verified
+  copying, rollback on failure and a read-only old-directory dependency audit.
+  The audit resolves Windows short names and directory aliases even when a
+  configured cache, model or vault folder has not been created yet.
+- Update local setup to Node 26.13.0 LTS and npm 12.2.1; apply dependency fixes,
+  bounded provider transport and exact browser-origin validation.
+- Refresh README screenshots using isolated, synthetic demonstration content.
+
+Existing public launchers, importer, Linux/Windows release gates and the single
+checksum manifest are retained. Upgrade all writers together and keep the complete
+stopped backup until archive, media, model, note and speech checks pass.
+
 ## ThreadShelf Enhanced 1.3.0 — 2026-10-26
 
 ### Imports and storage

@@ -13,6 +13,24 @@ import { startApiServer, stopChildProcess } from './helpers.js';
 const workerPath = fileURLToPath(
   new URL('../shared/indexing-coordinator-worker.js', import.meta.url),
 );
+const jobWorkspace = async (t, prefix) => {
+  const root = await mkdtemp(join(tmpdir(), prefix));
+  const cleanup = [];
+  t.after(async () => {
+    // node:test runs after hooks in registration order and stops on a rejected
+    // hook. Removing a live database first can race native writers, then leave
+    // the server/IPC children alive and hang the entire test process.
+    const stopped = await Promise.allSettled(cleanup.map((stop) => stop()));
+    const errors = stopped.filter((result) => result.status === 'rejected');
+    if (errors.length)
+      throw new AggregateError(
+        errors.map((result) => result.reason),
+        'Fixture shutdown failed',
+      );
+    await rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  });
+  return { root, cleanup: (stop) => cleanup.push(stop) };
+};
 const waitForJob = async (url, id, states = ['completed', 'failed', 'cancelled']) => {
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
@@ -165,18 +183,18 @@ test(
   'accepted uploads have independent snapshots and survive closing their client and restarting the server',
   { timeout: 60_000 },
   async (t) => {
-    const root = await mkdtemp(join(tmpdir(), 'threadshelf-durable-jobs-'));
+    const fixture = await jobWorkspace(t, 'threadshelf-durable-jobs-');
+    const { root } = fixture;
     const db = join(root, 'db');
-    t.after(() => rm(root, { recursive: true, force: true }));
     const blocker = await holdIndexer(db);
-    t.after(() => stopChildProcess(blocker));
+    fixture.cleanup(() => stopChildProcess(blocker));
     const env = {
       LANCEDB_PATH: db,
       UPLOADS_DIR: join(root, 'uploads'),
       COLLECTIONS_PATH: join(root, 'collections.json'),
     };
     const firstServer = await startApiServer({ prefix: 'threadshelf-job-server-', env });
-    t.after(firstServer.stop);
+    fixture.cleanup(firstServer.stop);
     await mkdir(join(root, 'uploads', 'durable'), { recursive: true });
     await writeFile(join(root, 'uploads', 'durable', 'notes.json'), '{"archived":"untouched"}');
     // Deliberately unsupported JSON exercises the real durable pipeline without
@@ -198,7 +216,7 @@ test(
     await stopChildProcess(firstServer.server);
 
     const restarted = await startApiServer({ prefix: 'threadshelf-job-restart-', env });
-    t.after(restarted.stop);
+    fixture.cleanup(restarted.stop);
     const listed = await (
       await fetch(`${restarted.baseUrl}/api/import-jobs?collection=durable`)
     ).json();
@@ -225,11 +243,11 @@ test(
   'queued jobs support explicit cancellation and retry, and reject modified staged input',
   { timeout: 60_000 },
   async (t) => {
-    const root = await mkdtemp(join(tmpdir(), 'threadshelf-job-controls-'));
+    const fixture = await jobWorkspace(t, 'threadshelf-job-controls-');
+    const { root } = fixture;
     const db = join(root, 'db');
-    t.after(() => rm(root, { recursive: true, force: true }));
     const blocker = await holdIndexer(db);
-    t.after(() => stopChildProcess(blocker));
+    fixture.cleanup(() => stopChildProcess(blocker));
     const ctx = await startApiServer({
       env: {
         LANCEDB_PATH: db,
@@ -237,7 +255,7 @@ test(
         COLLECTIONS_PATH: join(root, 'collections.json'),
       },
     });
-    t.after(ctx.stop);
+    fixture.cleanup(ctx.stop);
     const accepted = await upload(ctx.baseUrl, '{"ordinary_note":"kept"}');
     const cancelled = await fetch(`${ctx.baseUrl}/api/import-jobs/${accepted.id}/cancel`, {
       method: 'POST',
@@ -264,16 +282,16 @@ test(
   'an interrupted running replacement retains its reservation and resumes from verified input',
   { timeout: 180_000 },
   async (t) => {
-    const root = await mkdtemp(join(tmpdir(), 'threadshelf-running-recovery-'));
+    const fixture = await jobWorkspace(t, 'threadshelf-running-recovery-');
+    const { root } = fixture;
     const db = join(root, 'db');
-    t.after(() => rm(root, { recursive: true, force: true }));
     const env = {
       LANCEDB_PATH: db,
       UPLOADS_DIR: join(root, 'uploads'),
       COLLECTIONS_PATH: join(root, 'collections.json'),
     };
     const firstServer = await startApiServer({ prefix: 'threadshelf-running-job-', env });
-    t.after(firstServer.stop);
+    fixture.cleanup(firstServer.stop);
     const source = JSON.stringify(
       Array.from({ length: 40 }, (_, index) => ({
         conversationKey: `synthetic-resume-${index}`,
@@ -294,7 +312,7 @@ test(
       env: { ...process.env, LANCEDB_PATH: db },
       stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
     });
-    t.after(() => stopChildProcess(probe));
+    fixture.cleanup(() => stopChildProcess(probe));
     const rejected = await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error('Reservation probe timed out')), 10_000);
       probe.once('message', (message) => {
@@ -307,7 +325,7 @@ test(
     await stopChildProcess(probe);
 
     const restarted = await startApiServer({ prefix: 'threadshelf-resumed-job-', env });
-    t.after(restarted.stop);
+    fixture.cleanup(restarted.stop);
     const completed = await waitForJob(restarted.baseUrl, accepted.id);
     assert.equal(completed.state, 'completed', completed.error);
     assert.equal(completed.result.conversations, 40);
@@ -352,11 +370,11 @@ test(
   'deletion cancels queued jobs before a worker can claim them without stopping unrelated jobs',
   { timeout: 60_000 },
   async (t) => {
-    const root = await mkdtemp(join(tmpdir(), 'threadshelf-delete-queued-'));
-    t.after(() => rm(root, { recursive: true, force: true }));
+    const fixture = await jobWorkspace(t, 'threadshelf-delete-queued-');
+    const { root } = fixture;
     const db = join(root, 'db');
     const blocker = await holdIndexer(db);
-    t.after(() => stopChildProcess(blocker));
+    fixture.cleanup(() => stopChildProcess(blocker));
     const ctx = await startApiServer({
       env: {
         LANCEDB_PATH: db,
@@ -364,7 +382,7 @@ test(
         COLLECTIONS_PATH: join(root, 'collections.json'),
       },
     });
-    t.after(ctx.stop);
+    fixture.cleanup(ctx.stop);
     const source = JSON.stringify([{ conversationKey: 'queued-deletion', turns: [{ user: '?' }] }]);
     const removed = await upload(ctx.baseUrl, source, 'deleted_queue');
     const retained = await upload(ctx.baseUrl, source, 'retained_queue');
@@ -394,22 +412,18 @@ test(
   'finished history removal persists, covers all pages, preserves active jobs and serializes retry races',
   { timeout: 90_000 },
   async (t) => {
-    const root = await mkdtemp(join(tmpdir(), 'threadshelf-job-history-'));
+    const fixture = await jobWorkspace(t, 'threadshelf-job-history-');
+    const { root } = fixture;
     const dbRoot = join(root, 'db');
     const blocker = await holdIndexer(dbRoot);
-    const servers = [];
-    t.after(async () => {
-      for (const server of servers) await server.stop();
-      await stopChildProcess(blocker);
-      await rm(root, { recursive: true, force: true });
-    });
+    fixture.cleanup(() => stopChildProcess(blocker));
     const env = {
       LANCEDB_PATH: dbRoot,
       UPLOADS_DIR: join(root, 'uploads'),
       COLLECTIONS_PATH: join(root, 'collections.json'),
     };
     const ctx = await startApiServer({ prefix: 'threadshelf-history-server-', env });
-    servers.push(ctx);
+    fixture.cleanup(ctx.stop);
     assert.equal((await fetch(`${ctx.baseUrl}/api/import-jobs`)).status, 200);
     const databasePath = join(dbRoot, '.import-jobs', 'jobs.sqlite');
     const sourceFile = join(root, 'uploads', 'history', 'retained.json');
@@ -575,7 +589,7 @@ test(
       pendingDb.close();
     }
     const restarted = await startApiServer({ prefix: 'threadshelf-history-restart-', env });
-    servers.push(restarted);
+    fixture.cleanup(restarted.stop);
     assert.equal((await get(other.id, restarted.baseUrl)).status, 404);
     for (const entry of protectedJobs)
       assert.equal((await get(entry.id, restarted.baseUrl)).job.state, entry.state);

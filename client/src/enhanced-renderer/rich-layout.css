@@ -57,7 +57,7 @@
 .message-content .rich-entity{font-weight:600;text-decoration:underline;text-decoration-style:dotted;text-decoration-color:var(--border-color,#8888);text-underline-offset:3px}
 .message-content .rich-citation{display:inline-flex;flex-wrap:wrap;align-items:center;gap:.2em;max-width:100%;font-size:.8em;vertical-align:baseline;white-space:normal}
 .message-content .rich-citation a,.message-content .rich-citation-unresolved{overflow-wrap:anywhere}
-.message-content .rich-citation-link,.message-content .rich-citation-unresolved{display:inline-block;box-sizing:border-box;max-width:min(18em,100%);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:.1em .5em;border:1px solid var(--border-color,#8885);border-radius:999px;background:var(--bg-secondary,var(--bg-primary));font-size:.9em;line-height:1.4;text-decoration:none}
+.message-content .rich-citation-link,.message-content .rich-citation-unresolved{display:inline-block;box-sizing:border-box;min-width:0;max-width:min(18em,100%);white-space:normal;overflow-wrap:anywhere;padding:.1em .5em;border:1px solid var(--border-color,#8885);border-radius:999px;background:var(--bg-secondary,var(--bg-primary));font-size:.9em;line-height:1.4;text-decoration:none}
 .message-content .rich-citation-link:focus-visible{outline:2px solid var(--text-accent,var(--accent,#31678a));outline-offset:2px}
 .message-content .rich-citation-unresolved{color:var(--text-secondary)}
 .message-content .rich-icon-wrap{display:inline-flex;vertical-align:middle;align-items:center;justify-content:center;flex:none}

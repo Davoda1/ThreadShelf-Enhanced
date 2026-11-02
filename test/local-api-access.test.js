@@ -257,7 +257,52 @@ describe('host checks', () => {
       networkOriginRejection(
         fakeRequest({ host: '192.168.1.20:3001', origin: 'http://192.168.1.30:8080' }),
       ),
+      'Forbidden origin',
+    );
+  });
+
+  it('matches full browser origins while preserving native client requests', () => {
+    delete process.env.ALLOWED_ORIGINS;
+    for (const guard of [localOriginRejection, networkOriginRejection]) {
+      assert.equal(guard(fakeRequest({ host: 'localhost:3000' })), undefined);
+      assert.equal(
+        guard(fakeRequest({ host: 'localhost:3000', origin: 'http://localhost:3000' })),
+        undefined,
+      );
+      for (const origin of [
+        'http://localhost:4000',
+        'https://localhost:3000',
+        'http://127.0.0.1:3000',
+      ]) {
+        assert.equal(guard(fakeRequest({ host: 'localhost:3000', origin })), 'Forbidden origin');
+      }
+      for (const origin of [
+        'null',
+        'file:///',
+        'http://localhost:3000/path',
+        'http://user@localhost:3000',
+      ]) {
+        assert.equal(guard(fakeRequest({ host: 'localhost:3000', origin })), 'Invalid origin');
+      }
+    }
+    process.env.ALLOWED_ORIGINS = 'https://archive.example:8443';
+    assert.equal(
+      localOriginRejection(
+        fakeRequest({ host: 'localhost:3000', origin: 'https://archive.example:8443' }),
+      ),
       undefined,
+    );
+    assert.equal(
+      localOriginRejection(
+        fakeRequest({ host: 'localhost:3000', origin: 'https://archive.example' }),
+      ),
+      'Forbidden origin',
+    );
+    assert.equal(
+      localOriginRejection(
+        fakeRequest({ host: 'attacker.example', origin: 'https://archive.example:8443' }),
+      ),
+      'Forbidden host',
     );
   });
 

@@ -216,7 +216,7 @@ export const api = {
         model: params.model || undefined,
         from: params.from || undefined,
         to: params.to || undefined,
-        mode: params.mode === 'keyword' ? 'keyword' : undefined,
+        mode: params.mode === 'keyword' || params.mode === 'hybrid' ? params.mode : undefined,
         origin: params.origin,
       }),
       { signal },
@@ -314,6 +314,7 @@ export const api = {
       readonly executablePath?: string;
       readonly baseUrl?: string;
       readonly modelDirectories?: readonly string[];
+      readonly projectorPaths?: Readonly<Record<string, string>>;
       readonly contextSize?: number;
       readonly acceleration?: 'auto' | 'cpu' | 'gpu' | 'hybrid' | 'multi-gpu';
       readonly gpuLayers?: number;
@@ -332,6 +333,12 @@ export const api = {
       readonly clearApiKey?: boolean;
       readonly enforceZdr?: boolean;
       readonly denyDataCollection?: boolean;
+    };
+    readonly openAiCompatible?: {
+      readonly baseUrl?: string;
+      readonly label?: string;
+      readonly apiKey?: string;
+      readonly clearApiKey?: boolean;
     };
     readonly localApi?: {
       readonly enabled?: boolean;

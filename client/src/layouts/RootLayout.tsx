@@ -1,3 +1,4 @@
+import { TtsRuntime } from '../tts/runtime';
 import { useImportJobs } from '../import-jobs';
 import { t, useI18n } from '../i18n';
 import { useEffect, useCallback } from 'react';
@@ -242,6 +243,7 @@ export function RootLayout() {
         />
       )}
 
+      <TtsRuntime />
       <ConfirmDialog />
       <Toaster />
     </div>

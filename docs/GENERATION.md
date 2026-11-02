@@ -1,34 +1,58 @@
 # Conversation generation
 
 Conversation generation is optional. It adds a plugin
-contract above two engines:
+contract above four providers:
 
 - `llama.cpp`, the primary and local engine;
-- OpenRouter, an optional external API.
+- OpenRouter, an optional external API;
+- Strata, a separately started loopback server;
+- an explicitly configured OpenAI-compatible HTTP(S) server, either local or off-device.
 
 **New chat** creates a locally saved ThreadShelf conversation by default. A
 separate ghost-icon action starts a **Private conversation** whose history exists
-only in browser `sessionStorage`, is never written to LanceDB or `__threads`, and
-is removed when the tab session ends. Original export files are never modified.
+only in browser memory, including its draft and interrupted-response recovery. It is
+never written to browser storage, LanceDB or `__threads`, and disappears on a full
+reload or when the tab closes. Leftovers from older private-chat storage are cleared. Original export files are never modified.
 
 ## Privacy boundary
 
 Archive ingestion, embeddings, storage, search, and `llama.cpp` inference stay
-local. The OpenRouter option is different: selecting the
+local. Strata is also limited to loopback. Selecting the
 **OpenRouter · external** tab is the explicit off-device choice. The model button
 shows an `off-device` chip and the composer repeats that boundary. Sending then
 transmits the selected archive's or created chat's complete `user` and
 `assistant` turns plus the prompt to OpenRouter. Imported and locally generated
-`thinking` turns are deliberately omitted.
+`thinking` turns are deliberately omitted. An OpenAI-compatible endpoint outside
+loopback is also labeled off-device, including a LAN server. Enabled knowledge
+tools can additionally send their retrieved archive or note excerpts to that
+selected provider. Provider/model selections are remembered as preferences,
+without storing private conversation content.
 
-Two further network surfaces exist, and neither carries conversation content:
+Generation setup uses two further network surfaces, neither carrying conversation content:
 
 - **GitHub Releases** (`ggml-org/llama.cpp`) — release metadata; archives only
   after an explicit `--install`/`--url` or a confirmed setup plan.
 - **Hugging Face Hub** — catalog metadata and GGUF downloads, on request.
 
 Both are opt-in, both are described below, and neither sees a single turn of a
-conversation.
+conversation. Optional speech has its own model/runtime downloads and external
+provider choices; see [Text-to-Speech](TTS.md).
+
+## Headless trusted-LAN access
+
+Set `ALLOW_LAN_AI=1` in the root `.env` beside `setup-threadshelf.sh`, restart, and
+open the normal LAN web address. This enables AI settings, model/runtime setup,
+folder browsing, prompts, saved/private chats and connected Markdown-vault controls.
+Existing vault scope, write permissions and approval requirements still apply.
+`ALLOW_LAN_TTS` independently controls speech and is not required for AI.
+
+The default is `0` (also used when unset); only `1` enables the override. An
+already exported environment variable wins over `.env`. The override grants full
+AI administration without an API key to clients admitted by the main server's
+`HOST`, `ALLOWED_HOSTS` and browser Origin policy. It is not authentication or a
+private-subnet filter: use it only on a trusted network or behind an authenticated
+deployment boundary. Restart after changing it. The separate `/v1` listener and
+its existing key policy are unchanged; see [Local model API](LOCAL_API.md#access).
 
 ## Created chats
 
@@ -94,9 +118,65 @@ Generation config schema 2 changes both routing restrictions to opt-in. Older,
 unversioned config files created while these flags defaulted to `true` are migrated
 to `false`; a user can explicitly enable either policy again in Settings.
 
+## Knowledge tools and streaming
+
+**Archive tools** searches and reads stored conversations, returning source links
+with stable collection/source/conversation identities and original turn indices.
+**Notes tools** grants access only to the selected connected Markdown folder;
+see [Live Markdown notes](NOTES.md). These controls are independent. Neither
+requires reimporting or reembedding the archive.
+
+The tool loop is limited to eight model rounds and sixteen tool calls. Tool
+arguments, provider replies and accumulated context are bounded. Retrieved text
+is treated as source data, never permission to run arbitrary actions. Archive
+tools are read-only. Vault writes follow the current per-folder permission and,
+in interactive chat, pause for a human preview and exact-content approval. Tool
+transcripts and opaque provider `reasoning_details` stay transient within that
+request; ordinary final text/visible reasoning retain the existing saved-chat
+format.
+
+**Stream AI responses** can be changed in AI Models or the existing chat controls.
+When disabled, the response is displayed together after generation finishes.
+Knowledge-tool progress and browser approvals remain interactive; disabling
+streamed text does not disable the tool workflow. Provider connections refuse
+redirects, apply idle/size limits, and propagate cancellation. Settings cannot be
+saved before their initial load completes.
+
+## Strata and custom compatible servers
+
+Start Strata separately, then choose its provider in the model picker. Enhanced
+checks `/health`, lists `/v1/models`, and sends chat requests to `/v1/chat/completions`.
+It does not install, start or unload Strata. Its default root is
+`http://127.0.0.1:8080`; override it with `STRATA_BASE_URL` in the server environment,
+and optionally set `STRATA_API_KEY`. Only loopback HTTP(S) roots are accepted.
+
+For another server, use **Settings → AI Models → OpenAI-compatible server** and
+enter its API base URL, for example `http://127.0.0.1:1234/v1`. The provider appends
+`/models` and `/chat/completions`. Its label and endpoint are saved; a key entered
+in Settings lasts only for the server session and is bound to that endpoint.
+Changing endpoints does not forward the previous session key. Environment
+`OPENAI_COMPATIBLE_BASE_URL` and `OPENAI_COMPATIBLE_API_KEY` override saved/session
+values. A LAN or remote address sends selected content off-device. Configure
+only a server you intend to trust; the compatible preset does not install it.
+
+## Vision through the local API
+
+Image input is available through `/v1` for supported models and llama.cpp builds,
+not through the archived web-chat composer. A model needs its matching GGUF
+projector. Model catalog downloads can include a suitable single projector when
+requested; existing model/projector files can be mapped in **AI Models → Vision
+projectors**, using one full model path = projector path per line. Automatic
+selection is intentionally limited to an unambiguous one-model/one-projector
+folder. Projectors must be inside a configured model directory.
+
+Inline PNG, JPEG, WebP and GIF are accepted, with at most four images, 8 MiB per
+image and 16 MiB combined. Remote image URLs and filesystem paths are rejected.
+See [Local model API](LOCAL_API.md) for formats and limits. API exchanges and image
+bytes are not imported into the conversation database.
+
 ## Guided setup
 
-**Settings → Conversation generation → Set up local generation** resolves one
+**Settings → AI Models → Set up local generation** resolves one
 plan covering both halves of a first run — a `llama.cpp` build for the detected
 platform/accelerator and a GGUF model sized for it — and shows every URL,
 SHA-256 digest, size, and destination before anything is fetched. One
@@ -217,7 +297,7 @@ roots include:
 - roots from `LLAMA_MODEL_PATHS`.
 
 This includes `%USERPROFILE%\.lmstudio` on Windows. Add or remove custom paths
-from **Settings → Conversation generation**. Symbolic-link directories are not
+from **Settings → AI Models**. Symbolic-link directories are not
 followed during recursive scans. Set
 `THREADSHELF_DISABLE_DEFAULT_MODEL_PATHS=1` when only explicitly configured roots
 should be scanned. Default and environment-derived roots are returned separately
@@ -346,11 +426,11 @@ Three Settings selects cover the runtime options that matter most for modern
 models such as Qwen3.8-27B on a 24 GB GPU. They change speed and memory only;
 temperature, top-p, and top-k are never altered by these presets.
 
-| Setting | Options (default first) | llama-server flags |
-| --- | --- | --- |
-| KV cache | Quality · Memory saver · Default | `-ctk q8_0 -ctv q8_0` · `q4_0/q4_0` · none (f16) |
-| Speculative decoding (MTP) | Auto · Aggressive · Off | `--spec-type draft-mtp --spec-draft-n-max 2` · `3` · none |
-| Reasoning effort | Medium · Low · High · XHigh · Off · Template default | `--reasoning-effort <level>` · `--reasoning off` |
+| Setting                    | Options (default first)                              | llama-server flags                                        |
+| -------------------------- | ---------------------------------------------------- | --------------------------------------------------------- |
+| KV cache                   | Quality · Memory saver · Default                     | `-ctk q8_0 -ctv q8_0` · `q4_0/q4_0` · none (f16)          |
+| Speculative decoding (MTP) | Auto · Aggressive · Off                              | `--spec-type draft-mtp --spec-draft-n-max 2` · `3` · none |
+| Reasoning effort           | Medium · Low · High · XHigh · Off · Template default | `--reasoning-effort <level>` · `--reasoning off`          |
 
 Every option is gated before launch, so an unsupported choice is skipped and
 logged instead of preventing startup:
@@ -408,9 +488,9 @@ Invalid `LLAMA_CPP_*` tuning overrides are logged with their environment-variabl
 name and ignored in favor of the saved value or built-in default. A typo therefore
 does not make the generation settings and status endpoints unavailable.
 
-The system-folder picker lists directories only and is available only when the
-browser connects from loopback. This avoids exposing filesystem names over an
-optional LAN binding. It never uploads or modifies a selected directory.
+The system-folder picker lists directories only. It requires loopback by default;
+`ALLOW_LAN_AI=1` also permits it through the trusted-LAN web interface. It never
+uploads or modifies a selected directory.
 
 The continuation UI selects the active loaded model ahead of discovery order and
 distinguishes discovered models from the active model. A
@@ -450,9 +530,10 @@ updated, so selecting or copying earlier text is not disrupted by every token.
 There is also a **Copy current output** action during generation. If the backend
 exits, the stream fails, or the user presses Stop, ThreadShelf keeps the prompt,
 partial answer, and partial reasoning in a tab-session recovery card. Recovery
-cards are explicitly **not saved**, are excluded from later model context and
+cards are explicitly **not saved to the archive**, are excluded from later model context and
 LanceDB, and can be copied, dismissed, or restored to the composer with **Retry
-prompt**. They disappear when the tab session ends.
+prompt**. They disappear when the tab session ends; private-chat recovery is
+memory-only and also disappears on a full reload.
 
 ## HTTP API
 
@@ -460,7 +541,8 @@ To use the local models from other apps through the OpenAI or Anthropic API,
 the way you would with LM Studio or Ollama, see
 [Local model API](LOCAL_API.md). The routes below are ThreadShelf's own UI API.
 
-All routes are loopback only:
+Management and chat routes require loopback by default, or `ALLOW_LAN_AI=1`
+for trusted-LAN web access. Runtime status remains readable as before:
 
 - `GET /api/generation/hardware` — detected accelerators, RAM, and model budget;
 - `GET /api/generation/catalog/search?q=&sort=downloads|likes|trending|recent&limit=&author=` — Hugging Face GGUF search plus the hardware profile;
@@ -472,12 +554,12 @@ All routes are loopback only:
 - `PUT /api/generation/config` — update paths, privacy flags, a session key, the idle
   unload time and the local model API settings (`localApi`);
 - `GET /api/generation/local-api` — local model API model list and network listener status;
-- `GET /api/generation/models?provider=llama-cpp|openrouter` — dynamic models and runtime state;
+- `GET /api/generation/models?provider=llama-cpp|openrouter|strata|openai-compatible` — dynamic models and runtime state;
 - `GET /api/generation/runtime` — current backend and loaded model;
-- `GET /api/generation/runtime/logs` — localhost-only llama.cpp process/device diagnostics;
+- `GET /api/generation/runtime/logs` — llama.cpp process/device diagnostics;
 - `POST /api/generation/runtime/eject` — unload memory, never delete GGUF files;
-- `GET /api/generation/directories` — localhost-only directory browser;
-- `/api/generation/prompts` CRUD plus active selection — localhost-only master prompts;
+- `GET /api/generation/directories` — directory browser;
+- `/api/generation/prompts` CRUD plus active selection — master prompts;
 - `GET /api/generation/threads` — list chats created in ThreadShelf;
 - `POST /api/generation/threads` — create and persist a new local chat;
 - `GET /api/generation/threads/:id` — load one local chat and its turns;
@@ -488,12 +570,12 @@ All routes are loopback only:
 
 The directory browser, config/model discovery, every created-chat route, and
 every mutating generation route (`PUT /config`, eject, and both chat routes)
-require a direct loopback
-client. Forwarded client-address headers and the request hostname are also checked, so a normal reverse proxy on
+require a direct loopback client unless `ALLOW_LAN_AI=1` explicitly grants
+trusted-LAN access. Forwarded client-address headers and the request hostname are also checked, so a normal reverse proxy on
 the same machine does not turn these controls into a remote API. A proxy must not
 erase all client-address metadata and rewrite an external hostname to a loopback
-literal. This remains true when the main read/search UI is intentionally exposed
-with `HOST` and `ALLOWED_HOSTS`. Executable and model paths supplied through the
+literal. With the flag unset or `0`, this remains true when the main read/search
+UI is intentionally exposed with `HOST` and `ALLOWED_HOSTS`. Executable and model paths supplied through the
 API also reject UNC/network paths.
 
 Managed GGUF processes use a filename-only `--alias`; provider responses and

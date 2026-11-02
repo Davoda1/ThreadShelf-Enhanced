@@ -1,3 +1,4 @@
+import { withInterprocessLock } from '../interprocess-lock.js';
 import { existsSync } from 'fs';
 import { mkdir, readFile, rename, writeFile } from 'fs/promises';
 import { homedir } from 'os';
@@ -7,6 +8,7 @@ import { randomUUID } from 'crypto';
 import { ValidationError } from '../validation.js';
 
 export interface LlamaCppConfig {
+  readonly projectorPaths?: Readonly<Record<string, string>>;
   readonly executablePath?: string;
   readonly baseUrl?: string;
   /** Paths explicitly saved by the user. */
@@ -68,16 +70,27 @@ export interface LocalApiConfig {
   readonly networkPort: number;
 }
 
+export interface OpenAiCompatibleConfig {
+  readonly baseUrl: string;
+  readonly label: string;
+  readonly apiKeyConfigured: boolean;
+  /** Only a loopback endpoint runs on this server's machine. LAN is off-device. */
+  readonly local: boolean;
+}
+
 export interface PublicGenerationConfig {
   readonly llamaCpp: LlamaCppConfig;
   readonly openRouter: OpenRouterConfig;
+  readonly openAiCompatible: OpenAiCompatibleConfig;
   readonly localApi: LocalApiConfig;
   readonly diagnostics: { readonly persistErrorLogs: boolean };
 }
 
 interface StoredGenerationConfig {
+  readonly openAiCompatible?: { readonly baseUrl?: string; readonly label?: string };
   readonly schemaVersion?: number;
   readonly llamaCpp?: {
+    readonly projectorPaths?: Readonly<Record<string, string>>;
     readonly executablePath?: string;
     readonly baseUrl?: string;
     readonly modelDirectories?: readonly string[];
@@ -109,7 +122,14 @@ interface StoredGenerationConfig {
 }
 
 export interface GenerationConfigUpdate {
+  readonly openAiCompatible?: {
+    readonly baseUrl?: unknown;
+    readonly label?: unknown;
+    readonly apiKey?: unknown;
+    readonly clearApiKey?: unknown;
+  };
   readonly llamaCpp?: {
+    readonly projectorPaths?: unknown;
     readonly executablePath?: unknown;
     readonly baseUrl?: unknown;
     readonly modelDirectories?: unknown;
@@ -144,14 +164,14 @@ export interface GenerationConfigUpdate {
 }
 
 let sessionOpenRouterApiKey = '';
+let sessionCompatibleApiKey = '';
+let sessionCompatibleKeyEndpoint = '';
 export const DEFAULT_LOCAL_API_NETWORK_PORT = 3001;
 export const MAX_IDLE_UNLOAD_MINUTES = 7 * 24 * 60;
 const warnedInvalidEnvironmentValues = new Set<string>();
 
 export const generationConfigPath = (): string =>
-  resolve(
-    process.env.GENERATION_CONFIG_PATH || dataPath('generationConfig'),
-  );
+  resolve(process.env.GENERATION_CONFIG_PATH || dataPath('generationConfig'));
 
 const normalizePaths = (paths: readonly string[]): string[] => [
   ...new Set(paths.map((path) => resolve(path.trim())).filter(Boolean)),
@@ -207,12 +227,18 @@ const parseLocalBaseUrl = (value: unknown, field: string): string | undefined =>
   }
   const host = url.hostname.toLowerCase();
   if (!['localhost', '127.0.0.1', '::1', '[::1]'].includes(host)) {
-    throw new ValidationError(`Invalid ${field}: llama.cpp endpoint must be loopback-only`, {
+    throw new ValidationError(`Invalid ${field}: local endpoint must be loopback-only`, {
       field,
     });
   }
   if (!['http:', 'https:'].includes(url.protocol)) {
     throw new ValidationError(`Invalid ${field}: expected HTTP(S)`, { field });
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    throw new ValidationError(
+      `Invalid ${field}: URL credentials, query strings and fragments are not supported`,
+      { field },
+    );
   }
   return url.toString().replace(/\/$/, '');
 };
@@ -227,6 +253,30 @@ const parsePath = (value: unknown, field: string): string | undefined => {
     throw new ValidationError(`Invalid ${field}: network paths are not allowed`, { field });
   }
   return resolve(trimmed);
+};
+
+const parseProjectorPaths = (value: unknown): Record<string, string> | undefined => {
+  if (value === undefined) return undefined;
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Object.keys(value).length > 1000
+  ) {
+    throw new ValidationError('Invalid projectorPaths', { field: 'projectorPaths' });
+  }
+  const result: Record<string, string> = {};
+  for (const [model, projector] of Object.entries(value)) {
+    const key = parsePath(model, 'projectorPaths.model');
+    const path = parsePath(projector, 'projectorPaths.projector');
+    if (!key || !path || !/\.gguf$/i.test(key) || !/\.gguf$/i.test(path)) {
+      throw new ValidationError('projectorPaths expects GGUF model/projector paths', {
+        field: 'projectorPaths',
+      });
+    }
+    result[key] = path;
+  }
+  return result;
 };
 
 const parseBoolean = (value: unknown, field: string): boolean | undefined => {
@@ -314,8 +364,101 @@ const resolveApiKey = (): string => sessionOpenRouterApiKey || process.env.OPENR
 
 export const getOpenRouterApiKey = (): string => resolveApiKey();
 
+export const DEFAULT_STRATA_BASE_URL = 'http://127.0.0.1:8080';
+
+/**
+ * Loopback base URL (without `/v1`) of a separately started Strata server.
+ * Throws a `ValidationError` naming `STRATA_BASE_URL` for an unusable value;
+ * callers report it instead of crashing, because it comes from the environment.
+ */
+export const parseStrataBaseUrl = (value: string | undefined): string => {
+  const field = 'STRATA_BASE_URL';
+  const normalized =
+    parseLocalBaseUrl(value?.trim() || DEFAULT_STRATA_BASE_URL, field) ?? DEFAULT_STRATA_BASE_URL;
+  const url = new URL(normalized);
+  if (url.username || url.password) {
+    throw new ValidationError(`Invalid ${field}: credentials in the URL are not supported`, {
+      field,
+    });
+  }
+  if (/[?#]/.test(normalized)) {
+    throw new ValidationError(`Invalid ${field}: query strings and fragments are not supported`, {
+      field,
+    });
+  }
+  return normalized.replace(/\/+$/, '').replace(/\/v1$/i, '');
+};
+
+export const getStrataBaseUrl = (): string => parseStrataBaseUrl(process.env.STRATA_BASE_URL);
+
+/** Optional key for a Strata server started with one; sent as a Bearer token, never logged. */
+export const getStrataApiKey = (): string | undefined =>
+  process.env.STRATA_API_KEY?.trim() || undefined;
+
+/** Explicit user-configured OpenAI-compatible endpoint; never inferred or probed. */
+export const parseCompatibleBaseUrl = (value: unknown): string => {
+  if (value === undefined || value === null || value === '') return '';
+  if (typeof value !== 'string' || value.length > 2048)
+    throw new ValidationError('Invalid compatible base URL', { field: 'openAiCompatible.baseUrl' });
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new ValidationError('Expected an HTTP(S) base URL', {
+      field: 'openAiCompatible.baseUrl',
+    });
+  }
+  if (
+    !['http:', 'https:'].includes(url.protocol) ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash
+  )
+    throw new ValidationError('Use an HTTP(S) URL without credentials, query or fragment', {
+      field: 'openAiCompatible.baseUrl',
+    });
+  return url.toString().replace(/\/+$/, '');
+};
+export const isLoopbackProviderUrl = (baseUrl: string): boolean => {
+  try {
+    return ['localhost', '127.0.0.1', '[::1]', '::1'].includes(
+      new URL(baseUrl).hostname.toLowerCase(),
+    );
+  } catch {
+    return false;
+  }
+};
+export const getCompatibleApiKey = async (): Promise<string> => {
+  const stored = await readStoredConfig();
+  const baseUrl = parseCompatibleBaseUrl(
+    process.env.OPENAI_COMPATIBLE_BASE_URL || stored.openAiCompatible?.baseUrl,
+  );
+  // An endpoint change must never forward a previous server's key.
+  return (
+    process.env.OPENAI_COMPATIBLE_API_KEY?.trim() ||
+    (sessionCompatibleKeyEndpoint === baseUrl ? sessionCompatibleApiKey : '')
+  );
+};
+const compatibleConfig = (stored: StoredGenerationConfig): OpenAiCompatibleConfig => {
+  const baseUrl = parseCompatibleBaseUrl(
+    process.env.OPENAI_COMPATIBLE_BASE_URL || stored.openAiCompatible?.baseUrl,
+  );
+  return {
+    baseUrl,
+    label: stored.openAiCompatible?.label || 'OpenAI-compatible',
+    local: isLoopbackProviderUrl(baseUrl),
+    apiKeyConfigured: Boolean(
+      process.env.OPENAI_COMPATIBLE_API_KEY?.trim() ||
+      (sessionCompatibleKeyEndpoint === baseUrl && sessionCompatibleApiKey),
+    ),
+  };
+};
+
 export const clearSessionOpenRouterApiKeyForTests = (): void => {
   sessionOpenRouterApiKey = '';
+  sessionCompatibleApiKey = '';
+  sessionCompatibleKeyEndpoint = '';
 };
 
 /** Keys travel in HTTP headers, so only visible ASCII without spaces is accepted. */
@@ -383,7 +526,9 @@ export const llamaCppConfigChanged = (
 export const getGenerationConfig = async (): Promise<PublicGenerationConfig> => {
   const stored = await readStoredConfig();
   return {
+    openAiCompatible: compatibleConfig(stored),
     llamaCpp: {
+      projectorPaths: parseProjectorPaths(stored.llamaCpp?.projectorPaths) ?? {},
       executablePath:
         process.env.LLAMA_CPP_SERVER ||
         process.env.LLAMA_SERVER_PATH ||
@@ -499,13 +644,49 @@ export const getGenerationConfig = async (): Promise<PublicGenerationConfig> => 
   };
 };
 
-export const updateGenerationConfig = async (
+const updateGenerationConfigLocked = async (
   update: GenerationConfigUpdate,
 ): Promise<PublicGenerationConfig> => {
   if (!update || typeof update !== 'object' || Array.isArray(update)) {
     throw new ValidationError('Invalid generation config');
   }
   const current = await readStoredConfig();
+  const compatibleUpdate = update.openAiCompatible;
+  if (
+    compatibleUpdate !== undefined &&
+    (!compatibleUpdate || typeof compatibleUpdate !== 'object' || Array.isArray(compatibleUpdate))
+  )
+    throw new ValidationError('Invalid compatible provider settings', {
+      field: 'openAiCompatible',
+    });
+  const compatibleBaseUrl =
+    compatibleUpdate?.baseUrl !== undefined
+      ? parseCompatibleBaseUrl(compatibleUpdate.baseUrl)
+      : current.openAiCompatible?.baseUrl || '';
+  const compatibleLabel =
+    compatibleUpdate?.label !== undefined
+      ? compatibleUpdate.label
+      : current.openAiCompatible?.label || 'OpenAI-compatible';
+  if (
+    typeof compatibleLabel !== 'string' ||
+    !compatibleLabel.trim() ||
+    compatibleLabel.length > 80 ||
+    Array.from(compatibleLabel).some((character) => character.charCodeAt(0) < 32)
+  )
+    throw new ValidationError('Invalid provider label', { field: 'openAiCompatible.label' });
+  let compatibleKey =
+    compatibleBaseUrl === sessionCompatibleKeyEndpoint ? sessionCompatibleApiKey : '';
+  if (compatibleUpdate?.apiKey !== undefined) {
+    if (
+      typeof compatibleUpdate.apiKey !== 'string' ||
+      compatibleUpdate.apiKey.length > 4096 ||
+      Array.from(compatibleUpdate.apiKey).some((character) => character.charCodeAt(0) < 32)
+    )
+      throw new ValidationError('Invalid provider API key', { field: 'openAiCompatible.apiKey' });
+    if (compatibleUpdate.apiKey.trim()) compatibleKey = compatibleUpdate.apiKey.trim();
+  }
+  if (parseBoolean(compatibleUpdate?.clearApiKey, 'openAiCompatible.clearApiKey'))
+    compatibleKey = '';
   const llamaUpdate = update.llamaCpp;
   const openRouterUpdate = update.openRouter;
   const diagnosticsUpdate = update.diagnostics;
@@ -560,7 +741,10 @@ export const updateGenerationConfig = async (
 
   const next: StoredGenerationConfig = {
     schemaVersion: 2,
+    openAiCompatible: { baseUrl: compatibleBaseUrl, label: compatibleLabel.trim() },
     llamaCpp: {
+      projectorPaths:
+        parseProjectorPaths(llamaUpdate?.projectorPaths) ?? current.llamaCpp?.projectorPaths ?? {},
       executablePath:
         llamaUpdate?.executablePath !== undefined
           ? parsePath(llamaUpdate.executablePath, 'executablePath')
@@ -667,7 +851,29 @@ export const updateGenerationConfig = async (
   });
   await rename(temporary, path);
   sessionOpenRouterApiKey = nextSessionOpenRouterApiKey;
+  sessionCompatibleApiKey = compatibleKey;
+  sessionCompatibleKeyEndpoint = compatibleBaseUrl;
   return getGenerationConfig();
 };
+
+export const updateGenerationConfig = (
+  update: GenerationConfigUpdate,
+): Promise<PublicGenerationConfig> =>
+  withInterprocessLock(generationConfigPath(), () => updateGenerationConfigLocked(update));
+
+/** A completed catalog download adds one mapping without replacing mappings
+ * concurrently installed by another model download or settings request. */
+export const registerVisionProjector = (
+  model: string,
+  projector: string,
+): Promise<PublicGenerationConfig> =>
+  withInterprocessLock(generationConfigPath(), async () => {
+    const current = await readStoredConfig();
+    return updateGenerationConfigLocked({
+      llamaCpp: {
+        projectorPaths: { ...current.llamaCpp?.projectorPaths, [model]: projector },
+      },
+    });
+  });
 
 export const generationPathExists = (path: string): boolean => existsSync(path);

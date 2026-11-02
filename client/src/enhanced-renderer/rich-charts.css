@@ -41,17 +41,18 @@
 .rich-chart-legend [data-chart-item]{cursor:default;border-radius:3px}
 .rich-chart-legend .is-active{outline:1px solid var(--text-primary);outline-offset:3px}
 .rich-chart [data-chart-item]:focus-visible{outline:2px solid var(--text-accent);outline-offset:2px}
-.rich-chart-tooltip{position:fixed;z-index:2147483000;pointer-events:none;box-sizing:border-box;width:max-content;max-width:min(420px,calc(100vw - 16px));padding:10px 12px;border:1px solid var(--border-color,var(--border,#888));border-radius:8px;background:var(--bg-secondary,var(--surface,#fff));color:var(--text-primary,var(--text,#263446));box-shadow:0 5px 20px #0003;font-family:inherit;font-size:14px;line-height:1.45;overflow:hidden;overflow-wrap:anywhere;contain:layout;isolation:isolate}
+.rich-chart-tooltip{position:fixed;z-index:2147483000;pointer-events:auto;box-sizing:border-box;width:max-content;max-width:min(420px,calc(100vw - 16px));padding:10px 12px;border:1px solid var(--border-color,var(--border,#888));border-radius:8px;background:var(--bg-secondary,var(--surface,#fff));color:var(--text-primary,var(--text,#263446));box-shadow:0 5px 20px #0003;font-family:inherit;font-size:14px;line-height:1.45;overflow:auto;overscroll-behavior:contain;overflow-wrap:anywhere;contain:layout;isolation:isolate}
 .rich-chart-tooltip-heading{font-weight:650;margin-bottom:6px;white-space:pre-wrap}
-.rich-chart-tooltip-row{display:grid;grid-template-columns:.8em minmax(0,1fr) minmax(0,max-content);align-items:baseline;gap:.6em;margin-top:3px;min-width:0}
+.rich-chart-tooltip-row{display:grid;grid-template-columns:.8em minmax(0,2fr) minmax(0,1fr);align-items:baseline;gap:.6em;margin-top:3px;min-width:0}
 .rich-chart-tooltip-value{font-weight:600;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .rich-chart-tooltip-label{min-width:0;white-space:pre-wrap}
 .reader-high-contrast .rich-chart-mark.is-active,.rich-chart-tooltip-high-contrast{border-color:var(--text-primary);stroke-width:3}
 @media(prefers-reduced-motion:reduce){.rich-chart-mark,.rich-chart-tooltip{transition:none;animation:none}}
 @media(forced-colors:active){.rich-chart-tooltip{color:CanvasText;background:Canvas;border-color:CanvasText;box-shadow:none}.rich-chart-tooltip .rich-chart-swatch{background:Highlight;border-color:CanvasText}.rich-chart.has-chart-active .rich-chart-mark:not(.is-active){opacity:1}.rich-chart-mark.is-active{stroke:Highlight;stroke-width:4;filter:none}.rich-chart-crosshair{stroke:CanvasText}.rich-chart-line.rich-chart-color-1{stroke-dasharray:6 3}.rich-chart-line.rich-chart-color-2{stroke-dasharray:2 3}.rich-chart-line.rich-chart-color-3{stroke-dasharray:8 3 2 3}.rich-chart-line.rich-chart-color-4{stroke-dasharray:10 3}.rich-chart-line.rich-chart-color-5{stroke-dasharray:4 2 2 2}.rich-chart-line.rich-chart-color-6{stroke-dasharray:12 3 3 3}.rich-chart-line.rich-chart-color-7{stroke-dasharray:1 2}.rich-chart-hit:focus-visible{stroke:CanvasText}}
 
-.rich-chart-tooltip-heading,.rich-chart-tooltip-label,.rich-chart-tooltip-value{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
-.rich-chart-tooltip-compact .rich-chart-tooltip-heading,.rich-chart-tooltip-compact .rich-chart-tooltip-label,.rich-chart-tooltip-compact .rich-chart-tooltip-value{-webkit-line-clamp:1}
+/* Full labels wrap; exceptionally tall tooltips scroll inside the viewport. */
+.rich-chart-tooltip-heading,.rich-chart-tooltip-label,.rich-chart-tooltip-value{min-width:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.rich-chart-tooltip:focus-visible{outline:2px solid var(--text-accent,var(--text-primary,#777));outline-offset:2px}
 .rich-chart-tooltip-compact{line-height:1.25}
 
 .rich-chart svg [data-chart-item]:focus-visible{outline:none}

@@ -44,6 +44,7 @@ test.describe('Collection management', () => {
     await appPage.locator('#toggleEmptyCollections').click();
     await appPage.locator(`#collection-${name}`).click();
     await appPage.getByRole('button', { name: 'Settings' }).click();
+    await appPage.locator('#settings-tab-server').click();
     await appPage.getByRole('button', { name: 'Delete', exact: true }).click();
     await appPage.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
 

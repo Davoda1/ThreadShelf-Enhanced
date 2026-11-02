@@ -1,3 +1,4 @@
+import { NativeSelect } from '../components/NativeSelect';
 import { t, useI18n } from '../i18n';
 import { useMemo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
@@ -114,19 +115,19 @@ function ActivityChart({ activity }: { readonly activity: readonly ActivityBucke
                 data-hover={hover === i}
                 style={{ height: `${Math.max(pct, bucket.count > 0 ? 2 : 0)}%` }}
               />
-              {hover === i && (
-                <div className="chart-tip">
-                  <b>{monthLabel(bucket.month)}</b>
-                  <span>
-                    {full(bucket.count)}
-                    {t(' passages')}
-                  </span>
-                </div>
-              )}
             </div>
           );
         })}
       </div>
+      {hover !== null && activity[hover] && (
+        <div className="chart-tip">
+          <b>{monthLabel(activity[hover].month)}</b>
+          <span>
+            {full(activity[hover].count)}
+            {t(' passages')}
+          </span>
+        </div>
+      )}
       <div className="chart-x" aria-hidden="true">
         {activity.map((bucket, i) => (
           <span key={bucket.month} className="x-slot">
@@ -210,7 +211,7 @@ export function InsightsPage() {
             </div>
             <label className="insights-scope">
               <span>{t('scope')}</span>
-              <select
+              <NativeSelect
                 value={scope}
                 onChange={(e) => setScope(e.target.value)}
                 aria-label={t('Insights scope')}
@@ -220,7 +221,7 @@ export function InsightsPage() {
                     {collLabel(c)}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </label>
           </div>
 

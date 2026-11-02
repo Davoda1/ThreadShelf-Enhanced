@@ -1,3 +1,5 @@
+import { StableLabel } from './StableLabel';
+import { createPortal } from 'react-dom';
 import { t, useI18n, formatNumber } from '../i18n';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useLocalApiStatusQuery } from '../queries';
@@ -81,7 +83,7 @@ function Snippet({ code }: { readonly code: string }) {
           setTimeout(() => setCopied(false), 1400);
         }}
       >
-        {t(copied ? 'copied' : 'copy')}
+        <StableLabel current={t(copied ? 'copied' : 'copy')} labels={[t('copy'), t('copied')]} />
       </button>
     </pre>
   );
@@ -557,7 +559,7 @@ export function LocalApiGuide({ tab, onTab, config, model: chosenModel }: GuideP
   const network = status?.network;
   const external = config?.llamaCpp.baseUrl;
 
-  return (
+  return createPortal(
     <div className="scrim" onClick={onClose}>
       <div
         className="modal-card guide-modal"
@@ -776,6 +778,7 @@ export function LocalApiGuide({ tab, onTab, config, model: chosenModel }: GuideP
             ))}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

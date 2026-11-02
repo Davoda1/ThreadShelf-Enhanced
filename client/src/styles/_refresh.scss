@@ -1,0 +1,766 @@
+// Personal 1.4.0: shallow raised surfaces with selective cyan light.
+// No layout/scroll changes to the existing sidebar.
+:root {
+  --surface-shine: oklch(1 0 0 / 0.045);
+  --button-shine: oklch(1 0 0 / 0.065);
+  --button-shadow: oklch(0 0 0 / 0.28);
+  --edge-shine: oklch(1 0 0 / 0.09);
+  --neon-halo: oklch(0.78 0.13 215 / 0.38);
+  --neon-spill: oklch(0.78 0.13 215 / 0.18);
+  --raised-shadow: oklch(0 0 0 / 0.26);
+  --field-shadow: oklch(0 0 0 / 0.3);
+  --bevel-light: oklch(1 0 0 / 0.1);
+  --panel-depth: oklch(0 0 0 / 0.18);
+}
+[data-theme='light'] {
+  --surface-shine: oklch(1 0 0 / 0.45);
+  --button-shine: oklch(1 0 0 / 0.62);
+  --button-shadow: oklch(0.3 0.01 240 / 0.15);
+  --edge-shine: oklch(1 0 0 / 0.9);
+  --neon-halo: oklch(0.6 0.13 220 / 0.28);
+  --neon-spill: oklch(0.6 0.13 220 / 0.14);
+  --raised-shadow: oklch(0.3 0.01 240 / 0.17);
+  --field-shadow: oklch(0.3 0.01 240 / 0.12);
+  --bevel-light: oklch(1 0 0 / 0.88);
+  --panel-depth: oklch(0.3 0.01 240 / 0.08);
+}
+.btn:not(.ghost),
+.sb-private-chat,
+.load-more-button {
+  background-image: linear-gradient(180deg, var(--button-shine), transparent 85%);
+  box-shadow:
+    inset 0 1px 0 var(--edge-shine),
+    0 2px 0 var(--button-shadow),
+    0 3px 5px oklch(0 0 0 / 0.1);
+  &:active:not([disabled]) {
+    box-shadow:
+      inset 0 1px 2px var(--field-shadow),
+      0 1px 0 var(--raised-shadow);
+  }
+}
+.btn.primary,
+.sb-new-chat {
+  background-image: linear-gradient(180deg, oklch(1 0 0 / 0.19), transparent 88%);
+  border-color: color-mix(in oklch, var(--accent) 65%, white);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.3),
+    0 2px 0 color-mix(in oklch, var(--accent) 48%, var(--bg-0)),
+    0 0 0 1px var(--accent-border),
+    0 0 13px var(--neon-halo),
+    0 0 25px var(--neon-spill);
+  &:hover:not([disabled]) {
+    background-color: color-mix(in oklch, var(--accent) 94%, var(--text-0));
+    filter: brightness(1.035);
+  }
+  &:active:not([disabled]) {
+    box-shadow:
+      inset 0 1px 3px var(--field-shadow),
+      0 1px 0 var(--raised-shadow),
+      0 0 10px var(--neon-halo);
+  }
+  &:disabled {
+    box-shadow: inset 0 1px 0 var(--edge-shine);
+  }
+}
+:is(.sb-item, .sb-coll)[data-active='true']::before {
+  box-shadow:
+    0 0 6px var(--accent),
+    0 0 13px var(--neon-halo);
+}
+.sb-item[data-active='true'] .ico {
+  color: var(--accent);
+  filter: drop-shadow(0 0 4px var(--neon-halo));
+}
+.sb-coll[data-active='true'] .sb-coll-dot {
+  box-shadow: 0 0 7px var(--neon-halo);
+}
+.panel,
+.sb-chat-panel {
+  box-shadow:
+    inset 0 1px 0 var(--edge-shine),
+    0 3px 8px oklch(0 0 0 / 0.04);
+}
+.result {
+  background-image: linear-gradient(180deg, var(--surface-shine), transparent 80%);
+  box-shadow: inset 0 1px 0 color-mix(in oklch, var(--edge-shine) 50%, transparent);
+}
+.search-card,
+.continue-card {
+  background-image: linear-gradient(180deg, var(--surface-shine), transparent 65%);
+  box-shadow:
+    inset 0 1px 0 var(--edge-shine),
+    0 4px 12px oklch(0 0 0 / 0.045);
+}
+.search-card:focus-within {
+  border-color: var(--accent);
+  box-shadow:
+    inset 0 1px 0 var(--edge-shine),
+    0 0 0 1px var(--accent-border),
+    0 0 12px var(--neon-halo),
+    0 0 24px var(--neon-spill);
+}
+.mode-toggle {
+  overflow: visible;
+  border-color: var(--accent-border);
+  box-shadow: 0 0 10px var(--neon-spill);
+}
+.mode-btn {
+  flex: 1 0 7.25em;
+  min-width: max-content;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  text-align: center;
+}
+.mode-btn:first-child {
+  border-radius: 5px 0 0 5px;
+}
+.mode-btn:last-child {
+  border-radius: 0 5px 5px 0;
+}
+.mode-btn[data-on='true'] {
+  color: var(--text-0);
+  background-image: linear-gradient(180deg, var(--button-shine), transparent 85%);
+  box-shadow:
+    inset 0 1px 0 var(--edge-shine),
+    inset 0 -2px 0 var(--accent),
+    0 0 8px var(--neon-spill);
+}
+.render-switch-track {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--bg-0) 64%, var(--bg-3)),
+    var(--bg-3)
+  );
+  border-color: var(--border-1);
+  box-shadow:
+    inset 0 2px 3px var(--field-shadow),
+    0 1px 0 var(--bevel-light);
+}
+.render-switch-knob {
+  background: linear-gradient(180deg, color-mix(in oklch, var(--text-1) 72%, white), var(--text-1));
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.3),
+    0 1px 3px var(--raised-shadow);
+}
+.render-switch[aria-checked='true'] .render-switch-track {
+  border-color: var(--accent);
+  box-shadow:
+    inset 0 2px 3px var(--field-shadow),
+    0 0 8px var(--neon-halo),
+    0 0 16px var(--neon-spill);
+}
+.render-switch[aria-checked='true'] .render-switch-knob {
+  background: linear-gradient(180deg, color-mix(in oklch, var(--accent) 70%, white), var(--accent));
+}
+.render-switch-state {
+  display: inline-block;
+  min-width: 3em;
+  text-align: start;
+}
+.settings-stack {
+  gap: 24px;
+}
+.settings-content,
+.settings-group,
+.settings-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+}
+.settings-page [hidden] {
+  display: none !important;
+}
+.settings-fields {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.settings-content:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 6px;
+}
+.settings-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  padding: 5px;
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-lg);
+  background: var(--bg-0);
+  box-shadow:
+    inset 0 2px 4px var(--field-shadow),
+    0 1px 0 var(--bevel-light);
+}
+.settings-tabs button {
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.settings-tabs button[aria-selected='true'] {
+  color: var(--text-0);
+  border-color: var(--accent-border);
+  background: linear-gradient(180deg, var(--button-shine), transparent), var(--bg-2);
+  box-shadow:
+    inset 0 1px 0 var(--bevel-light),
+    inset 0 -2px 0 var(--accent),
+    0 2px 3px var(--raised-shadow),
+    0 0 10px var(--neon-spill);
+}
+.settings-tabs button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.settings-page .panel {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--bg-2) 40%, var(--bg-1)),
+    var(--bg-1) 90px
+  );
+  border-color: var(--border-1);
+  box-shadow:
+    inset 0 1px 0 var(--bevel-light),
+    0 3px 0 var(--panel-depth),
+    0 8px 18px var(--panel-depth);
+}
+.settings-page .panel-head {
+  background: linear-gradient(
+    180deg,
+    var(--bg-2),
+    color-mix(in oklch, var(--bg-2) 35%, var(--bg-1))
+  );
+  border-bottom-color: var(--border-1);
+  box-shadow:
+    inset 0 1px 0 var(--bevel-light),
+    0 1px 0 var(--panel-depth);
+}
+.settings-page select {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--bg-2) 92%, var(--text-0)),
+    var(--bg-2) 40%,
+    var(--bg-1)
+  );
+  box-shadow:
+    inset 0 1px 0 var(--bevel-light),
+    0 2px 0 var(--raised-shadow);
+}
+.settings-page :is(input:not([type='checkbox']):not([type='radio']):not([type='range']), textarea) {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--bg-0) 68%, var(--bg-1)),
+    var(--bg-1)
+  );
+  box-shadow:
+    inset 0 2px 3px var(--field-shadow),
+    0 1px 0 var(--bevel-light);
+}
+.settings-page :is(select, input, textarea):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.settings-collections > .view {
+  padding: 0;
+}
+.settings-save,
+.composer-send {
+  justify-content: center;
+}
+.composer-send {
+  width: 8.5em;
+  flex: 0 0 8.5em;
+}
+.stable-label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.stable-label > span {
+  grid-area: 1 / 1;
+}
+.stable-label-size {
+  visibility: hidden;
+}
+.generation-context-apply {
+  min-width: 7.2em;
+  justify-content: center;
+}
+.model-popover-providers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.model-popover-providers button {
+  min-width: 0;
+  width: 100%;
+  white-space: normal;
+  min-height: 34px;
+  overflow-wrap: anywhere;
+}
+.composer-preferences {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  padding: 10px 2px 2px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.composer-preferences label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.composer-tool-note {
+  margin: 8px 2px 0;
+  font-size: var(--fs-meta);
+  color: var(--text-2);
+}
+.composer-keyboard-help {
+  min-width: 0;
+  margin: 4px 2px 8px;
+  color: var(--text-2);
+  font: var(--fs-meta)/1.5 var(--font-sans);
+  overflow-wrap: anywhere;
+}
+// Semantic feedback has an icon, label, tinted surface and left rail; color is supplementary.
+.toast {
+  --feedback: var(--accent);
+  --feedback-soft: var(--accent-soft);
+  grid-template-columns: 28px minmax(0, 1fr) 12px;
+  border-color: color-mix(in oklch, var(--feedback) 55%, var(--border-1));
+  border-left: 4px solid var(--feedback);
+  background: linear-gradient(100deg, var(--feedback-soft), transparent 85%), var(--bg-1);
+  box-shadow:
+    inset 0 1px 0 var(--edge-shine),
+    0 12px 32px -14px var(--raised-shadow);
+}
+.toast[data-type='success'] {
+  --feedback: var(--success);
+  --feedback-soft: var(--success-soft);
+}
+.toast[data-type='warning'] {
+  --feedback: var(--warning);
+  --feedback-soft: var(--warning-soft);
+}
+.toast[data-type='error'] {
+  --feedback: var(--danger);
+  --feedback-soft: var(--danger-soft);
+}
+.toast .toast-ico {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--feedback);
+  background: var(--feedback-soft);
+  border: 1px solid color-mix(in oklch, var(--feedback) 35%, transparent);
+}
+.toast .toast-ico svg {
+  width: 15px;
+  height: 15px;
+}
+.toast .toast-label {
+  display: block;
+  font-size: var(--fs-meta);
+  color: var(--feedback);
+  margin-bottom: 3px;
+}
+.toast .toast-text {
+  overflow-wrap: anywhere;
+}
+.toast-dismiss {
+  color: var(--text-2);
+  align-self: start;
+}
+.banner.warn {
+  color: var(--warning);
+}
+.banner.err {
+  color: var(--danger);
+}
+.banner.info {
+  color: var(--accent);
+}
+@media (max-width: 640px) {
+  .settings-tabs button {
+    font-size: 12px;
+    padding-inline: 5px;
+  }
+  .settings-stack {
+    gap: 18px;
+  }
+  .settings-page .generation-actions {
+    align-items: flex-start;
+  }
+  .settings-save {
+    max-width: 100%;
+    white-space: normal;
+    min-height: 36px;
+    height: auto;
+    padding-block: 8px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}
+
+.sb-chat-panel {
+  overflow: visible;
+}
+
+.catalog-projector {
+  margin-block: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-1);
+  border-radius: 8px;
+  background: var(--bg-1);
+  font-size: var(--fs-meta);
+  label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-0);
+  }
+  input {
+    accent-color: var(--accent);
+    flex: none;
+  }
+  p {
+    margin: 6px 0;
+    color: var(--text-2);
+  }
+  ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    color: var(--text-2);
+    code {
+      overflow-wrap: anywhere;
+    }
+  }
+}
+.catalog-quant button {
+  min-width: 84px;
+}
+.catalog-modal .modal-foot button {
+  min-width: 145px;
+}
+
+// The native control still owns focus, keyboard navigation and its option popup.
+// Its visible selected value can wrap, unlike a platform select's single line.
+.native-select {
+  position: relative;
+  display: inline-grid;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 6px 28px 6px 9px;
+  border: 1px solid var(--border-0);
+  border-radius: var(--r-sm);
+  background: var(--bg-2);
+  color: var(--text-0);
+  font: 12.5px/1.4 var(--font-sans);
+  text-transform: none;
+  letter-spacing: normal;
+  vertical-align: middle;
+  &::after {
+    position: absolute;
+    right: 11px;
+    top: calc(50% - 4px);
+    width: 6px;
+    height: 6px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    rotate: 45deg;
+    content: '';
+    pointer-events: none;
+  }
+  &:has(select:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  &:has(select:disabled) {
+    opacity: 0.55;
+  }
+}
+.native-select > select {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  // Overlay geometry must win over legacy context-specific native-select rules.
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  margin: 0;
+  padding: 0 !important;
+  opacity: 0;
+  cursor: pointer;
+  font: inherit;
+  option,
+  optgroup {
+    color: var(--text-0);
+    background: var(--bg-2);
+  }
+}
+.native-select > .native-select-value {
+  grid-area: 1 / 1;
+  display: block;
+  min-width: 0;
+  color: inherit;
+  font: inherit;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+.native-select > .native-select-size {
+  grid-area: 1 / 1;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  visibility: hidden;
+  font: inherit;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.settings-page .native-select {
+  width: 100%;
+  background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
+  box-shadow:
+    inset 0 1px 0 var(--bevel-light),
+    0 2px 0 var(--raised-shadow);
+}
+.appearance-settings .native-select {
+  max-width: 24rem;
+}
+.quick-setup-variant {
+  flex-wrap: wrap;
+  .native-select {
+    flex: 1 1 170px;
+  }
+}
+.upload-storage-toolbar .native-select {
+  flex: 1;
+}
+
+// Translated actions and labels must fit the containing panel, including at 320px.
+.btn {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 32px;
+  height: auto;
+  padding-block: 6px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  svg {
+    flex-shrink: 0;
+  }
+  &.sm {
+    min-height: 26px;
+    height: auto;
+    padding-block: 4px;
+  }
+}
+.section-h {
+  flex-wrap: wrap;
+  > * {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+.panel-head > *,
+.panel-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.image-cache-settings,
+.render-setting > span {
+  min-width: 0;
+}
+.image-cache-settings > .btn {
+  align-self: flex-start;
+}
+.directory-picker-foot {
+  flex-wrap: wrap;
+  > span {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+.directory-picker-list button {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.catalog-head,
+.catalog-item-head,
+.catalog-item-meta,
+.catalog-quant-name {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.catalog-origin,
+.catalog-quant-fit,
+.catalog-item-title {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.catalog-origin,
+.catalog-item-meta {
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+.catalog-quant button {
+  height: auto;
+  min-height: 26px;
+  padding-block: 4px;
+}
+.guide-snippet {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  white-space: normal;
+  .btn {
+    position: static;
+    order: -1;
+    align-self: flex-end;
+  }
+  code {
+    display: block;
+    max-width: 100%;
+    white-space: pre;
+    overflow: auto;
+  }
+}
+.guide-fields {
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  overflow-wrap: anywhere;
+}
+.guide-table td:first-child {
+  white-space: normal;
+}
+.guide-body {
+  overflow-wrap: anywhere;
+}
+.guide-table {
+  table-layout: fixed;
+  td:first-child {
+    width: 40%;
+  }
+}
+.local-api-tabs {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
+  button {
+    min-width: 0;
+    min-height: 32px;
+    height: auto;
+    padding-block: 6px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+.guide-tabs {
+  width: auto;
+}
+.guide-head {
+  flex-wrap: wrap;
+  > .btn {
+    flex: 0 0 auto;
+  }
+}
+.local-api-example > .btn {
+  align-self: flex-end;
+}
+.stat-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.stat {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.role-legend {
+  flex-wrap: wrap;
+  > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  i {
+    flex-shrink: 0;
+  }
+}
+.danger-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.toaster {
+  max-height: calc(100dvh - 36px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+.toast {
+  flex-shrink: 0;
+}
+.number-combobox-toggle {
+  width: max(20px, 1.3em);
+  height: max(20px, 1.3em);
+  line-height: 1;
+}
+.number-combobox > input {
+  min-height: 1.6em;
+  padding-right: max(24px, 1.6em);
+}
+@media (max-width: 520px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .danger-row {
+    grid-template-columns: minmax(0, 1fr);
+    > .btn {
+      justify-self: start;
+    }
+  }
+  .catalog-controls input {
+    flex-basis: 100%;
+  }
+  .catalog-quant {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+  .catalog-quant-name {
+    grid-column: 1 / -1;
+  }
+  .catalog-quant button {
+    grid-column: 2;
+  }
+  .directory-picker-bar {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    input {
+      grid-column: 1 / -1;
+      grid-row: 1;
+    }
+  }
+  .guide-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

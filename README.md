@@ -1,7 +1,7 @@
 # ThreadShelf Enhanced
 
 [![CI](https://github.com/Davoda1/ThreadShelf-Enhanced/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Davoda1/ThreadShelf-Enhanced/actions/workflows/ci.yml)
-[![Version 1.3.0](https://img.shields.io/badge/version-1.3.0-blue)](https://github.com/Davoda1/ThreadShelf-Enhanced/releases)
+[![Version 1.4.0](https://img.shields.io/badge/version-1.4.0-blue)](https://github.com/Davoda1/ThreadShelf-Enhanced/releases)
 [![MIT license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Node 24+](https://img.shields.io/badge/Node.js-24%2B-43853d)](#installation)
 [![Source distribution](https://img.shields.io/badge/distribution-source_ZIP_%2F_TAR.GZ-6f42c1)](https://github.com/Davoda1/ThreadShelf-Enhanced/releases)
@@ -12,15 +12,19 @@ Import, search, read and continue AI conversations on your own machine. ThreadSh
 
 ## Interface
 
-The web interface in light and dark themes, using synthetic demo conversations. [View all eight full-resolution screenshots](docs/extras/README.md).
+The web interface in light and dark themes, using synthetic demo conversations. [View all release screenshots](docs/extras/README.md).
 
-**Dark theme — a structured conversation with headings, a table and a quotation.**
+**Dark theme — rich conversation reading with optional speech controls.**
 
 ![ThreadShelf Enhanced dark conversation reader with a formatted comparison table](docs/extras/01-reader-dark.png)
 
-**Light theme — a Mermaid diagram rendered within the conversation.**
+**Light theme — hybrid archive search with the expanded control row.**
 
-![ThreadShelf Enhanced light conversation reader with a rendered archive workflow diagram](docs/extras/04-diagram-light.png)
+![ThreadShelf Enhanced light hybrid search interface](docs/extras/06-search-light.png)
+
+**Text-to-speech — optional local voices and playback settings.**
+
+![ThreadShelf Enhanced speech settings in dark theme](docs/extras/09-speech-dark.png)
 
 ## What Enhanced adds
 
@@ -33,7 +37,34 @@ The web interface in light and dark themes, using synthetic demo conversations. 
 - Integrated Reader pagination for compatible [ThreadShelf Local Suite](https://github.com/Davoda1/ThreadShelf-Local-Suite) clients. No separate pagination patch is needed.
 - Project-local Node/npm setup and a Linux launcher for repeated starts and folder indexing.
 
-Search embeddings and storage run locally. First setup and model use require network downloads. OpenRouter generation is an optional external service: using it sends selected conversation content to OpenRouter and its provider. See [security and privacy](SECURITY.md).
+Search embeddings and storage run locally. First setup and model use require
+network downloads. Optional remote AI and speech providers receive the content
+sent to them; local llama.cpp, Strata and installed CPU speech remain available.
+See [security and privacy](SECURITY.md).
+
+## New in 1.4.0
+
+- **Hybrid search:** independent lexical and semantic retrieval, complete filters
+  and deterministic ranking, with a rebuildable local lexical cache.
+- **Archive and Markdown tools:** bounded archive search/read in chat, live note
+  folders, scoped writes, revision checks, history and explicit chat-write approval.
+- **More AI options:** Strata and configurable OpenAI-compatible providers,
+  opt-in API vision, streaming controls and memory-only private chats.
+- **Text-to-speech:** optional Pocket/Kokoro CPU voices, self-hosted and selected
+  API providers, streaming/buffered playback, protected saved credentials, pinned
+  recordings and cache controls. Speech starts disabled; voice downloads require
+  explicit review. Audio testing is unavailable until the selected CPU engine is ready.
+- **Interface refresh:** cyan accents, raised controls, three settings tabs,
+  speaker icons, stable controls and improved six-language/narrow-screen layouts.
+- **Headless setup:** independent `ALLOW_LAN_AI` and `ALLOW_LAN_TTS` permissions
+  for trusted-LAN web use, both disabled by default.
+- **Portable migration:** verified stopped-installation copying with explicit
+  paths, destination safeguards and an audit for dependencies on the old directory.
+- **Runtime and dependencies:** project-local Node 26.13.0 LTS, npm 12.2.1 and
+  reviewed dependency fixes. Existing public launchers and importer remain available.
+
+See [speech](docs/TTS.md), [search](docs/SEARCH-1.4.0.md),
+[live notes](docs/NOTES.md) and [migration](docs/MIGRATION.md).
 
 ## Scalable imports and background jobs in 1.3.0
 
@@ -43,7 +74,7 @@ Accepted imports run as persistent server jobs. Keep the tab open until file tra
 
 A single coordinator protects web, CLI, watcher and recovery work. Only one index operation and one HTTP server use a database at a time. Replacement imports reserve their collection against other writes while its published data remains readable. Memory monitoring accounts for process/native allocations and effective host/container limits; batches shrink, wait or fail safely under sustained pressure.
 
-The existing API, stored identities, embedding model and vector dimensions remain compatible. **Upgrade every process sharing a writable store to 1.3.0 together.** Publication metadata changes the internal storage layout: retain a stopped backup, and never open a 1.3.0-written store with an older server. Prior release tags and assets remain available.
+The existing API, stored identities, embedding model and vector dimensions remain compatible. **Upgrade every process sharing a writable store to the current version together.** Publication metadata changes the internal storage layout: retain a stopped backup, and never open a 1.3.0-written store with an older server. Prior release tags and assets remain available.
 
 See [import jobs and resource limits](docs/IMPORT-JOBS.md), the [changelog](CHANGELOG.md) and [validation record](docs/ENHANCED_VALIDATION.md) for behavior, recovery and test scope.
 
@@ -57,9 +88,9 @@ https://github.com/user-attachments/assets/3018cbe2-b819-45ad-8ada-f3c61d5bfb99
 
 ## Installation
 
-Download the **1.3.0** [source ZIP](https://github.com/Davoda1/ThreadShelf-Enhanced/releases/download/v1.3.0/ThreadShelf-Enhanced-1.3.0-Source.zip) or [source TAR.GZ](https://github.com/Davoda1/ThreadShelf-Enhanced/releases/download/v1.3.0/ThreadShelf-Enhanced-1.3.0-Source.tar.gz), with the consolidated [SHA256SUM.txt](https://github.com/Davoda1/ThreadShelf-Enhanced/releases/download/v1.3.0/SHA256SUM.txt). [All releases](https://github.com/Davoda1/ThreadShelf-Enhanced/releases) remain available. You can also clone the repository's `master` branch. Extract into a writable directory and run setup there. Enhanced is distributed as source; it is not published to npm.
+Download the **1.4.0** [source ZIP](https://github.com/Davoda1/ThreadShelf-Enhanced/releases/download/v1.4.0/ThreadShelf-Enhanced-1.4.0-Source.zip) or [source TAR.GZ](https://github.com/Davoda1/ThreadShelf-Enhanced/releases/download/v1.4.0/ThreadShelf-Enhanced-1.4.0-Source.tar.gz), with the consolidated [SHA256SUM.txt](https://github.com/Davoda1/ThreadShelf-Enhanced/releases/download/v1.4.0/SHA256SUM.txt). [All releases](https://github.com/Davoda1/ThreadShelf-Enhanced/releases) remain available. You can also clone the repository's `master` branch. Extract into a writable directory and run setup there. Enhanced is distributed as source; it is not published to npm.
 
-The setup scripts download official **Node 24.22.1 LTS**, verify its SHA-256 against the official checksum list, install **npm 12.2.1** into the project-local runtime, install locked dependencies and build the application. They do not change your global Node installation or shell profile. Administrator access is not required.
+The setup scripts download official **Node 26.13.0 LTS**, verify its SHA-256 against the official checksum list, install **npm 12.2.1** into the project-local runtime, install locked dependencies and build the application. They do not change your global Node installation or shell profile. Administrator access is not required.
 
 ### Linux
 
@@ -110,7 +141,7 @@ Requires x64 or ARM64 Windows and PowerShell.
 For subsequent starts on x64:
 
 ```powershell
-.\.local\node-v24.22.1-win-x64\node.exe dist\src\server.js
+.\.local\node-v26.13.0-win-x64\node.exe dist\src\server.js
 ```
 
 Substitute `arm64` for `x64` on ARM machines. If execution policy blocks a downloaded script, review it and use `Unblock-File .\setup-threadshelf.ps1`; organization-managed policy still applies. See [validation](docs/ENHANCED_VALIDATION.md) for platform verification scope.
@@ -120,7 +151,7 @@ Substitute `arm64` for `x64` on ARM machines. If execution policy blocks a downl
 | Purpose | Bash | PowerShell |
 | --- | --- | --- |
 | Install only the local Node/npm runtime | `--runtime-only` | `-RuntimeOnly` |
-| Select Node | `--node-version 24.22.1` | `-NodeVersion 24.22.1` |
+| Select Node | `--node-version 26.13.0` | `-NodeVersion 26.13.0` |
 | Select npm | `--npm-version 12.2.1` | `-NpmVersion 12.2.1` |
 
 Environment overrides are `THREADSHELF_NODE_VERSION` and `THREADSHELF_NPM_VERSION`. Node 24+ is required for lossless JSON numeric-token handling; npm 12 requires Node 24.15+ within the 24.x line. Setup rejects incompatible combinations. The root package explicitly allows the install scripts needed by its pinned dependencies. CPU embeddings are used by default; optional CUDA downloads are skipped unless `ONNXRUNTIME_NODE_INSTALL=cuda12` is set.
@@ -141,6 +172,9 @@ Setup preserves an existing `.env` and copies `.env.example` when it is absent. 
 | --- | --- |
 | `HOST` | Bind address; the supplied default is `127.0.0.1` for this computer only |
 | `PORT` | HTTP port; default `3000` |
+| `ALLOW_LAN_AI` | `0` by default; `1` permits AI chat, model setup and Markdown-vault controls through the allowed LAN web address |
+| `ALLOW_LAN_TTS` | `0` by default; `1` permits speech setup, credentials, saved audio and playback through the allowed LAN web address |
+| `ALLOWED_ORIGINS` | Optional comma-separated full browser origins for a deliberate proxy or separate frontend; exact same-origin is the default |
 | `ALLOWED_HOSTS` | Comma-separated request hostnames/IP addresses, without schemes or ports |
 | `THREADSHELF_DATA_DIR` | Override the common data directory |
 | `LANCEDB_PATH`, `UPLOADS_DIR`, `COLLECTIONS_PATH` | Override individual storage locations |
@@ -149,6 +183,33 @@ Setup preserves an existing `.env` and copies `.env.example` when it is absent. 
 | `OPENROUTER_API_KEY`, `HF_TOKEN`, `GITHUB_TOKEN` | Optional credentials for the corresponding integrations |
 
 Host checks do not provide authentication. Remote access requires an appropriate network boundary or authenticated reverse proxy. Keep `.env`, uploaded exports, databases and model files out of source control. The [upstream manual](docs/UPSTREAM_README.md) explains inherited generation, MCP, search and configuration features; its npm publishing and installation instructions apply to upstream ThreadShelf.
+
+### Headless trusted-LAN AI and speech
+
+Edit the root `.env` beside the setup scripts, using your server's actual address:
+
+```dotenv
+HOST=0.0.0.0
+ALLOWED_HOSTS=localhost,127.0.0.1,192.168.1.50
+ALLOW_LAN_AI=1
+ALLOW_LAN_TTS=1
+```
+
+The two flags are independent. Only the exact value `1` enables permission;
+`0`, unset or any other value keeps that feature's management localhost-only.
+Restart after editing; an explicitly exported process variable overrides `.env`.
+After migration, edit the copied `.env`, because it replaces the fresh template.
+
+These flags grant the full corresponding controls without an API key to clients
+that can reach an allowed server address. They are not authentication or subnet
+filters. Keep this deployment on a trusted network or behind authenticated access.
+Host and exact browser-origin checks still apply. Native clients need no browser
+origin entry. The separate `/v1` listener and its key policy are unchanged.
+
+`ALLOW_LAN_TTS=1` does not enable speech or download voices. Open **Settings →
+Text-to-Speech**, enable and save, then review **Download local voices**. AI access
+is not needed for speech. With the TTS flag disabled, the separate authenticated
+LAN CPU playback option remains available as described in [TTS.md](docs/TTS.md).
 
 ## Import support and known limits
 
@@ -167,9 +228,18 @@ See the [compatibility contract](docs/ENHANCED_COMPATIBILITY.md) and [import ada
 
 Stop all server, MCP, importer and watcher processes first. Back up the complete `.lancedb`, `.uploads`, `.collections.json`, `.threadshelf` and `.env`, or their configured external locations. The complete database includes its publication/job metadata and SQLite sidecars; do not copy selected LanceDB tables alone.
 
-For a fresh directory, run setup without starting the server, then copy the stopped data and configuration into their corresponding locations. Preserve relative layouts and inspect absolute paths, custom data roots and symlinks before removing the old installation. Do not copy old dependencies, local Node binaries or generated builds over the fresh source. Keep the old copy until stored threads, search, media, generation settings and client connections are verified.
+For a fresh directory, run setup without starting the server, then use the [verified migration tool](docs/MIGRATION.md):
 
-All processes sharing the new store must run 1.3.0. Opening old data does not require reimporting exports, although pending index work may recover at startup. Once the new server writes generation metadata, rollback means restoring the stopped backup, not starting an older binary against the changed store. Preserve the server URL and source paths when bookmarks or thread identities depend on them.
+```bash
+.local/node-v26.13.0-linux-x64/bin/node scripts/migrate-installation.mjs \
+  --stopped --source /path/to/old-installation --target /path/to/new-installation
+```
+
+Both paths are required. The tool never deletes the source and refuses existing target data. `--include-caches` also copies the supported optional cache directories; `--audit-only` checks dependencies without copying. Windows examples, custom-layout limitations and rollback guidance are in the migration guide.
+
+Preserve relative layouts and inspect absolute paths, custom data roots and symlinks before removing the old installation. Do not copy old dependencies, local Node binaries or generated builds over the fresh source. Keep the old copy until stored threads, search, media, generation settings and client connections are verified.
+
+All processes sharing the new store must run 1.4.0. Opening old data does not require reimporting exports, although pending index work may recover at startup. Once the new server writes generation metadata, rollback means restoring the stopped backup, not starting an older binary against the changed store. Preserve the server URL and source paths when bookmarks or thread identities depend on them.
 
 Enhanced adds metadata columns while preserving existing normalized turns and identity keys. Compatible Local Suite clients keep their own archive formats; Enhanced does not migrate their databases. Do not install the older Reader pagination patch over Enhanced. The [compatibility matrix](docs/ENHANCED_COMPATIBILITY.md) distinguishes server API checks from desktop and archive behavior.
 

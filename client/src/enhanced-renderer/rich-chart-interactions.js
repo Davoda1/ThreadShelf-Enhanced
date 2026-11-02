@@ -76,7 +76,7 @@ function show(state, index, origin) {
   previous?.hide();
   const item = state.items[index], point = visibleAnchor(state, item, index);
   if (!point) return;
-  const panel = doc.createElement('div'); panel.className = 'rich-chart-tooltip'; panel.id = `threadshelf-chart-tooltip-${++tooltipSequence}`; panel.setAttribute('role', 'tooltip');
+  const panel = doc.createElement('div'); panel.className = 'rich-chart-tooltip'; panel.id = `threadshelf-chart-tooltip-${++tooltipSequence}`; panel.setAttribute('role', 'tooltip'); panel.tabIndex = 0;
   const heading = doc.createElement('div'); heading.className = 'rich-chart-tooltip-heading'; heading.textContent = item.heading; panel.append(heading);
   for (const row of item.rows) {
     const line = doc.createElement('div'); line.className = 'rich-chart-tooltip-row';
@@ -102,7 +102,7 @@ function show(state, index, origin) {
   if (doc.activeElement === state.viewport || (state.figure.contains(doc.activeElement) && doc.activeElement?.dataset.chartItem === String(index))) doc.activeElement.setAttribute('aria-describedby', panel.id);
   state.index = index;
   let frame = 0, closed = false;
-  const active = {state, index, origin, hide};
+  const active = {state, index, origin, panel, hide};
   const listeners = [];
   function listen(target, name, fn, options) { target.addEventListener(name, fn, options); listeners.push(() => target.removeEventListener(name, fn, options)); }
   function hide() {
@@ -138,15 +138,30 @@ function show(state, index, origin) {
     panel.style.left = `${(x - origin.left) / sx}px`; panel.style.top = `${(y - origin.top) / sy}px`;
   }
   function schedule() { if (!frame && !closed) frame = win.requestAnimationFrame(position); }
-  function escape(event) { if (event.key === 'Escape') { state.suppressed = index; hide(); event.preventDefault(); } }
+  function escape(event) { if (event.key === 'Escape') { const returnFocus = panel.contains(doc.activeElement); state.suppressed = index; hide(); if (returnFocus) state.nodes[index].focus({preventScroll: true}); event.preventDefault(); } }
   const removal = win.MutationObserver ? new win.MutationObserver(schedule) : null;
   removal?.observe(doc.body, {childList: true, subtree: true});
   const ancestors = win.MutationObserver ? new win.MutationObserver(hide) : null;
   for (let node = state.figure.parentElement; node; node = node.parentElement) ancestors?.observe(node, {attributes: true, attributeFilter: ['class', 'style', 'hidden', 'aria-hidden']});
   const resize = win.ResizeObserver ? new win.ResizeObserver(schedule) : null;
   resize?.observe(state.figure); resize?.observe(state.viewport);
-  listen(doc, 'scroll', schedule, true); listen(win, 'resize', schedule); listen(doc, 'keydown', escape, true);
-  listen(doc, 'pointerdown', event => { if (!state.figure.contains(event.target)) hide(); }, true);
+  listen(doc, 'scroll', event => { if (event.target !== panel) schedule(); }, true); listen(win, 'resize', schedule); listen(doc, 'keydown', escape, true);
+  listen(doc, 'pointerdown', event => { if (!state.figure.contains(event.target) && !panel.contains(event.target)) hide(); }, true);
+  // A long translated label can exceed the viewport. Keep its scrollable
+  // tooltip reachable by pointer and keyboard without changing chart arrows.
+  listen(panel, 'pointerleave', event => { if (active.origin !== 'focus' && !state.figure.contains(event.relatedTarget)) hide(); });
+  listen(panel, 'focusin', () => { active.origin = 'focus'; });
+  listen(panel, 'focusout', event => { if (!panel.contains(event.relatedTarget) && !state.figure.contains(event.relatedTarget)) hide(); });
+  listen(panel, 'keydown', event => {
+    if (event.key === 'Tab' && event.shiftKey) { event.preventDefault(); state.nodes[index].focus({preventScroll: true}); return; }
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const delta = {ArrowDown: 40, ArrowUp: -40, PageDown: panel.clientHeight * .8, PageUp: -panel.clientHeight * .8}[event.key];
+    if (event.key === 'Home') panel.scrollTop = 0;
+    else if (event.key === 'End') panel.scrollTop = panel.scrollHeight;
+    else if (delta !== undefined) panel.scrollTop += delta;
+    else return;
+    event.preventDefault();
+  });
   if (win.visualViewport) { listen(win.visualViewport, 'resize', schedule); listen(win.visualViewport, 'scroll', schedule); }
   activeByDocument.set(doc, active); position();
 }
@@ -193,7 +208,7 @@ export function mountChartInteractions(root) {
     const state = eventState(event); if (!state || state.figure.contains(event.relatedTarget)) return;
     state.suppressed = -1;
     const active = activeByDocument.get(state.figure.ownerDocument);
-    if (active?.state === state && active.origin !== 'focus') active.hide();
+    if (active?.state === state && !active.panel.contains(event.relatedTarget) && active.origin !== 'focus') active.hide();
   }
   function focus(event) {
     if (handled.has(event)) return; const state = eventState(event); if (!state) return; handled.add(event);
@@ -205,10 +220,16 @@ export function mountChartInteractions(root) {
   }
   function blur(event) {
     const state = eventState(event); if (!state || state.figure.contains(event.relatedTarget)) return;
+    const active = activeByDocument.get(state.figure.ownerDocument);
+    if (active?.state === state && active.panel.contains(event.relatedTarget)) return;
     state.suppressed = -1; dismissChartInteractions(state.figure);
   }
   function key(event) {
     if (handled.has(event)) return; const state = eventState(event); if (!state || (!event.target.closest('[data-chart-item]') && event.target !== state.viewport)) return;
+    const active = activeByDocument.get(state.figure.ownerDocument);
+    if (event.key === 'Tab' && !event.shiftKey && active?.state === state && active.panel.scrollHeight > active.panel.clientHeight) {
+      event.preventDefault(); active.panel.focus({preventScroll: true}); return;
+    }
     let index = Number(event.target.closest('[data-chart-item]')?.dataset.chartItem ?? state.index);
     if (event.key === 'ArrowRight' || event.key === 'ArrowDown') index = Math.min(state.items.length - 1, index + 1);
     else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') index = Math.max(0, index - 1);

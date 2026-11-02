@@ -3,6 +3,7 @@ import { startLocalApiUpstream } from '../shared/local-api-upstream.js';
 
 const openSettings = async (page, baseUrl) => {
   await page.goto(`${baseUrl}/settings`);
+  await page.locator('#settings-tab-server').click();
   const panel = page.locator('.panel', { hasText: 'Local model API' });
   await expect(panel).toBeVisible();
   return panel;
@@ -54,7 +55,7 @@ test.describe('Local model API settings and guide', () => {
         const response = page.waitForResponse(
           (res) => res.url().endsWith('/api/generation/config') && res.request().method() === 'PUT',
         );
-        await page.getByRole('button', { name: 'Save generation settings' }).click();
+        await page.locator('.settings-save').click();
         return (await response).status();
       };
       const key = 'synthetic-active-key';
@@ -73,6 +74,7 @@ test.describe('Local model API settings and guide', () => {
       ).toBe(200);
 
       // A real context change still needs an idle runtime and cannot stop inference.
+      await page.locator('#settings-tab-ai').click();
       await page
         .getByLabel('Context window in tokens')
         .fill(String(previous.llamaCpp.contextSize + 512));
@@ -81,6 +83,7 @@ test.describe('Local model API settings and guide', () => {
       await page.getByLabel('Context window in tokens').fill(String(previous.llamaCpp.contextSize));
       await page.getByLabel('Context window in tokens').press('Escape');
 
+      await page.locator('#settings-tab-server').click();
       await panel.getByLabel('Serve the local model API at /v1').uncheck();
       expect(await save()).toBe(200);
       expect(savedBodies.at(-1)).not.toHaveProperty('llamaCpp');
@@ -97,8 +100,9 @@ test.describe('Local model API settings and guide', () => {
       controller.abort();
       await upstream.stop();
       await expect
-        .poll(async () =>
-          (await update({ llamaCpp: { baseUrl: previous.llamaCpp.baseUrl ?? '' } })).status,
+        .poll(
+          async () =>
+            (await update({ llamaCpp: { baseUrl: previous.llamaCpp.baseUrl ?? '' } })).status,
         )
         .toBe(200);
     }
@@ -176,6 +180,7 @@ test.describe('Local model API settings and guide', () => {
 
   test('the llama.cpp panel opens the settings explanations', async ({ page, serverContext }) => {
     await openSettings(page, serverContext.baseUrl);
+    await page.locator('#settings-tab-ai').click();
     await page.getByRole('button', { name: 'What do these settings mean?' }).click();
     const guide = page.getByRole('dialog', { name: 'Local model API guide' });
     await expect(guide.getByRole('tab', { name: 'Settings explained' })).toHaveAttribute(
@@ -201,7 +206,7 @@ test.describe('Local model API settings and guide', () => {
     // The examples use the new key before it is saved, so it can be copied.
     await expect(panel.locator('.local-api-example')).toContainText(`Bearer ${key}`);
 
-    await page.getByRole('button', { name: 'Save generation settings' }).click();
+    await page.locator('.settings-save').click();
     await expect(page.getByText('Generation settings saved.')).toBeVisible();
     await expect(input).toHaveValue('');
     await expect(input).toHaveAttribute('placeholder', /A key is configured/);
@@ -225,7 +230,7 @@ test.describe('Local model API settings and guide', () => {
     await page.keyboard.press('Escape');
 
     await panel.getByLabel('Remove the saved key').check();
-    await page.getByRole('button', { name: 'Save generation settings' }).click();
+    await page.locator('.settings-save').click();
     await expect(input).toHaveAttribute('placeholder', 'Empty · no key required');
     response = await fetch(`${serverContext.baseUrl}/v1/models`);
     expect(response.status).toBe(200);
@@ -234,7 +239,7 @@ test.describe('Local model API settings and guide', () => {
   test('turning the API off is saved and shown in the guide', async ({ page, serverContext }) => {
     const panel = await openSettings(page, serverContext.baseUrl);
     await panel.getByLabel('Serve the local model API at /v1').uncheck();
-    await page.getByRole('button', { name: 'Save generation settings' }).click();
+    await page.locator('.settings-save').click();
     await expect(page.getByText('Generation settings saved.')).toBeVisible();
     const response = await fetch(`${serverContext.baseUrl}/v1/models`);
     expect(response.status).toBe(403);
@@ -246,10 +251,11 @@ test.describe('Local model API settings and guide', () => {
 
   test('the idle unload choice is saved', async ({ page, serverContext }) => {
     await openSettings(page, serverContext.baseUrl);
+    await page.locator('#settings-tab-ai').click();
     const select = page.getByLabel('Unload model from memory');
     await expect(select).toHaveValue('0');
     await select.selectOption('15');
-    await page.getByRole('button', { name: 'Save generation settings' }).click();
+    await page.locator('.settings-save').click();
     await expect(page.getByText('Generation settings saved.')).toBeVisible();
     const { config } = await (await fetch(`${serverContext.baseUrl}/api/generation/config`)).json();
     expect(config.llamaCpp.idleUnloadMinutes).toBe(15);
@@ -258,5 +264,42 @@ test.describe('Local model API settings and guide', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ llamaCpp: { idleUnloadMinutes: 0 } }),
     });
+  });
+});
+
+test('server access save ignores invalid AI drafts and preserves them for later editing', async ({
+  page,
+  serverContext,
+}) => {
+  const panel = await openSettings(page, serverContext.baseUrl);
+  await page.locator('#settings-tab-ai').click();
+  await page.getByLabel('Context window in tokens').fill('1');
+  await page.getByLabel('Model-to-projector overrides').fill('unfinished projector mapping');
+  await page
+    .getByLabel('Session API key', { exact: true })
+    .fill('synthetic-unsaved-compatible-key');
+  await page.locator('#settings-tab-server').click();
+  await panel.getByLabel('Serve the local model API at /v1').uncheck();
+  const saved = page.waitForRequest(
+    (request) => request.url().endsWith('/api/generation/config') && request.method() === 'PUT',
+  );
+  await page.locator('.settings-save').click();
+  expect((await saved).postDataJSON()).toEqual({
+    localApi: { enabled: false, networkAccess: false, networkPort: 3001 },
+    diagnostics: { persistErrorLogs: true },
+  });
+  await expect(page.getByText('Generation settings saved.')).toBeVisible();
+  await page.locator('#settings-tab-ai').click();
+  await expect(page.getByLabel('Context window in tokens')).toHaveValue('1');
+  await expect(page.getByLabel('Model-to-projector overrides')).toHaveValue(
+    'unfinished projector mapping',
+  );
+  await expect(page.getByLabel('Session API key', { exact: true })).toHaveValue(
+    'synthetic-unsaved-compatible-key',
+  );
+  await putLocalApi(serverContext.baseUrl, {
+    enabled: true,
+    clearApiKey: true,
+    networkAccess: false,
   });
 });

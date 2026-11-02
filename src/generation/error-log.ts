@@ -1,3 +1,4 @@
+import { redactProviderError } from './transport.js';
 import { appendFile, mkdir, readFile, stat, writeFile } from 'fs/promises';
 import { basename, dirname, resolve } from 'path';
 import { dataPath } from '../paths.js';
@@ -9,16 +10,17 @@ const KEEP_LOG_BYTES = 4 * 1024 * 1024;
 let pendingWrite: Promise<void> = Promise.resolve();
 
 export const generationErrorLogPath = (): string =>
-  resolve(
-    process.env.GENERATION_ERROR_LOG_PATH || dataPath('generationErrorLog'),
-  );
+  resolve(process.env.GENERATION_ERROR_LOG_PATH || dataPath('generationErrorLog'));
 
 const appendError = async (request: ChatRequest, error: unknown): Promise<void> => {
   if (request.persistDiagnostics === false) return;
   const config = await getGenerationConfig();
   if (!config.diagnostics.persistErrorLogs) return;
   const path = generationErrorLogPath();
-  const message = error instanceof Error ? error.message : String(error);
+  const message = redactProviderError(
+    error,
+    request.messages.map((entry) => entry.content),
+  );
   const entry = [
     `[${new Date().toISOString()}] provider=${request.provider} model=${basename(request.model)}`,
     message,

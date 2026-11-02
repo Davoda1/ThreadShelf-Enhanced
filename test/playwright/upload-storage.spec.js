@@ -53,7 +53,7 @@ test('upload cleanup is a discreet dialog and deletes only confirmed originals, 
   await confirmation
     .getByRole('button', { name: 'Delete all uploaded files', exact: true })
     .click();
-  await expect(modal.getByText('No uploaded files.', { exact: true })).toBeVisible();
+  await expect(modal.locator('p').filter({ hasText: /^No uploaded files\.$/ })).toBeVisible();
   expect(
     await (
       await appPage.request.get(`${serverContext.baseUrl}/api/files?collection=pw_fixture`)
@@ -68,7 +68,8 @@ test('upload cleanup is a discreet dialog and deletes only confirmed originals, 
   await expect(
     appPage
       .getByRole('dialog', { name: 'Manage uploads' })
-      .getByText('No uploaded files.', { exact: true }),
+      .locator('p')
+      .filter({ hasText: /^No uploaded files\.$/ }),
   ).toBeVisible();
 });
 

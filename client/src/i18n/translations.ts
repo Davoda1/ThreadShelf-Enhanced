@@ -1,9 +1,50 @@
 import type { Locale } from './core';
+import { release140Translations } from './translations-release140';
+import { speech140Translations } from './translations-speech140';
+import { speechControls140Translations } from './translations-speech-controls140';
 
 /** Application-owned text only. English source text is the fallback. */
 export const translations: Readonly<
   Record<string, Readonly<Record<Exclude<Locale, 'en'>, string>>>
 > = {
+  ...release140Translations,
+  ...speech140Translations,
+  ...speechControls140Translations,
+  'Search…': {
+    hu: 'Keresés…',
+    de: 'Suchen…',
+    ja: '検索…',
+    fr: 'Trouver…',
+    ru: 'Поиск…',
+  },
+  'Filter…': {
+    hu: 'Szűrés…',
+    de: 'Filtern…',
+    ja: '絞り込み…',
+    fr: 'Filtrer…',
+    ru: 'Фильтр…',
+  },
+  'Message…': {
+    hu: 'Üzenet…',
+    de: 'Nachricht…',
+    ja: 'メッセージ…',
+    fr: 'Message…',
+    ru: 'Сообщение…',
+  },
+  'Follow-up…': {
+    hu: 'További kérdés…',
+    de: 'Rückfrage…',
+    ja: '追加の質問…',
+    fr: 'Question…',
+    ru: 'Вопрос…',
+  },
+  'Enter to send, Shift+Enter for a new line': {
+    hu: 'Enter: küldés, Shift+Enter: új sor',
+    de: 'Enter zum Senden, Umschalt+Enter für neue Zeile',
+    ja: 'Enter で送信、Shift+Enter で改行',
+    fr: 'Entrée pour envoyer, Maj+Entrée pour une nouvelle ligne',
+    ru: 'Enter — отправить, Shift+Enter — новая строка',
+  },
   'Appearance and language': {
     hu: 'Megjelenés és nyelv',
     de: 'Darstellung und Sprache',

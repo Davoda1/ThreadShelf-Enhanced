@@ -1,18 +1,17 @@
 # Native import adapters and attribution
 
-These modules are adapted from **ThreadShelf Local Reader** by **davoda1**
-(MIT). The importer and bounded JSON framer preserve the source implementation's
-native-format behavior, with the Enhanced changes documented below. This
-attribution does not assert identical code in any particular public release.
+These modules are adapted from **ThreadShelf Local Reader 3.3.0**, supplied by
+its author. The original importer and bounded JSON framer are retained here so
+that the desktop reader and this server share their native-format behavior.
 
-- `importers.mjs`, `stream-json.mjs`: Local Reader, MIT;
+- `importers.mjs`, `stream-json.mjs`: Local Reader 3.3.0, MIT;
   see `Local-Reader-LICENSE.txt`.
 - `providers/threadshelf-parser.mjs`: ThreadShelf 1.2.3 parser, with TypeScript
   annotations removed by the Local Reader project; MIT;
   see `ThreadShelf-LICENSE.txt`. The server adapter restores the v1.3.0 public
   conversation-key conventions.
 - `providers/common.mjs`, `meta.mjs`, `gemini.mjs`, `venice.mjs`: AI Export
-  Converter GUI modules as bundled and refined by Local Reader; MIT;
+  Converter GUI 1.2.1 modules as bundled and refined by Local Reader; MIT;
   see `AI-Export-Converter-LICENSE.txt`.
 
 Changes in Enhanced preserve per-message raw data and metadata, the original
@@ -22,8 +21,8 @@ non-conversation account metadata files are skipped. The TypeScript adapter
 retains the server's existing identity/continuation contract and checks every
 turn before storage. Native source fields stay inert data.
 
-Converted HTML support follows the **ChatGPT Export Processor GUI**
-`jsonData` contract. Importing
+Processor compatibility was checked against the supplied **ChatGPT Export
+Processor GUI 1.1.0** source and its strict `jsonData` HTML contract. Importing
 `conversations-index.json` or `chat-index.html` parses its existing conversation
 records without executing the viewer's scripts or applying text conversions
 again. Original input files are never rewritten.
@@ -38,11 +37,7 @@ compatible converter outputs; and normalized ThreadShelf/Local Reader turns.
 ZIP members are never extracted. Selected conversation members are checked for
 CRC, size and safe paths. Missing or encrypted required data produces a source
 error. Multipart Venice backups are grouped only when their manifests identify
-one unambiguous backup. Encrypted Venice backups and JSONL inputs are unsupported.
-
-A ZIP containing both `conversations.json` and `chat.html` can create duplicates;
-use one conversation representation. Browser folder uploads include supported
-raster image companions, while unrelated files are skipped.
+one unambiguous backup.
 
 UTF-8 top-level/wrapped conversation arrays above 8 MiB are validated in a first
 streaming pass and normalized one record at a time in a second pass. Limits

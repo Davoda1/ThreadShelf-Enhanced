@@ -1,6 +1,6 @@
 # Compatibility contract
 
-ThreadShelf Enhanced 1.3.0 retains the existing server routes, public conversation
+ThreadShelf Enhanced 1.4.0 retains the existing server routes, public conversation
 identities and integrated Reader pagination. Import processing now uses persistent
 jobs and atomic archive/index publication. The current public client reference is
 [ThreadShelf Local Suite v1.2.0](https://github.com/Davoda1/ThreadShelf-Local-Suite/tree/v1.2.0),
@@ -199,3 +199,15 @@ attachments, embedding-model caches and Local Reader's own resource cache.
 - Unknown binary attachments, export-global metadata and unsupported layouts may
   not have a normalized representation. Keep the original export as the complete
   source archive.
+
+
+## Features added in 1.4.0
+
+Hybrid search adds a mode to `/api/search` and the CLI while Reader v1 continues
+advertising keyword and semantic modes with unchanged totals and cursors. The
+lexical sidecar is disposable and does not rewrite conversations or embeddings.
+
+Speech settings, installed voices and optional recordings live below `.threadshelf`.
+Live Markdown vaults remain external files. Copying a stopped installation preserves
+configuration and identities; review external dependencies as described in
+[MIGRATION.md](MIGRATION.md). No desktop client database conversion is performed.

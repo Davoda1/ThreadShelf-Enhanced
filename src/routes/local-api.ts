@@ -1,7 +1,9 @@
+import { speechHandler, speechVoicesHandler, speechModels } from '../tts/service.js';
 import { createHash, timingSafeEqual } from 'crypto';
 import express, { Router, type NextFunction, type Request, type Response } from 'express';
 import http from 'http';
 import https from 'https';
+import { Transform } from 'stream';
 import { pipeline } from 'stream/promises';
 import { getLocalApiAccess } from '../generation/config.js';
 import {
@@ -13,6 +15,7 @@ import {
   type LocalApiModel,
 } from '../generation/local-api.js';
 import { localOriginRejection, networkOriginRejection } from './local-origin.js';
+import { assertInlineImageInputs } from '../generation/vision.js';
 import { isLoopbackHttpRequest } from './loopback.js';
 import { abortOnDisconnect } from './stream-abort.js';
 
@@ -101,6 +104,7 @@ export const openAiModel = (model: LocalApiModel) => ({
   object: 'model',
   owned_by: 'threadshelf',
   loaded: model.loaded,
+  ...(model.vision === undefined ? {} : { vision: model.vision }),
 });
 
 const sha256 = (value: string): Buffer => createHash('sha256').update(value).digest();
@@ -139,6 +143,28 @@ const relay = (target: URL, body: string, res: Response, signal: AbortSignal): P
       },
       (upstreamRes) => {
         answered = true;
+        if (Number(upstreamRes.headers['content-length']) > 64 * 1024 * 1024) {
+          upstreamRes.destroy();
+          reject(
+            new LocalApiError('upstream_unavailable', 'Model response exceeds the 64 MiB limit'),
+          );
+          return;
+        }
+        upstream.setTimeout(120_000, () =>
+          upstream.destroy(new Error('Model response idle timeout')),
+        );
+        let receivedBytes = 0;
+        const bounded = new Transform({
+          transform(chunk, _encoding, callback) {
+            receivedBytes += chunk.length;
+            callback(
+              receivedBytes > 64 * 1024 * 1024
+                ? new Error('Model response exceeds the 64 MiB limit')
+                : null,
+              chunk,
+            );
+          },
+        });
         res.status(upstreamRes.statusCode ?? 502);
         for (const name of RELAYED_HEADERS) {
           const value = upstreamRes.headers[name];
@@ -148,9 +174,10 @@ const relay = (target: URL, body: string, res: Response, signal: AbortSignal): P
           res.setHeader('X-Accel-Buffering', 'no');
           res.flushHeaders();
         }
-        pipeline(upstreamRes, res).then(resolve, reject);
+        pipeline(upstreamRes, bounded, res).then(resolve, reject);
       },
     );
+    upstream.setTimeout(30 * 60_000, () => upstream.destroy(new Error('Model response timeout')));
     upstream.once('error', (error) => {
       if (answered || signal.aborted) {
         reject(error);
@@ -211,9 +238,12 @@ export const createLocalApiRouter = (listener: LocalApiListener): Router => {
 
   router.use(express.json({ limit: MAX_BODY }));
 
+  router.post('/audio/speech', speechHandler);
+  router.get('/audio/voices', speechVoicesHandler);
+
   router.get('/models', async (_req, res) => {
     const models = await listLocalApiModels();
-    res.json({ object: 'list', data: models.map(openAiModel) });
+    res.json({ object: 'list', data: [...models.map(openAiModel), ...(await speechModels())] });
   });
 
   // ThreadShelf's own addition: frees VRAM now instead of on the idle timeout.
@@ -227,7 +257,8 @@ export const createLocalApiRouter = (listener: LocalApiListener): Router => {
   router.get('/models/*id', async (req, res) => {
     const segments: unknown = req.params.id;
     const id = Array.isArray(segments) ? segments.join('/') : String(segments ?? '');
-    res.json(openAiModel(await resolveLocalApiModel(id)));
+    const speech = (await speechModels()).find((model) => model.id === id);
+    res.json(speech ?? openAiModel(await resolveLocalApiModel(id)));
   });
 
   router.post(INFERENCE_ENDPOINTS, async (req, res) => {
@@ -241,7 +272,20 @@ export const createLocalApiRouter = (listener: LocalApiListener): Router => {
       );
     }
     try {
+      let images: number;
+      try {
+        images = assertInlineImageInputs(body);
+      } catch (error) {
+        throw new LocalApiError('invalid_request', (error as Error).message, 'messages');
+      }
       const model = await resolveLocalApiModel(body.model);
+      if (images && model.vision === false) {
+        throw new LocalApiError(
+          'invalid_request',
+          'This model cannot read images: it has no vision projector, or this llama-server build has no --mmproj. Download the matching mmproj (or set llamaCpp.projectorPaths) and update llama.cpp if needed.',
+          'model',
+        );
+      }
       if (controller.signal.aborted) return;
       const payload = JSON.stringify({ ...body, model: model.upstreamModel });
       await withLocalApiModel(model, (baseUrl) => {

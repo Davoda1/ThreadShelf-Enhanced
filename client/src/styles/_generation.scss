@@ -167,11 +167,10 @@
 
   > span {
     min-width: 0;
-    overflow: hidden;
     color: var(--text-3);
     font: var(--fs-meta) var(--font-mono);
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 }
 
@@ -235,6 +234,8 @@
   gap: 12px;
   padding: 10px 12px;
   border-bottom: 1px solid var(--border-0);
+  min-width: 0;
+  overflow-wrap: anywhere;
 
   > div:first-child {
     display: flex;
@@ -288,6 +289,8 @@
 .llama-log-details {
   summary {
     display: flex;
+    flex-wrap: wrap;
+    overflow-wrap: anywhere;
     justify-content: space-between;
     gap: 12px;
     padding: 9px 12px;
@@ -295,6 +298,10 @@
     font: var(--fs-meta) var(--font-mono);
     cursor: pointer;
     list-style-position: inside;
+
+    span {
+      min-width: 0;
+    }
 
     span:last-child {
       margin-left: auto;
@@ -352,11 +359,11 @@
 
 .turn-model {
   max-width: min(260px, 42vw);
-  overflow: hidden;
+  overflow-wrap: anywhere;
   color: var(--text-4);
   font: var(--fs-meta) var(--font-mono);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  white-space: normal;
 }
 
 .generated-reasoning {
@@ -429,11 +436,11 @@
     }
 
     span {
-      overflow: hidden;
+      min-width: 0;
+      overflow-wrap: anywhere;
       color: var(--text-4);
       font: var(--fs-micro) var(--font-mono);
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      white-space: normal;
     }
   }
 
@@ -608,9 +615,9 @@
 
     strong,
     span {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      overflow-wrap: anywhere;
+      min-width: 0;
+      white-space: normal;
     }
 
     strong {
@@ -783,16 +790,16 @@
 
 .master-prompt-chip {
   max-width: 130px;
-  height: 32px;
-  padding: 0 10px;
-  overflow: hidden;
+  min-height: 32px;
+  padding: 5px 10px;
+  overflow-wrap: anywhere;
   border: 1px dashed var(--border-1);
   border-radius: 99px;
   background: transparent;
   color: var(--text-3);
   font: 11.5px var(--font-mono);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  white-space: normal;
 
   &:hover {
     border-color: var(--accent-border);
@@ -863,14 +870,14 @@
   button {
     max-width: 120px;
     padding: 3px 8px;
-    overflow: hidden;
+    overflow-wrap: anywhere;
     border: 1px solid var(--border-0);
     border-radius: 99px;
     background: transparent;
     color: var(--text-3);
     font: var(--fs-meta) var(--font-mono);
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    min-width: 0;
+    white-space: normal;
 
     &[data-active='true'] {
       border-color: var(--accent-border);
@@ -902,9 +909,9 @@
   > span {
     display: block;
     max-width: 25ch;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    min-width: 0;
+    white-space: normal;
     cursor: help;
   }
 
@@ -1004,6 +1011,8 @@
   z-index: 1;
   top: 0;
   display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
   justify-content: space-between;
   padding: 7px 10px;
   border-bottom: 1px solid var(--border-0);
@@ -1011,6 +1020,12 @@
   color: var(--text-3);
   font: var(--fs-micro) var(--font-mono);
   text-transform: uppercase;
+
+  > span {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
 }
 
 .model-combobox-empty {
@@ -1022,7 +1037,7 @@
 
 .model-option {
   display: grid;
-  grid-template-columns: 27px minmax(0, 1fr) auto;
+  grid-template-columns: max(27px, 1.8em) minmax(0, 1fr);
   align-items: center;
   gap: 7px;
   padding: 7px 9px;
@@ -1037,8 +1052,10 @@
 
 .model-favorite {
   display: grid;
-  width: 25px;
-  height: 25px;
+  width: 100%;
+  min-height: max(25px, 1.6em);
+  height: auto;
+  line-height: 1;
   place-items: center;
   padding: 0;
   border: 0;
@@ -1059,9 +1076,9 @@
 
   strong,
   span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    min-width: 0;
+    white-space: normal;
   }
 
   strong {
@@ -1076,9 +1093,12 @@
 }
 
 .model-option-meta {
+  grid-column: 2;
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: var(--text-3);
   font: var(--fs-micro) var(--font-mono);
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .model-catalog-filters {
@@ -1116,6 +1136,7 @@
 .model-runtime,
 .generation-progress {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 10px;
   padding: 10px 12px;
@@ -1136,10 +1157,10 @@
   }
 
   span:not(.runtime-dot, .generation-spinner) {
-    overflow: hidden;
+    min-width: 0;
+    overflow-wrap: anywhere;
     color: var(--text-3);
     font: var(--fs-meta)/1.4 var(--font-mono);
-    text-overflow: ellipsis;
   }
 }
 
@@ -1187,9 +1208,9 @@
   b,
   span,
   small {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    min-width: 0;
+    white-space: normal;
   }
 
   b {
@@ -1374,11 +1395,11 @@
 
 .chat-storage-status {
   min-width: 0;
-  overflow: hidden;
+  overflow-wrap: anywhere;
   color: var(--text-4);
   font: var(--fs-micro) var(--font-mono);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  white-space: normal;
 }
 
 .private-chat-badge {
@@ -1519,10 +1540,8 @@
     }
 
     h1 {
-      display: -webkit-box;
-      overflow: hidden;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 2;
+      display: block;
+      overflow-wrap: anywhere;
       font-size: 19px;
     }
   }
@@ -1705,6 +1724,7 @@
 
 .composer-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   justify-content: space-between;
@@ -1721,8 +1741,8 @@
   gap: 8px;
   max-width: 100%;
   min-width: 0;
-  height: 32px;
-  padding: 0 10px;
+  min-height: 32px;
+  padding: 5px 10px;
   border: 1px solid var(--border-1);
   border-radius: 99px;
   background: var(--bg-2);
@@ -1757,9 +1777,10 @@
 }
 
 .model-status-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  white-space: normal;
+  line-height: 1.4;
 }
 
 .model-status-chevron {
@@ -1795,6 +1816,7 @@
   border-radius: var(--r-md);
   background: var(--bg-1);
   box-shadow: 0 18px 48px -18px var(--bg-0);
+  overflow-wrap: anywhere;
 }
 
 .model-menu[data-popover-placement='down'] .model-popover {
@@ -1811,7 +1833,9 @@
   background: var(--bg-2);
 
   button {
-    height: 30px;
+    height: auto;
+    min-height: 30px;
+    padding-block: 5px;
     border: 0;
     border-radius: var(--r-sm);
     background: transparent;
@@ -1847,12 +1871,17 @@
 
 .composer-actions {
   display: flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   align-items: center;
   gap: 10px;
   flex: 0 0 auto;
 }
 
 .composer-hint {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   color: var(--text-4);
   font: var(--fs-micro) var(--font-mono);
 }

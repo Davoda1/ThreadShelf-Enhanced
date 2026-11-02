@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type ToastType = 'info' | 'success' | 'error';
+export type ToastType = 'info' | 'success' | 'warning' | 'error' | 'progress';
 
 export interface Toast {
   readonly id: number;
@@ -40,7 +40,10 @@ export const useToastStore = create<ToastStore>((set, get) => ({
   pushToast: (text, type = 'info') => {
     const id = nextId++;
     set((s) => ({ toasts: [...s.toasts, { id, type, text }] }));
-    setTimeout(() => get().dismissToast(id), TOAST_TTL);
+    setTimeout(
+      () => get().dismissToast(id),
+      type === 'error' || type === 'warning' ? TOAST_TTL * 2 : TOAST_TTL,
+    );
   },
 
   dismissToast: (id) => {
@@ -66,6 +69,8 @@ export const useToastStore = create<ToastStore>((set, get) => ({
 export const toast = {
   info: (text: string) => useToastStore.getState().pushToast(text, 'info'),
   success: (text: string) => useToastStore.getState().pushToast(text, 'success'),
+  warning: (text: string) => useToastStore.getState().pushToast(text, 'warning'),
+  progress: (text: string) => useToastStore.getState().pushToast(text, 'progress'),
   error: (text: string) => useToastStore.getState().pushToast(text, 'error'),
 };
 

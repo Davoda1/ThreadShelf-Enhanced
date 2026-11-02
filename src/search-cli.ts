@@ -9,14 +9,14 @@ import {
   normalizeOptionalString,
   normalizeQuery,
   normalizeRoles,
-  normalizeSearchMode,
+  normalizeEnhancedSearchMode,
 } from './validation.js';
 
 const USAGE = `Usage: ${invocation('search')} "<query>" -- [options]
 
 Options:
   --collection <name>   Collection to search, or "all" (default: all)
-  --mode <mode>         "semantic" (default) or "keyword" (exact substring)
+  --mode <mode>         "semantic" (default), "keyword" (exact substring), or "hybrid"
   --roles <list>        Comma list of user,thinking,ai
   --model <text>        Only results whose model contains this text
   --from <date>         Inclusive ISO/YYYY-MM-DD lower bound
@@ -58,7 +58,7 @@ try {
   const collection = normalizeCollectionSelector(flags.get('collection'), {
     defaultValue: 'all',
   });
-  const mode = normalizeSearchMode(flags.get('mode'));
+  const mode = normalizeEnhancedSearchMode(flags.get('mode'));
   const roles = normalizeRoles(flags.get('roles'));
   const model = normalizeOptionalString(flags.get('model'), { field: 'model' });
   const { from, to } = normalizeDateRange(flags.get('from'), flags.get('to'));

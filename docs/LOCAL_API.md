@@ -13,8 +13,7 @@ API key:                   any value, unless you set one in Settings
 
 The API is part of the normal ThreadShelf server and is on by default, the way
 LM Studio and Ollama work out of the box: any program on this computer can use
-it without a key. Nothing else needs to be started. **Settings → Conversation
-generation → Local model API** shows the URL, your model ids and ready-to-copy
+it without a key. Nothing else needs to be started. **Settings → Server → Local model API** shows the URL, your model ids and ready-to-copy
 examples, a plain-language guide to every setting, and the optional
 [access settings](#access): an API key,
 network access and an off switch.
@@ -35,9 +34,12 @@ network access and an off switch.
 | POST   | `/v1/messages`              | Anthropic Messages API                   |
 | POST   | `/v1/messages/count_tokens` | Anthropic token counting                 |
 | POST   | `/v1/models/unload`         | ThreadShelf: free the model's memory now |
+| GET    | `/v1/audio/voices`          | Installed local speech voices            |
+| POST   | `/v1/audio/speech`          | Local speech as WAV or raw PCM           |
 
-Every inference endpoint accepts `"stream": true` and answers with server-sent
-events in that API's own event format.
+Text inference endpoints accept `"stream": true` and answer with server-sent
+events in that API's own event format. Speech returns binary audio; PCM may stream
+as described below and never uses the text SSE format.
 
 ## Models
 
@@ -76,7 +78,7 @@ model's id is its file name without `.gguf`:
   Settings, `/v1` forwards to that server and lists its model ids unchanged
   (all reported as loaded). Unloading is then up to that server.
 
-Runtime settings from **Settings → Conversation generation** apply to models
+Runtime settings from **Settings → AI Models** apply to models
 loaded through the API as well: context size, GPU offload, flash attention,
 KV cache and speculative decoding.
 
@@ -94,7 +96,7 @@ shared by the ThreadShelf chat and the API.
   reload on every switch. Point them at the same model when you can.
 - **A loaded model stays loaded** until another model is requested, it is
   unloaded, or ThreadShelf exits. Closing ThreadShelf always stops it.
-- **Unload after idle time.** **Settings → llama.cpp wrapper → Unload model
+- **Unload after idle time.** **Settings → AI Models → llama.cpp wrapper → Unload model
   from memory** stops the model once no chat or API request has used it for
   the chosen time (5 minutes to 1 day), like Ollama's `keep_alive`. The default
   is **Never**. The next request loads it again. The same setting is available
@@ -276,9 +278,47 @@ in Settings, e.g. `http://192.168.1.50:3001/v1`.
 - **Cancellation.** If the client disconnects, for example by stopping a
   stream, `llama-server` stops generating right away.
 - **Request size.** Bodies may be up to 32 MB, enough for long conversations.
-- **Not served:** embeddings (`/v1/embeddings`), image input (models are
-  loaded without a vision projector), audio, image generation, and the
-  Ollama-native `/api/*` routes.
+- **Inline vision:** supported with a matching projector and capable model/runtime;
+  see the image-input section below.
+- **Local speech:** optional Pocket/Kokoro synthesis is separate from GGUF inference;
+  see the speech section below.
+- **Not served:** embeddings (`/v1/embeddings`), speech recognition, image generation,
+  and the Ollama-native `/api/*` routes.
+
+## Image input
+
+For managed GGUF models, `GET /v1/models` includes a `capabilities.vision` flag.
+Use a compatible model and its matching projector; download it explicitly from
+the model catalog or map existing files under **Settings → AI Models → Vision
+projectors**. Automatic projector selection requires an unambiguous folder.
+An existing external llama-server manages its own projector and model capability.
+
+OpenAI Chat Completions accepts an `image_url` content part containing a base64
+`data:image/...` URL. Responses-style `input_image` parts and Anthropic base64
+image sources are also validated. Only inline PNG, JPEG, GIF and WebP are accepted:
+at most four images, 8 MiB each and 16 MiB total, within the overall 32 MiB JSON
+body limit. Remote image URLs and local filesystem paths are rejected. The
+wrapper checks the declared format/signature; the model runtime still performs
+image decoding and inference. Requests stay API-only and are not archived.
+
+## Local speech
+
+Speech is disabled by default. Enable **Settings → Text-to-Speech**, explicitly
+install local voices, and keep the local API enabled. Installed engines appear
+as `tts-pocket` and `tts-kokoro` in `/v1/models`; `/v1/audio/voices` reports their
+English voice identifiers. `POST /v1/audio/speech` accepts `model`, `input`, `voice`
+and `response_format` (`wav`, the default, or `pcm`). Input is bounded to 100,000
+characters; provider text/audio limits also apply. `speed` must be 1 because rate
+is controlled during playback.
+
+PCM is 24 kHz mono signed 16-bit audio. With server speech streaming enabled and
+`stream` not false, PCM can arrive progressively. WAV is returned as a completed
+recording. Speech requests use the existing `/v1` access/key/network policy;
+the separate authenticated LAN web-playback option does not replace that policy.
+Calls are neither archived nor cached and cannot invoke the server's paid speech
+credentials. The desktop GUIs can point their existing self-hosted speech provider
+at this endpoint. See [Text-to-Speech](TTS.md) for installation, providers and
+validation limits.
 
 ## Errors
 
@@ -323,8 +363,17 @@ window, are passed through with llama.cpp's status and message.
 ## Access
 
 The defaults match LM Studio and Ollama: on, this computer only, no key.
-Everything else is opt-in under **Settings → Conversation generation → Local
-model API** and takes effect when you save, without a restart.
+Everything else is opt-in under **Settings → Server → Local model API** and takes
+effect when you save, without a restart.
+
+For headless setup through the LAN web interface, set `ALLOW_LAN_AI=1` in the
+root `.env` and restart. This unlocks the Server tab's local API settings as well
+as AI settings. `ALLOW_LAN_TTS=1` independently unlocks speech setup and playback.
+These flags grant trusted-LAN web administration without an API key; they do not
+change `/v1` access, enable its network listener or bypass a configured API key.
+Leave them at `0` to retain localhost-only administration and the existing
+separate API access policy. The flags are not authentication or subnet filters;
+`HOST`, `ALLOWED_HOSTS`, browser Origin checks and your network boundary still apply.
 
 | Setting                    | Default | Effect                                              |
 | -------------------------- | ------- | --------------------------------------------------- |
@@ -369,7 +418,8 @@ network". Settings then lists the URLs other devices can use, one per network
 address, e.g. `http://192.168.1.50:3001/v1`.
 
 - **Only `/v1` is served there.** The archive, the ThreadShelf UI and its
-  settings API stay on the loopback port. Any other path on the network port
+  settings API stay on the main server port, whose web access follows `HOST`,
+  `ALLOWED_HOSTS` and the feature flags above. Any other path on the network port
   answers 404.
 - **Without a key**, anyone on your network can use your models. The network
   port then accepts requests addressed to an IP address, to this computer's

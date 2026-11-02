@@ -1,97 +1,85 @@
 import {
   searchCollection,
   keywordSearchCollection,
+  hybridSearchCollectionCandidates,
   keywordResultComparator,
   type SearchResult,
   type SearchOptions,
 } from '../store.js';
 import { embedOne } from '../embedding.js';
 import { getAllCollections } from './collections.js';
-import type { SearchMode } from '../validation.js';
+import type { EnhancedSearchMode } from '../validation.js';
+import {
+  fuseSearchResults,
+  lexicalResultComparator,
+  stableSearchTie,
+  TopResults,
+} from '../search-ranking.js';
+import { withStorageReadLease } from '../storage-read-leases.js';
+import { withPublicationSnapshot } from '../storage-publication.js';
 
 export interface MultiSearchOptions extends SearchOptions {
-  readonly model?: string;
-  readonly mode?: SearchMode;
+  readonly mode?: EnhancedSearchMode;
 }
 
+/** One publication snapshot for every collection and both hybrid branches. */
 export const searchAcrossCollections = async (
   query: string,
   collection: string,
   opts: MultiSearchOptions = {},
-): Promise<SearchResult[]> => {
-  const n = opts.n ?? 15;
-  const model = opts.model;
-  const searchLimit = model ? 50 : n;
+): Promise<SearchResult[]> =>
+  withStorageReadLease(() =>
+    withPublicationSnapshot(async () => {
+      opts.signal?.throwIfAborted();
+      const n = opts.n ?? 15;
+      const collections = collection === 'all' ? await getAllCollections() : [collection];
+      if (opts.mode === 'keyword') {
+        const best = new TopResults<SearchResult>(n, keywordResultComparator(query));
+        for (const name of collections) {
+          opts.signal?.throwIfAborted();
+          for (const row of await keywordSearchCollection(name, query, opts)) best.add(row);
+        }
+        return best.values();
+      }
 
-  if (opts.mode === 'keyword') {
-    return keywordSearchAcrossCollections(query, collection, { ...opts, n });
-  }
-
-  // Generate the query vector once. "All collections" used to repeat the
-  // exact same model inference for every collection, multiplying latency as a
-  // user's archive grew.
-  const queryEmbedding = await embedOne(query);
-
-  if (collection === 'all') {
-    const collections = await getAllCollections();
-    const merged = await Promise.all(
-      collections.map(async (name) => {
-        const rows = await searchCollection(
-          name,
-          query,
-          { ...opts, n: searchLimit },
-          queryEmbedding,
+      // A single local embedding regardless of collection count or hybrid branches.
+      const embedding = await embedOne(query);
+      opts.signal?.throwIfAborted();
+      if (opts.mode === 'hybrid') {
+        const candidateCount = Math.max(200, n * 8);
+        const semantic = new TopResults<SearchResult>(
+          candidateCount,
+          searchResultComparator(query, false),
         );
-        return rows.map((row) => ({
-          ...row,
-          metadata: { ...row.metadata, collection: name },
-        }));
-      }),
-    );
+        const lexical = new TopResults<SearchResult>(
+          candidateCount,
+          lexicalResultComparator(query),
+        );
+        for (const name of collections) {
+          opts.signal?.throwIfAborted();
+          const candidates = await hybridSearchCollectionCandidates(
+            name,
+            query,
+            { ...opts, n: candidateCount },
+            embedding,
+          );
+          for (const row of candidates.semantic) semantic.add(row);
+          for (const row of candidates.lexical) lexical.add(row);
+        }
+        return fuseSearchResults(semantic.values(), lexical.values(), query, n);
+      }
 
-    let results: SearchResult[] = merged.flat();
-    results = filterResultsByModel(results, model);
-    results.sort(searchResultComparator(query, opts.keywordBoost === true));
-    return results.slice(0, n);
-  }
-
-  const rawResults = await searchCollection(
-    collection,
-    query,
-    { ...opts, n: searchLimit },
-    queryEmbedding,
-  );
-  return filterResultsByModel(rawResults, model).slice(0, n);
-};
-
-// Exact substring search. Model/date/role filtering happens inside
-// keywordSearchCollection; here we only fan out and merge-rank.
-const keywordSearchAcrossCollections = async (
-  query: string,
-  collection: string,
-  opts: MultiSearchOptions,
-): Promise<SearchResult[]> => {
-  const n = opts.n ?? 15;
-
-  if (collection !== 'all') {
-    return keywordSearchCollection(collection, query, opts);
-  }
-
-  const collections = await getAllCollections();
-  const merged = await Promise.all(
-    collections.map(async (name) => {
-      const rows = await keywordSearchCollection(name, query, opts);
-      return rows.map((row) => ({
-        ...row,
-        metadata: { ...row.metadata, collection: name },
-      }));
+      const best = new TopResults<SearchResult>(
+        n,
+        searchResultComparator(query, opts.keywordBoost === true),
+      );
+      for (const name of collections) {
+        opts.signal?.throwIfAborted();
+        for (const row of await searchCollection(name, query, opts, embedding)) best.add(row);
+      }
+      return best.values();
     }),
   );
-
-  const results: SearchResult[] = merged.flat();
-  results.sort(keywordResultComparator(query));
-  return results.slice(0, n);
-};
 
 export const searchResultComparator =
   (query: string, keywordBoost: boolean) =>
@@ -102,18 +90,8 @@ export const searchResultComparator =
       const bHas = needle.length > 0 && b.document.toLowerCase().includes(needle);
       if (aHas !== bHas) return aHas ? -1 : 1;
     }
-    return (a.distance ?? Number.POSITIVE_INFINITY) - (b.distance ?? Number.POSITIVE_INFINITY);
+    return (
+      (a.distance ?? Number.POSITIVE_INFINITY) - (b.distance ?? Number.POSITIVE_INFINITY) ||
+      stableSearchTie(a, b)
+    );
   };
-
-const filterResultsByModel = (
-  results: SearchResult[],
-  model: string | undefined,
-): SearchResult[] => {
-  if (!model) return results;
-  const needle = model.toLowerCase();
-  return results.filter((row) =>
-    String(row.metadata.model || '')
-      .toLowerCase()
-      .includes(needle),
-  );
-};

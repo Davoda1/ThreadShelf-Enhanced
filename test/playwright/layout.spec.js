@@ -340,6 +340,9 @@ test('long conversations scroll to their final message and back without moving t
   await expectWithinViewport(page.locator('#threadContent'));
   await expectWithinViewport(page.locator('.thread-bar'));
   await expectReachable(page.locator('.thread-end'));
+  // A wrapped toolbar can leave the last message just above the footer's
+  // viewport. Bring that deferred Markdown block into view before its heading.
+  await page.locator('.turn').last().scrollIntoViewIfNeeded();
   await expectReachable(
     page.locator('.turn').last().getByRole('heading', { name: 'Response 30', exact: true }),
   );
@@ -402,4 +405,860 @@ test('nested model and token lists escape the composer clipping area and preserv
   await lastPreset.click();
   await expect(page.locator('.model-popover')).toBeVisible();
   await expect(page.locator('#chatContextSize')).toHaveValue('131072');
+});
+
+for (const theme of ['dark', 'light']) {
+  test(`settings tabs preserve drafts and fixed widths without overflow (${theme})`, async ({
+    page,
+    uiUrl,
+  }) => {
+    await page.addInitScript(
+      (theme) =>
+        localStorage.setItem('threadshelf:ui', JSON.stringify({ state: { theme }, version: 0 })),
+      theme,
+    );
+    await page.setViewportSize({ width: 680, height: 540 });
+    await page.goto(`${uiUrl}/settings`);
+    const tabs = page.locator('.settings-tabs [role="tab"]');
+    await expect(tabs).toHaveCount(3);
+    await expect(page.locator('.settings-save')).toBeEnabled();
+    await page.getByLabel('API base URL', { exact: true }).fill('http://192.168.1.5:1234/v1');
+    const widths = [];
+    for (const tab of ['ai', 'server', 'tts', 'ai']) {
+      await page.locator(`#settings-tab-${tab}`).click();
+      await expect(page.locator(`#settings-tab-${tab}`)).toHaveAttribute('aria-selected', 'true');
+      const boxes = await tabs.evaluateAll((elements) =>
+        elements.map((element) => element.getBoundingClientRect().width),
+      );
+      expect(Math.max(...boxes) - Math.min(...boxes)).toBeLessThan(1);
+      widths.push(boxes);
+      const overflow = await page
+        .locator('.main-scroll')
+        .evaluate((element) => element.scrollWidth - element.clientWidth);
+      expect(overflow).toBeLessThanOrEqual(1);
+    }
+    expect(
+      widths.every((values) => values.every((value, i) => Math.abs(value - widths[0][i]) < 1)),
+    ).toBe(true);
+    await expect(page.getByLabel('API base URL', { exact: true })).toHaveValue(
+      'http://192.168.1.5:1234/v1',
+    );
+    await page.locator('#settings-tab-ai').focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(page.locator('#settings-tab-server')).toBeFocused();
+    await expect(page.locator('#appearance-heading')).toBeVisible();
+    await expect(page.getByLabel(/Save generation errors/)).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath(`settings-server-${theme}.png`) });
+  });
+}
+
+test('settings cannot overwrite server values before hydration', async ({ page, uiUrl }) => {
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  let saves = 0;
+  await page.route('**/api/generation/config', async (route) => {
+    if (route.request().method() === 'PUT') saves += 1;
+    await gate;
+    await route.fallback();
+  });
+  await page.goto(`${uiUrl}/settings`);
+  await expect(page.locator('.settings-save')).toBeDisabled();
+  await expect(page.locator('#llamaContextSize')).toBeDisabled();
+  await page.locator('#settings-tab-server').click();
+  await expect(page.locator('.settings-save')).toBeDisabled();
+  expect(saves).toBe(0);
+  release();
+  await expect(page.locator('.settings-save')).toBeEnabled();
+});
+
+test('private messages, drafts and interrupted output stay in memory and reset on reload', async ({
+  page,
+  uiUrl,
+}) => {
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('privacy-seeded')) {
+      sessionStorage.setItem('privacy-seeded', '1');
+      sessionStorage.setItem(
+        'threadshelf:private-chat',
+        JSON.stringify({
+          createdAt: '2025-10-01T00:00:00Z',
+          messages: [{ role: 'user', content: 'legacy private content' }],
+        }),
+      );
+      sessionStorage.setItem(
+        'threadshelf:interrupted-generations:2025-10-01T00:00:00Z',
+        '[{"prompt":"legacy content"}]',
+      );
+    }
+  });
+  await page.route('**/api/generation/chat/stream', (route) =>
+    route.fulfill({
+      contentType: 'application/x-ndjson',
+      body: `${JSON.stringify({ type: 'delta', content: 'private partial secret' })}\n${JSON.stringify({ type: 'error', error: 'Synthetic interruption' })}\n`,
+    }),
+  );
+  await page.goto(`${uiUrl}/chat?private=privacy-check`);
+  await expect(page.locator('#continueSend')).toBeDisabled();
+  await page.locator('#continuePrompt').fill('Private test prompt');
+  await expect(page.locator('#continueSend')).toBeEnabled();
+  await page.locator('#continueSend').click();
+  await expect(page.locator('.interrupted-generation')).toContainText('private partial secret');
+  await page.locator('#continuePrompt').fill('Unsent private draft');
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.locator('#sidebarPrivateChatButton').click();
+  await expect(page.locator('#continuePrompt')).toHaveValue('Unsent private draft');
+  await expect(page.locator('.interrupted-generation')).toContainText('private partial secret');
+  const stored = await page.evaluate(() => ({
+    local: JSON.stringify(localStorage),
+    session: JSON.stringify(sessionStorage),
+  }));
+  for (const text of [
+    'Private test prompt',
+    'private partial secret',
+    'Unsent private draft',
+    'legacy private content',
+  ]) {
+    expect(stored.local).not.toContain(text);
+    expect(stored.session).not.toContain(text);
+  }
+  await page.reload();
+  await expect(page.locator('#continuePrompt')).toHaveValue('');
+  await expect(page.locator('.interrupted-generation')).toHaveCount(0);
+});
+
+test('hybrid search sends its additive mode and preserves it in the URL', async ({
+  page,
+  uiUrl,
+}) => {
+  const requests = [];
+  await page.route('**/api/search?*', (route) => {
+    requests.push(new URL(route.request().url()));
+    return route.fulfill({ json: { results: [] } });
+  });
+  await page.goto(`${uiUrl}/search/all`);
+  await page.getByRole('button', { name: 'Hybrid', exact: true }).click();
+  await page.locator('#searchInput').fill('árvíztűrő API-123');
+  await page.locator('#searchInput').press('Enter');
+  await expect.poll(() => requests.at(-1)?.searchParams.get('mode')).toBe('hybrid');
+  await expect(page).toHaveURL(/mode=hybrid/);
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Hybrid', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+});
+
+test('streaming preference survives provider changes and send/stop controls keep their width', async ({
+  page,
+  uiUrl,
+}) => {
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  let request;
+  await page.route('**/api/generation/chat/stream', async (route) => {
+    request = route.request().postDataJSON();
+    await gate;
+    await route.fulfill({
+      contentType: 'application/x-ndjson',
+      body: `${JSON.stringify({ type: 'done', response: { provider: 'strata', model: 'synthetic-0.gguf', content: 'Complete synthetic reply.' } })}\n`,
+    });
+  });
+  await page.goto(`${uiUrl}/chat?private=stream-check`);
+  await page.getByLabel('Stream response', { exact: true }).uncheck();
+  await page.locator('#modelMenuButton').click();
+  await page.getByRole('tab', { name: 'Strata · local' }).click();
+  await expect(page.getByRole('tab', { name: 'Strata · local' })).toBeEnabled();
+  await page.locator('#modelMenuButton').click();
+  await page.locator('#continuePrompt').fill('A synthetic prompt.');
+  const before = await page.locator('#continueSend').boundingBox();
+  await page.locator('#continueSend').click();
+  const stop = page.locator('.composer-send').filter({ hasText: 'Stop' });
+  await expect(stop).toBeVisible();
+  const during = await stop.boundingBox();
+  expect(during.width).toBe(before.width);
+  expect(during.x).toBe(before.x);
+  await expect.poll(() => request?.streamOutput).toBe(false);
+  expect(request.provider).toBe('strata');
+  release();
+  await expect(page.locator('.generated-turn[data-role="ai"]')).toContainText(
+    'Complete synthetic reply.',
+  );
+  await page.reload();
+  await expect(page.getByLabel('Stream response', { exact: true })).not.toBeChecked();
+  await page.locator('#modelMenuButton').click();
+  await expect(page.getByRole('tab', { name: 'Strata · local' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+});
+
+test('remembered provider, paid model and catalog filters survive reload together', async ({
+  page,
+  uiUrl,
+}) => {
+  await page.addInitScript(() => {
+    if (!localStorage.getItem('threadshelf:ui'))
+      localStorage.setItem(
+        'threadshelf:ui',
+        JSON.stringify({
+          state: {
+            generationProvider: 'openrouter',
+            generationModels: { openrouter: 'synthetic/paid' },
+            generationFreeOnly: false,
+            generationCatalogSort: 'newest',
+          },
+          version: 0,
+        }),
+      );
+  });
+  const requests = [];
+  await page.route('**/api/generation/models?provider=openrouter*', (route) => {
+    requests.push(new URL(route.request().url()));
+    return route.fulfill({
+      json: {
+        provider: 'openrouter',
+        models: [
+          { id: 'synthetic/free', name: 'Free alternative', provider: 'openrouter' },
+          { id: 'synthetic/paid', name: 'Remembered paid model', provider: 'openrouter' },
+        ],
+        runtime: { state: 'remote', detail: 'Synthetic remote catalog' },
+      },
+    });
+  });
+  await page.goto(`${uiUrl}/chat?private=model-memory-check`);
+  await expect(page.locator('#modelMenuButton')).toContainText('Remembered paid model');
+  expect(requests.at(-1).searchParams.get('free')).toBeNull();
+  expect(requests.at(-1).searchParams.get('sort')).toBe('newest');
+  await page.locator('#modelMenuButton').click();
+  await expect(page.getByLabel('Free only')).not.toBeChecked();
+  await expect(page.getByLabel('Sort OpenRouter models')).toHaveValue('newest');
+  await page.reload();
+  await expect(page.locator('#modelMenuButton')).toContainText('Remembered paid model');
+});
+
+test('blocked browser storage keeps settings and private chat usable in memory', async ({
+  page,
+  uiUrl,
+}) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.addInitScript(() => {
+    for (const name of ['localStorage', 'sessionStorage'])
+      Object.defineProperty(window, name, {
+        configurable: true,
+        get() {
+          throw new DOMException('Storage blocked by browser policy', 'SecurityError');
+        },
+      });
+  });
+  await page.goto(`${uiUrl}/settings`);
+  await page.locator('#settings-tab-server').click();
+  await page.locator('#interface-language').selectOption('hu');
+  await expect(page.locator('#appearance-heading')).toHaveText('Megjelenés és nyelv');
+  await page.locator('#sidebarPrivateChatButton').click();
+  await page.locator('#continuePrompt').fill('Memory-only input');
+  await expect(page.locator('#continuePrompt')).toHaveValue('Memory-only input');
+  expect(errors).toEqual([]);
+});
+
+// Labels, provenance and navigation are complete text, rather than hover-only
+// ellipses. These fixtures deliberately combine long identifiers with the
+// translations whose controls need the most room.
+for (const locale of ['en', 'hu', 'de', 'fr', 'ru', 'ja']) {
+  test(`main pages and model menus keep full localized labels (${locale})`, async ({
+    page,
+    uiUrl,
+  }) => {
+    const title = 'Detailed synthesis of archive search, server configuration and model workflows';
+    const sourceFile = `/synthetic/${'LongExportFilename_'.repeat(6)}2026-11-02.json`;
+    const model = 'SyntheticOrganisation/LongModelName_With_Quantization_Q4_K_M';
+    const modelPath = `/synthetic/models/${model}/model.Q4_K_M.gguf`;
+    await page.addInitScript((locale) => {
+      localStorage.setItem('threadshelf:ui', JSON.stringify({ state: { locale }, version: 0 }));
+    }, locale);
+    await page.route('**/api/files*', (route) =>
+      route.fulfill({
+        json: {
+          files: [
+            {
+              sourceFile,
+              collection: collectionNames[0],
+              title,
+              turnCount: 1234,
+              provider: 'openai',
+              lastTurnAt: '2026-10-20T12:35:41Z',
+            },
+          ],
+        },
+      }),
+    );
+    await page.route('**/api/search*', (route) =>
+      route.fulfill({
+        json: {
+          results: [
+            {
+              document: 'A synthetic search result with complete model provenance.',
+              distance: 0.15,
+              metadata: {
+                role: 'ai',
+                provider: 'openai',
+                sourceFile,
+                collection: collectionNames[0],
+                title,
+                turnIndex: 3,
+                model,
+                createdAt: '2026-10-20T12:35:41Z',
+              },
+            },
+          ],
+        },
+      }),
+    );
+    await page.route('**/api/insights*', (route) =>
+      route.fulfill({
+        json: {
+          collection: 'all',
+          totals: { collections: 30, files: 24, chunks: 5402, conversations: 245, turns: 13892 },
+          roles: { user: 20, thinking: 12, ai: 26 },
+          activity: [
+            { month: '2026-01', count: 240 },
+            { month: '2026-02', count: 560 },
+          ],
+          topModels: [{ model, count: 2578 }],
+          providers: [{ provider: 'openai', conversations: 1234, turns: 5678 }],
+          longestThreads: [
+            {
+              collection: collectionNames[0],
+              sourceFile,
+              conversationKey: 'synthetic',
+              title,
+              provider: 'openai',
+              turnCount: 1234,
+              lastTurnAt: '2026-10-20T12:35:41Z',
+            },
+          ],
+          firstActivity: '2026-01-01T00:00:00Z',
+          lastActivity: '2026-10-20T12:35:41Z',
+        },
+      }),
+    );
+    await page.route('**/api/generation/models*', (route) =>
+      route.fulfill({
+        json: {
+          provider: 'llama-cpp',
+          models: [
+            {
+              id: 'synthetic-long-model.gguf',
+              name: model,
+              path: modelPath,
+              provider: 'llama-cpp',
+              sizeBytes: 4 * 1024 ** 3,
+              contextLength: 131072,
+            },
+          ],
+          runtime: { state: 'stopped', detail: 'No model loaded.' },
+        },
+      }),
+    );
+    const labelsFit = async (selector) => {
+      const clipped = await page.locator(selector).evaluateAll((elements) =>
+        elements.flatMap((e) => {
+          const rect = e.getBoundingClientRect();
+          if (!rect.width || !rect.height || !e.clientWidth) return [];
+          return e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1
+            ? [
+                {
+                  text: e.textContent,
+                  className: e.className,
+                  width: e.clientWidth,
+                  scrollWidth: e.scrollWidth,
+                  height: e.clientHeight,
+                  scrollHeight: e.scrollHeight,
+                },
+              ]
+            : [];
+        }),
+      );
+      expect(clipped).toEqual([]);
+    };
+    const enlargedLabelsFit = async (selector) => {
+      // Read all original sizes before changing any ancestor, so inherited
+      // fonts are doubled once rather than compounding to four/eight times.
+      await page.evaluate(() => {
+        const fonts = [...document.querySelectorAll('body *')]
+          .filter((e) => !e.closest('svg'))
+          .map((e) => [e, getComputedStyle(e).fontSize]);
+        for (const [e, size] of fonts) {
+          e.dataset.layoutOriginalFont = e.style.fontSize;
+          e.style.fontSize = `${parseFloat(size) * 2}px`;
+        }
+      });
+      try {
+        if (await page.locator('.model-combobox input').count())
+          await page.locator('.model-combobox input').first().scrollIntoViewIfNeeded();
+        else if (await page.locator('#continuePrompt').count())
+          await page.locator('#continuePrompt').scrollIntoViewIfNeeded();
+        const clippedPlaceholders = await page
+          .locator('#searchInput, .model-combobox input, .cmdk-input input, #continuePrompt')
+          .evaluateAll((elements) =>
+            elements.flatMap((e) => {
+              const rect = e.getBoundingClientRect();
+              const style = getComputedStyle(e);
+              if (
+                !rect.width ||
+                !rect.height ||
+                rect.bottom <= 0 ||
+                rect.top >= innerHeight ||
+                style.visibility === 'hidden' ||
+                style.opacity === '0' ||
+                e.value ||
+                !e.placeholder
+              )
+                return [];
+              const context = document.createElement('canvas').getContext('2d');
+              context.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+              const needed =
+                context.measureText(e.placeholder).width +
+                (parseFloat(style.letterSpacing) || 0) * Math.max(0, e.placeholder.length - 1);
+              const available =
+                e.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+              return needed > available + 1
+                ? [{ placeholder: e.placeholder, needed, available }]
+                : [];
+            }),
+          );
+        expect(clippedPlaceholders).toEqual([]);
+        if (await page.locator('#continuePrompt').count()) {
+          await labelsFit('.composer-keyboard-help');
+          const accessibleHint = await page.locator('#continuePrompt').evaluate((e) => {
+            const hint = document.getElementById('composer-keyboard-help');
+            const describedBy = (e.getAttribute('aria-describedby') || '').split(/\s+/);
+            if (!hint || !describedBy.includes(hint.id) || !hint.textContent.trim()) return false;
+            const bounds = hint.parentElement.getBoundingClientRect();
+            const rect = hint.getBoundingClientRect();
+            return (
+              rect.width > 0 &&
+              rect.height > 0 &&
+              rect.left >= bounds.left &&
+              rect.right <= bounds.right &&
+              rect.bottom <= bounds.bottom
+            );
+          });
+          expect(accessibleHint).toBe(true);
+        }
+        await labelsFit(selector);
+        if (await page.locator('.model-combobox-popover').count()) {
+          const overflow = await page.locator('.model-combobox-popover').evaluate((e) => {
+            const bounds = e.getBoundingClientRect();
+            const summary = e.querySelector('.model-combobox-summary');
+            return [...summary.querySelectorAll('span')].some((label) => {
+              const rect = label.getBoundingClientRect();
+              return (
+                rect.left < bounds.left ||
+                rect.right > bounds.right ||
+                label.scrollWidth > label.clientWidth + 1
+              );
+            });
+          });
+          expect(overflow).toBe(false);
+        }
+        if (await page.locator('.model-status-name').count()) {
+          const lineSpacing = await page
+            .locator('.model-status-name')
+            .first()
+            .evaluate((e) => {
+              const style = getComputedStyle(e);
+              return parseFloat(style.lineHeight) / parseFloat(style.fontSize);
+            });
+          expect(lineSpacing).toBeGreaterThanOrEqual(1.2);
+        }
+        const outside = await page.locator(selector).evaluateAll((elements) =>
+          elements.flatMap((e) => {
+            const rect = e.getBoundingClientRect();
+            return rect.width && rect.height && (rect.left < -1 || rect.right > innerWidth + 1)
+              ? [{ text: e.textContent, className: e.className, right: rect.right }]
+              : [];
+          }),
+        );
+        expect(outside).toEqual([]);
+        if (await page.locator('.topbar').count()) {
+          const contained = await page.locator('.topbar').evaluate((e) => {
+            const bar = e.getBoundingClientRect();
+            const crumbs = e.querySelector('.crumbs')?.getBoundingClientRect();
+            return !crumbs || (crumbs.top >= bar.top && crumbs.bottom <= bar.bottom);
+          });
+          expect(contained).toBe(true);
+        }
+      } finally {
+        await page.evaluate(() => {
+          for (const e of document.querySelectorAll('[data-layout-original-font]')) {
+            e.style.fontSize = e.dataset.layoutOriginalFont;
+            delete e.dataset.layoutOriginalFont;
+          }
+        });
+      }
+    };
+    for (const width of [320, 680, 1440]) {
+      await page.setViewportSize({ width, height: width === 1440 ? 900 : 650 });
+      await page.goto(`${uiUrl}/search/all`);
+      await expect(page.locator('.r-source-file')).toBeAttached();
+      await labelsFit('.r-source-file, .r-source-coll');
+      if (width < 1440)
+        await enlargedLabelsFit('.mode-btn, .role-chip, .example-chip, .r-source-file');
+      if (width <= 1180) await page.locator('.mobile-menu-btn').click();
+      await labelsFit('.sb-coll-meta b, .sb-coll-meta span, .sb-cmdk > span, .sb-item .label');
+      await page.locator('#sidebarChatHistoryToggle').click();
+      await labelsFit('.sb-chat-item strong, .sb-chat-item span');
+      if (width < 1440)
+        await enlargedLabelsFit('.sb-section > span, .sb-coll-meta b, .sb-coll-meta span');
+      if (width <= 1180) await page.keyboard.press('Escape');
+
+      await page.goto(`${uiUrl}/search/all?q=example&mode=keyword`);
+      const saveSearch = page.locator('.save-search');
+      await expect(saveSearch).toBeVisible();
+      await expect(page.locator('.r-foot > .mono')).toHaveText(model);
+      const unsavedSize = await saveSearch.boundingBox();
+      await saveSearch.click();
+      const savedSize = await saveSearch.boundingBox();
+      expect(savedSize.width).toBe(unsavedSize.width);
+      expect(savedSize.height).toBe(unsavedSize.height);
+      if (width < 1440) await enlargedLabelsFit('.r-foot > span, .save-search');
+
+      await page.goto(
+        `${uiUrl}/thread?${new URLSearchParams({
+          sourceFile,
+          collection: collectionNames[0],
+          title,
+          model,
+        })}`,
+      );
+      await expect(page.locator('.thread-hero')).toBeVisible();
+      await labelsFit('.title-preview, .path-crumb, .thread-hero .v');
+      if (width < 1440)
+        await enlargedLabelsFit('.title-preview, .thread-hero .v, .role-toggle, .composer-send');
+      expect(
+        await page.locator('#threadContent').evaluate((e) => e.scrollWidth <= e.clientWidth + 1),
+      ).toBe(true);
+
+      await page.goto(`${uiUrl}/insights`);
+      await expect(page.locator('.longest-row')).toBeAttached();
+      await labelsFit('.bar-label, .l-title, .l-meta');
+      await expectWithinViewport(page.locator('.insights-scope'));
+      if (width < 1440)
+        await enlargedLabelsFit('.insights-head h2, .stat-label, .stat-value, .l-title, .l-meta');
+      expect(
+        await page.locator('.main-scroll').evaluate((e) => e.scrollWidth <= e.clientWidth + 1),
+      ).toBe(true);
+      await page.locator('.col-slot').last().hover();
+      await expectWithinViewport(page.locator('.chart-tip'));
+      await labelsFit('.chart-tip');
+
+      await page.goto(`${uiUrl}/chat?private=localized-layout`);
+      await expect(page.locator('.model-status-name')).toHaveText(model);
+      if (width < 1440) await enlargedLabelsFit('#continuePrompt, .composer-keyboard-help');
+      await page.locator('#modelMenuButton').click();
+      await page.locator('.model-combobox input').first().click();
+      await page.locator('.model-combobox input').first().press('ArrowDown');
+      await expect(page.locator('.model-option').first()).toBeVisible();
+      await expect(page.locator('.model-option-copy strong').first()).toHaveText(model);
+      await expect(page.locator('.model-option-copy > span').first()).toHaveText(modelPath);
+      await labelsFit('.model-option-copy strong, .model-option-copy span, .model-status-name');
+      if (width < 1440)
+        await enlargedLabelsFit(
+          '.model-popover-providers button, .model-option-meta, .model-favorite, .model-status-name, .composer-send',
+        );
+
+      await page.goto(`${uiUrl}/mcp`);
+      for (const panel of await page.locator('.mcp-code-panel').all()) {
+        const geometry = await panel.evaluate((e) => ({
+          code: e.querySelector('pre').getBoundingClientRect().bottom,
+          action: e.querySelector('button').getBoundingClientRect().top,
+        }));
+        expect(geometry.action).toBeGreaterThanOrEqual(geometry.code);
+      }
+      const copy = page.locator('.mcp-code-panel button').first();
+      const before = await copy.boundingBox();
+      await copy.click();
+      const after = await copy.boundingBox();
+      expect(after.width).toBe(before.width);
+      expect(after.height).toBe(before.height);
+      if (width < 1440) {
+        await page.keyboard.press('Control+k');
+        await expect(page.locator('.cmdk-input input')).toBeVisible();
+        await enlargedLabelsFit('.cmdk-input input');
+        await page.keyboard.press('Escape');
+      }
+    }
+  });
+}
+
+// Exercise complete localized settings and dialogs, including the actual native
+// select interaction behind the wrapping selected-value presentation.
+for (const locale of ['en', 'hu', 'de', 'fr', 'ru', 'ja']) {
+  test(`settings and model dialogs preserve localized text and select behavior (${locale})`, async ({
+    page,
+    uiUrl,
+  }) => {
+    const longName = 'SyntheticOrganisation/VeryLongMultilingualModelName_With_Quantization_Q4_K_M';
+    const hardware = {
+      devices: [],
+      totalRamBytes: 16e9,
+      freeRamBytes: 12e9,
+      modelBudgetBytes: 8e9,
+      vramBudgetBytes: 0,
+      detectionSource: 'system',
+      suggestedVariant: 'cpu',
+    };
+    const catalogModel = {
+      id: longName,
+      name: longName,
+      author: 'SyntheticPublisherWithALongUnbrokenName',
+      downloads: 1200000,
+      likes: 450,
+      gated: false,
+      trustedPublisher: true,
+    };
+    await page.addInitScript(
+      (locale) =>
+        localStorage.setItem(
+          'threadshelf:ui',
+          JSON.stringify({ state: { locale, activeColl: 'archive_00' }, version: 0 }),
+        ),
+      locale,
+    );
+    await page.route('**/api/generation/catalog/search*', (route) =>
+      route.fulfill({ json: { models: [catalogModel], hardware, tokenConfigured: false } }),
+    );
+    await page.route('**/api/generation/catalog/model*', (route) =>
+      route.fulfill({
+        json: {
+          model: {
+            ...catalogModel,
+            projectors: [{ path: `${longName}-vision-projector.gguf`, sizeBytes: 268435456 }],
+            quants: [
+              {
+                label: 'Q4_K_M',
+                totalBytes: 2.5e9,
+                shards: 1,
+                recommended: true,
+                fit: 'fits',
+                files: [],
+              },
+            ],
+          },
+          hardware,
+          tokenConfigured: false,
+        },
+      }),
+    );
+    await page.route('**/api/generation/directories*', (route) =>
+      route.fulfill({
+        json: {
+          path: `/synthetic/${'LongDirectoryName_'.repeat(8)}`,
+          parent: '/synthetic',
+          roots: [{ name: 'Synthetic root', path: '/synthetic' }],
+          directories: [{ name: 'LongDirectoryName_'.repeat(6), path: '/synthetic/child' }],
+          truncated: false,
+        },
+      }),
+    );
+    await page.route('**/api/generation/local-api', (route) =>
+      route.fulfill({
+        json: {
+          enabled: true,
+          models: [{ id: longName, loaded: false }],
+          network: { state: 'disabled', urls: [] },
+        },
+      }),
+    );
+    await page.route('**/api/files*', (route) =>
+      route.fulfill({
+        json: { files: [{ sourceFile: `/synthetic/${'FullVisibleExportName_'.repeat(8)}.json` }] },
+      }),
+    );
+    await page.route('**/api/collections/archive_00/clear', (route) =>
+      route.fulfill({
+        status: 503,
+        json: {
+          error:
+            'Synthetic test error with a complete diagnostic identifier: ' +
+            'LongUnbrokenDiagnosticIdentifier_'.repeat(8),
+        },
+      }),
+    );
+    const errors = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    const labelsFit = async (scope, enlarged = false) => {
+      const failures = await scope.evaluate((root) =>
+        [...root.querySelectorAll('*')].flatMap((e) => {
+          const rect = e.getBoundingClientRect(),
+            style = getComputedStyle(e);
+          if (
+            !rect.width ||
+            !rect.height ||
+            style.visibility === 'hidden' ||
+            ['SELECT', 'OPTION', 'INPUT', 'TEXTAREA', 'SVG', 'PATH'].includes(e.tagName) ||
+            e.closest('pre, [hidden]')
+          )
+            return [];
+          const clippedX =
+            e.scrollWidth > e.clientWidth + 1 && ['hidden', 'clip'].includes(style.overflowX);
+          const clippedY =
+            e.scrollHeight > e.clientHeight + 1 && ['hidden', 'clip'].includes(style.overflowY);
+          const clippedControl =
+            e.matches('button, .native-select-value') &&
+            e.clientWidth &&
+            (e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1);
+          const outside = rect.right > innerWidth + 1 || rect.left < -1;
+          return clippedX || clippedY || clippedControl || outside
+            ? [
+                {
+                  tag: e.tagName,
+                  className: e.className,
+                  text: e.textContent?.slice(0, 120),
+                  right: rect.right,
+                  width: e.clientWidth,
+                  scroll: e.scrollWidth,
+                },
+              ]
+            : [];
+        }),
+      );
+      expect(failures).toEqual([]);
+      if (!enlarged && ['hu', 'ru'].includes(locale)) {
+        // Scale actual per-element text, including px-based labels; body font
+        // scaling alone would miss controls with explicit font sizes.
+        await scope.evaluate((root) => {
+          const sizes = [root, ...root.querySelectorAll('*')].map((e) => [
+            e,
+            parseFloat(getComputedStyle(e).fontSize),
+          ]);
+          for (const [element, size] of sizes) {
+            element.dataset.layoutOriginalFont = element.style.fontSize;
+            element.style.fontSize = `${size * 2}px`;
+          }
+        });
+        try {
+          await labelsFit(scope, true);
+        } finally {
+          await scope.evaluate((root) => {
+            for (const element of [root, ...root.querySelectorAll('[data-layout-original-font]')]) {
+              element.style.fontSize = element.dataset.layoutOriginalFont;
+              delete element.dataset.layoutOriginalFont;
+            }
+          });
+        }
+      }
+    };
+    for (const width of [320, 680, 1440]) {
+      await page.setViewportSize({ width, height: width === 1440 ? 900 : 650 });
+      await page.goto(`${uiUrl}/settings`);
+      await expect(page.locator('.settings-save')).toBeEnabled();
+      for (const theme of ['dark', 'light']) {
+        await page.evaluate((theme) => (document.documentElement.dataset.theme = theme), theme);
+        await page.locator('#settings-tab-server').click();
+        await labelsFit(page.locator('.settings-page'));
+        // Conditional per-collection management, its confirmation, and a long
+        // server error must remain readable too. The mutation is fully mocked.
+        await page.locator('.danger-row button').first().click();
+        await labelsFit(page.getByRole('alertdialog'));
+        await page.getByRole('alertdialog').locator('.modal-foot button').last().click();
+        await expect(page.locator('.toast[data-type="error"]')).toBeVisible();
+        await labelsFit(page.locator('.toaster'));
+        const toastBounds = await page.locator('.toaster').boundingBox();
+        expect(toastBounds.y).toBeGreaterThanOrEqual(0);
+        await page.locator('.toast[data-type="error"]').click();
+        const copy = page.locator('.local-api-row > button').first();
+        const copyBefore = await copy.boundingBox();
+        await copy.click();
+        const copyAfter = await copy.boundingBox();
+        expect(copyAfter.width).toBe(copyBefore.width);
+        expect(copyAfter.height).toBe(copyBefore.height);
+        const example = page.locator('.local-api-example');
+        const exampleGeometry = await example.evaluate((e) => ({
+          code: e.querySelector('pre').getBoundingClientRect().bottom,
+          copy: e.querySelector(':scope > button').getBoundingClientRect().top,
+        }));
+        expect(exampleGeometry.copy).toBeGreaterThanOrEqual(exampleGeometry.code);
+        const language = page.locator('#interface-language');
+        await language.focus();
+        await language.press('Home');
+        await language.press('ArrowDown');
+        await expect(language).toHaveValue('hu');
+        await expect(language.locator('..').locator('.native-select-value')).toHaveText('Magyar');
+        await language.selectOption(locale);
+        await expect(language).toHaveValue(locale);
+        // The guide includes tabbed content, long model IDs and scrollable code.
+        await page.locator('.local-api').locator('..').locator('.panel-head-action').click();
+        for (const tab of await page.locator('.guide-tabs button').all()) {
+          await tab.click();
+          await labelsFit(page.locator('.guide-modal'));
+        }
+        await page.keyboard.press('Escape');
+        await page.locator('#settings-tab-ai').click();
+        await labelsFit(page.locator('.settings-page'));
+        await page.locator('.directory-picker-launch button:visible').first().click();
+        await labelsFit(page.locator('.directory-picker').first());
+        await page.locator('.directory-picker-bar button').last().click();
+        await page.locator('.generation-actions > .btn.primary').first().click();
+        await page.locator('.catalog-item-head').first().click();
+        await expect(page.locator('.catalog-quant')).toHaveCount(1);
+        await labelsFit(page.locator('.catalog-modal'));
+        const sort = page.locator('.catalog-controls select');
+        await sort.selectOption('likes');
+        await expect(sort).toHaveValue('likes');
+        const selected = await sort.evaluate((e) => e.selectedOptions[0].label);
+        await expect(sort.locator('..').locator('.native-select-value')).toHaveText(selected);
+        await page.locator('.catalog-modal .modal-foot button').click();
+      }
+    }
+    expect(errors).toEqual([]);
+  });
+}
+
+test('conversation sort reserves its option width and the native hit target follows wrapped text', async ({
+  page,
+  uiUrl,
+}) => {
+  for (const locale of ['en', 'hu', 'de', 'fr', 'ru', 'ja']) {
+    await page.goto(`${uiUrl}/settings`);
+    await page.locator('#settings-tab-server').click();
+    await page.locator('#interface-language').selectOption(locale);
+    await page.setViewportSize({ width: 320, height: 650 });
+    await page.goto(`${uiUrl}/search/all`);
+    const sort = page.locator('.conv-sort select');
+    const shell = sort.locator('..');
+    const initial = await shell.boundingBox();
+    for (const value of ['title', 'longest', 'recent']) {
+      await sort.selectOption(value);
+      const current = await shell.boundingBox();
+      expect(current.width).toBe(initial.width);
+      await expect(sort).toHaveValue(value);
+    }
+    // A larger user font can make even a compact selector span several lines.
+    await shell.evaluate((e) => {
+      e.style.width = '100px';
+      e.style.fontSize = '24px';
+    });
+    await shell.scrollIntoViewIfNeeded();
+    const geometry = await shell.evaluate((e) => {
+      const native = e.querySelector('select'),
+        box = e.getBoundingClientRect(),
+        control = native.getBoundingClientRect();
+      return {
+        height: box.height,
+        nativeHeight: control.height,
+        width: box.width,
+        nativeWidth: control.width,
+        bottomHit: document.elementFromPoint(box.left + box.width / 2, box.bottom - 3) === native,
+      };
+    });
+    expect(geometry.nativeHeight).toBeGreaterThanOrEqual(geometry.height - 2.1);
+    expect(geometry.nativeWidth).toBeGreaterThanOrEqual(geometry.width - 2.1);
+    expect(geometry.bottomHit).toBe(true);
+  }
 });

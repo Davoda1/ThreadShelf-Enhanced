@@ -28,6 +28,11 @@ export const startApiServer = async ({ prefix = 'threadshelf-e2e-', env = {} } =
       HOST: '127.0.0.1',
       // Deployment host settings must not restrict isolated HTTP fixtures.
       ALLOWED_HOSTS: '',
+      ALLOWED_ORIGINS: '',
+      ALLOW_LAN_AI: '0',
+      ALLOW_LAN_TTS: '0',
+      THREADSHELF_DATA_DIR: join(tempRoot, 'data'),
+      OBSIDIAN_CONFIG_PATH: join(tempRoot, 'obsidian.json'),
       LANCEDB_PATH: join(tempRoot, '.lancedb'),
       UPLOADS_DIR: join(tempRoot, '.uploads'),
       COLLECTIONS_PATH: join(tempRoot, '.collections.json'),

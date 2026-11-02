@@ -98,3 +98,7 @@ __pycache__/
 /personal/
 
 /client/node_modules
+
+# Public, reviewed speech manifests and synthetic benchmark.
+!tts/cpu/*-manifest.json
+!docs/benchmarks/search-1.4.0-synthetic-100k.json

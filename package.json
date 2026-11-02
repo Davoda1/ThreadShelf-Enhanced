@@ -1,6 +1,6 @@
 {
   "name": "threadshelf-enhanced",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "ThreadShelf Enhanced — local AI conversation archive, rich reader and compatible search server",
   "license": "MIT",
   "type": "module",
@@ -32,7 +32,8 @@
     "README.md",
     "CHANGELOG.md",
     "LICENSE",
-    "SECURITY.md"
+    "SECURITY.md",
+    "tts/"
   ],
   "workspaces": [
     "client"
@@ -51,7 +52,8 @@
       "adm-zip": "0.6.1",
       "global-agent": "4.1.3"
     },
-    "seroval": "1.6.3"
+    "seroval": "1.7.6",
+    "minimatch": "11.0.1"
   },
   "scripts": {
     "test": "node scripts/run-node-tests.js test",
@@ -68,6 +70,7 @@
     "dev:client": "npm run dev --workspace client",
     "build": "npm run build:client && npm run build:server",
     "build:client": "npm run build --workspace client",
+    "docs:screenshots": "node --import tsx scripts/capture-docs-screenshots.ts",
     "mcp": "node --import tsx mcp/server.ts",
     "lint": "eslint src/ mcp/ client/src/",
     "format": "prettier --write \"src/**/*.ts\" \"client/src/**/*.{ts,tsx}\"",

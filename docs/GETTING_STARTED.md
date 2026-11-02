@@ -2,32 +2,31 @@
 
 This guide gets ThreadShelf running locally and indexes your first export folder. It assumes you want a private local search tool, not a hosted service.
 
-The optional llama.cpp/OpenRouter conversation continuation is a separate,
-opt-in layer. Search remains local; OpenRouter continuation is external
-and is selected through the clearly marked **OpenRouter · external** provider.
+Optional conversation generation is a separate, opt-in layer. Search remains
+local. llama.cpp and Strata run locally; OpenRouter and configured non-loopback
+OpenAI-compatible servers receive selected content off-device, as the UI labels.
 See [GENERATION.md](GENERATION.md).
 
 ## 1. Install
 
-Run the platform setup from the extracted source directory. It installs a
-checksum-verified project-local Node 24.22.1 runtime, npm 12.2.1, locked
-dependencies and the compiled application. It preserves an existing `.env`.
+Requirements:
 
-Linux:
+- Node.js 24 or newer and a compatible npm version.
+- Or use the setup scripts from the [Enhanced setup guide](../README.md#installation),
+  which install a project-local Node 26.13.0 LTS and npm 12.2.1.
+- For an existing installation, follow the [migration guide](MIGRATION.md).
+
+The Linux Node runtime requires compatible system C/C++ libraries, including
+`libatomic.so.1` for Node 26. Setup keeps Node, npm and application dependencies
+inside the installation; it does not modify system packages.
+
+Install locked dependencies (one `npm ci` covers server and client through npm
+workspaces) and build the application:
 
 ```bash
-bash setup-threadshelf.sh
+npm ci
+npm run build
 ```
-
-Windows PowerShell:
-
-```powershell
-.\setup-threadshelf.ps1
-```
-
-With a compatible existing Node 24+/npm installation, use `npm ci` followed by
-`npm run build`. See the [installation guide](../README.md#installation) for
-supported architectures, runtime overrides and subsequent-start commands.
 
 ## 2. Start The App
 
@@ -87,50 +86,52 @@ Supported inputs are JSON exports from:
 - LM Studio (`.lmstudio/conversations/*.conversation.json`).
 - Grok / xAI (`prod-grok-backend.json` from an account export).
 
-The app skips known account metadata, unrelated files and unsupported inputs,
-reporting them in the job diagnostics. Supported conversations in a mixed folder
-or ZIP can still import. Recognized but malformed exports are reported as errors.
+Enhanced also supports the documented Meta AI, Gemini/Takeout, unencrypted Venice,
+normalized ThreadShelf and converted JSON/HTML/ZIP inputs. See the
+[compatibility contract](ENHANCED_COMPATIBILITY.md) for exact limits, including
+ZIP duplicates, image companions and unsupported JSONL or encrypted backups.
 
-Keep the tab open while files transfer. Once the server accepts the import job,
-it continues independently of the tab or browser connection. The **Add data** page
-retains job progress and provides explicit **Cancel import** and **Retry import**
-actions. Cancellation stops at a safe boundary; publication that already finished
-is not undone. For update imports, files completed earlier can remain indexed.
-See [background jobs and recovery](IMPORT-JOBS.md).
+The app skips known account metadata files such as `users.json`, `projects.json`,
+and `message_feedback.json`.
+
+An active run has a **Stop indexing** action. Cancellation propagates to the
+server and embedding loop. A batch already being embedded finishes before the
+operation stops so ThreadShelf does not replace a previously healthy file with
+partial index data; files completed earlier in the run remain indexed.
 
 ## Folder Picker Versus Manual Path
 
 Folder picker:
 
 - Easier for normal browser use.
-- Transfers supported exports and image companions to the server, then accepts a persistent job.
-- Publishes originals for successfully imported source groups into `.uploads/`.
+- Uploads selected files into `.uploads/`.
 - Good when you do not want to paste local paths.
 
 Manual path:
 
-- The server snapshots selected input files from disk for a persistent job.
+- The server reads files directly from disk.
 - Better for very large folders.
 - Useful when browser folder upload is slow or awkward.
 - Requires the path to be readable by the Node.js process.
 
 ## Clear First
 
-`Clear collection first` replaces the selected collection after the complete
-replacement is prepared. It does not delete the original export folder.
-Published conversations remain readable during preparation; other writes to the
-collection receive a busy response until replacement finishes.
+`Clear collection first` stages replacement conversations and embeddings before
+committing them. Invalid, empty, cancelled or failed input before commit leaves
+the existing collection intact. A successful replacement does not delete the
+original export folder from your disk.
 
-Use it when you intend to replace the collection with the selected export set.
-Unsupported or empty auxiliary files are skipped. Recognized corruption, failed
-preparation, zero valid conversations or cancellation before publication leave
-the previous collection intact. An ordinary update import can refresh matching
-source files without replacing unrelated sources.
+Use it when:
 
-Deleting a collection removes its archive/index and copies uploaded through the
-browser, cancels queued imports and refuses an active import conflict. Files in
-the original folder are not deleted. Server-local indexing does not move or
-rewrite original files. Keep a backup before intentional replacement or deletion.
+- Reindexing the same folder.
+- Rebuilding a collection after parser changes.
+- Avoiding duplicate chunks.
+
+Do not use it on a collection you care about unless you are ready to rebuild it.
+
+Deleting a collection removes its index and any copies uploaded through the
+browser folder picker. Files in the original folder on your computer are not
+deleted. Manual-path indexing never moves or deletes the original files.
 
 ## 5. Search
 
@@ -201,6 +202,7 @@ These should not be committed.
 npm test
 npm run test:e2e
 npm run test:playwright
+npm run check:security             # requires current advisory-service access
 npm run check
 npm run parse -- path/to/export.json
 npm run mcp
@@ -222,8 +224,6 @@ npx playwright install chromium
 ## Troubleshooting
 
 If first ingest is slow, the local embedding model may be downloading or loading.
-Check the persistent job phase before starting another import. Only one index
-operation uses a database at a time; queued jobs wait for the current one.
 
 If search returns nothing, check:
 
@@ -232,12 +232,12 @@ If search returns nothing, check:
 - Role filters: you may have filtered out the role that contains the match.
 - Parser support: unsupported export shapes need a tiny anonymized fixture and a parser test.
 
-If an upload or import fails, inspect the job's error and skipped-file details.
-Check that the uploads/database directories are writable and have free space for
-input snapshots and replacement staging. Memory pressure can pause or stop work
-safely; close other memory-intensive programs before retrying. Individual record
-and format limits still apply. A server-local path avoids transferring files
-already present on the server. See [resource limits](IMPORT-JOBS.md#memory-and-disk).
+If upload fails, try:
+
+- A smaller folder.
+- A path without unusual nesting.
+- Manual folder path ingest.
+- Checking that `.uploads/` is writable.
 
 If OpenRouter export looks incomplete:
 

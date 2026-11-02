@@ -1,3 +1,4 @@
+import { NativeSelect } from './NativeSelect';
 import { useState, useRef, useMemo, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { createFolderJob, createUploadJob, useImportJobs } from '../import-jobs';
@@ -538,7 +539,7 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
 
       <div className="ingest-options">
         <label style={{ color: 'var(--text-3)' }}>{t('Target collection')}</label>
-        <select
+        <NativeSelect
           id="targetCollectionSelect"
           value={targetColl}
           onChange={(e) => setTargetColl(e.target.value)}
@@ -550,7 +551,7 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
               {collLabel(c)}
             </option>
           ))}
-        </select>
+        </NativeSelect>
         <button
           id="newCollectionBtnIndexing"
           className="btn sm"

@@ -73,22 +73,24 @@ describe('appendStableStreamChunk', () => {
   });
 });
 
-describe('compact path and model labels', () => {
-  it('keeps path labels within the requested length while preserving the filename', () => {
-    const compact = compactPath(
-      'C:\\Users\\private-user\\.lmstudio\\models\\Bielik\\Bielik-11B-v3.0-Instruct.Q4_K_M.gguf',
-      25,
-    );
-    assert.ok(compact.length <= 25);
-    assert.match(compact, /^C:\\/);
-    assert.match(compact, /gguf$/);
+describe('complete path and model labels', () => {
+  it('keeps full Windows and POSIX paths for the wrapping UI', () => {
+    for (const path of [
+      'C:\\Users\\synthetic-user\\models\\Bielik\\Bielik-11B-v3.0-Instruct.Q4_K_M.gguf',
+      '/synthetic/models/Bielik/Bielik-11B-v3.0-Instruct.Q4_K_M.gguf',
+    ])
+      assert.equal(compactPath(path), path);
   });
 
-  it('shows only a compact GGUF model name instead of its full path', () => {
-    const compact = compactModel('C:\\models\\Bielik-11B-v3.0-Instruct.Q4_K_M.gguf', 30);
-    assert.ok(compact.length <= 30);
-    assert.match(compact, /Bielik.*….*Q4_K_M/);
-    assert.doesNotMatch(compact, /C:\\/);
+  it('keeps full portable GGUF names and remote provider namespaces', () => {
+    assert.equal(
+      compactModel('C:\\models\\Bielik-11B-v3.0-Instruct.Q4_K_M.gguf'),
+      'Bielik-11B-v3.0-Instruct.Q4_K_M',
+    );
+    assert.equal(
+      compactModel('synthetic-provider/FullModelName_With_Quantization_Q4_K_M'),
+      'synthetic-provider/FullModelName_With_Quantization_Q4_K_M',
+    );
   });
 });
 

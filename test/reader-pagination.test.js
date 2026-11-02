@@ -37,7 +37,13 @@ const row = (collection, i) => ({
 const identity = (r) => `${r.metadata.collection}/${r.id}`;
 const request = async (options = {}, path = '/api/reader/search') => {
   const url = new URL(path, base);
-  for (const [key, value] of Object.entries({ q: query, collection: 'all', n: 50, mode: 'keyword', ...options })) {
+  for (const [key, value] of Object.entries({
+    q: query,
+    collection: 'all',
+    n: 50,
+    mode: 'keyword',
+    ...options,
+  })) {
     if (value !== undefined) url.searchParams.set(key, String(value));
   }
   const response = await fetch(url);
@@ -63,11 +69,19 @@ const allPages = async (options = {}) => {
 };
 before(async () => {
   for (const collection of ['alpha', 'beta']) {
-    await database.createTable(collection, Array.from({ length: 260 }, (_, i) => row(collection, i)));
+    await database.createTable(
+      collection,
+      Array.from({ length: 260 }, (_, i) => row(collection, i)),
+    );
   }
   const app = express();
   app.use('/api', requireLocalOrigin);
-  app.use(createReaderSearchRouter(async () => { embeddingCalls++; return [1, 0, 0]; }));
+  app.use(
+    createReaderSearchRouter(async () => {
+      embeddingCalls++;
+      return [1, 0, 0];
+    }),
+  );
   app.use(searchRouter);
   server = await new Promise((resolve) => {
     const instance = app.listen(0, '127.0.0.1', () => resolve(instance));
@@ -100,7 +114,11 @@ describe('Reader v1 cursor extension carried forward to ThreadShelf 1.3.0', () =
       assert.equal(rows.length, 520);
       assert.equal(embeddingCalls - beforeCalls, options.mode === 'semantic' ? 1 : 0);
       const again = await request(options);
-      assert.deepEqual(again.body.results.map(identity), rows.slice(0, 50).map(identity), 'equal-rank ordering must be repeatable');
+      assert.deepEqual(
+        again.body.results.map(identity),
+        rows.slice(0, 50).map(identity),
+        'equal-rank ordering must be repeatable',
+      );
     });
   }
   it('single-collection pages and final short page are exact', async () => {
@@ -114,10 +132,24 @@ describe('Reader v1 cursor extension carried forward to ThreadShelf 1.3.0', () =
     assert.ok(rows.every((r) => r.metadata.model === 'rare-model'));
   });
   it('applies provider, role, date and origin filters before pagination', async () => {
-    const opts = { provider: 'openai', roles: 'user', from: '2026-01-03', to: '2026-01-03', origin: 'threadshelf', n: 13 };
+    const opts = {
+      provider: 'openai',
+      roles: 'user',
+      from: '2026-01-03',
+      to: '2026-01-03',
+      origin: 'threadshelf',
+      n: 13,
+    };
     const rows = await allPages(opts);
     assert.equal(rows.length, 88);
-    assert.ok(rows.every((r) => r.metadata.provider === 'openai' && r.metadata.role === 'user' && r.metadata.createdInThreadShelf));
+    assert.ok(
+      rows.every(
+        (r) =>
+          r.metadata.provider === 'openai' &&
+          r.metadata.role === 'user' &&
+          r.metadata.createdInThreadShelf,
+      ),
+    );
     const archive = await allPages({ origin: 'archive' });
     assert.equal(archive.length, 346);
   });
@@ -129,7 +161,12 @@ describe('Reader v1 cursor extension carried forward to ThreadShelf 1.3.0', () =
   it('rejects altered query/filter cursors, invalid offsets and invalid page sizes', async () => {
     const { body } = await request();
     const cursor = body.nextCursor;
-    for (const change of [{ q: 'other' }, { model: 'rare-model' }, { provider: 'openai' }, { origin: 'archive' }]) {
+    for (const change of [
+      { q: 'other' },
+      { model: 'rare-model' },
+      { provider: 'openai' },
+      { origin: 'archive' },
+    ]) {
       assert.equal((await request({ cursor, ...change })).status, 400);
     }
     assert.equal((await request({ cursor: 'invalid' })).status, 400);
@@ -141,7 +178,10 @@ describe('Reader v1 cursor extension carried forward to ThreadShelf 1.3.0', () =
   });
   it('deleting a snapshot makes its cursor expire explicitly', async () => {
     const { body } = await request();
-    const deleted = await fetch(`${base}/api/reader/search?cursor=${encodeURIComponent(body.nextCursor)}`, { method: 'DELETE' });
+    const deleted = await fetch(
+      `${base}/api/reader/search?cursor=${encodeURIComponent(body.nextCursor)}`,
+      { method: 'DELETE' },
+    );
     assert.equal(deleted.status, 204);
     assert.equal((await request({ cursor: body.nextCursor })).status, 410);
   });
@@ -151,6 +191,12 @@ describe('Reader v1 cursor extension carried forward to ThreadShelf 1.3.0', () =
     assert.deepEqual(Object.keys(result.body), ['results']);
     assert.equal(result.body.results.length, 50);
     assert.equal((await request({ n: 51 }, '/api/search')).status, 400);
+  });
+  it('retains the legacy single-collection metadata shape', async () => {
+    const result = await request({ collection: 'alpha' }, '/api/search');
+    assert.equal(result.status, 200);
+    assert.ok(result.body.results.length > 0);
+    assert.ok(result.body.results.every((row) => !Object.hasOwn(row.metadata, 'collection')));
   });
   it('keeps an active result snapshot stable when database rows change', async () => {
     const { body: first } = await request({ collection: 'alpha' });

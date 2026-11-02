@@ -1,3 +1,4 @@
+import { NativeSelect } from './NativeSelect';
 import { useUIStore } from '../store';
 import { t, useI18n } from '../i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -51,6 +52,26 @@ const FIT_LABEL: Record<CatalogFit, string> = {
   'too-large': 'too large',
 };
 
+// Mirrors the server's preferredProjector order for the download-size preview.
+// The server still resolves and validates the actual download independently.
+const preferredProjectorBytes = (detail: CatalogModelDetail): number => {
+  const precision = (path: string): number => {
+    const name = (path.split('/').pop() ?? path).toLowerCase();
+    if (/(^|[-_.])f16([-_.]|$)/.test(name)) return 0;
+    if (/(^|[-_.])bf16([-_.]|$)/.test(name)) return 1;
+    if (/(^|[-_.])f32([-_.]|$)/.test(name)) return 2;
+    return 3;
+  };
+  return (
+    [...detail.projectors].sort(
+      (a, b) =>
+        precision(a.path) - precision(b.path) ||
+        a.sizeBytes - b.sizeBytes ||
+        a.path.localeCompare(b.path),
+    )[0]?.sizeBytes ?? 0
+  );
+};
+
 const hardwareSummary = (hardware: HardwareProfile | null): string => {
   if (!hardware) return t('detecting hardware…');
   const device = hardware.devices[0];
@@ -75,6 +96,7 @@ export function ModelCatalogModal({ open, onClose, onDownloaded }: ModelCatalogM
   const [expanded, setExpanded] = useState<string | null>(null);
   const [detail, setDetail] = useState<CatalogModelDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [includeProjector, setIncludeProjector] = useState(false);
 
   const [downloading, setDownloading] = useState<string | null>(null);
   const [progress, setProgress] = useState({ done: 0, total: 0, file: '' });
@@ -115,11 +137,13 @@ export function ModelCatalogModal({ open, onClose, onDownloaded }: ModelCatalogM
     abortRef.current?.abort();
     setExpanded(null);
     setDetail(null);
+    setIncludeProjector(false);
     onClose();
   }, [onClose]);
 
   const toggle = useCallback(
     (id: string) => {
+      setIncludeProjector(false);
       if (expanded === id) {
         setExpanded(null);
         setDetail(null);
@@ -151,7 +175,12 @@ export function ModelCatalogModal({ open, onClose, onDownloaded }: ModelCatalogM
       try {
         let saved = '';
         await api.catalogDownload(
-          { repoId, quant },
+          {
+            repoId,
+            quant,
+            includeProjector:
+              includeProjector && detail?.id === repoId && detail.projectors.length > 0,
+          },
           (event) => {
             if (event.type === 'progress' && event.phase === 'downloading') {
               setProgress({
@@ -175,7 +204,7 @@ export function ModelCatalogModal({ open, onClose, onDownloaded }: ModelCatalogM
         abortRef.current = null;
       }
     },
-    [onDownloaded],
+    [onDownloaded, includeProjector, detail],
   );
 
   if (!open) return null;
@@ -212,10 +241,10 @@ export function ModelCatalogModal({ open, onClose, onDownloaded }: ModelCatalogM
             autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder={t('Search models — e.g. qwen, coder, heretic, uncensored…')}
+            placeholder={t('Search…')}
             aria-label={t('Search models')}
           />
-          <select
+          <NativeSelect
             value={sort}
             onChange={(event) => setSort(event.target.value as CatalogSort)}
             aria-label={t('Sort models')}
@@ -225,7 +254,7 @@ export function ModelCatalogModal({ open, onClose, onDownloaded }: ModelCatalogM
                 {option.label}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </div>
 
         <div className="catalog-hardware">
@@ -309,6 +338,28 @@ export function ModelCatalogModal({ open, onClose, onDownloaded }: ModelCatalogM
                         {t(' to download it here.')}
                       </p>
                     )}
+                    {detail?.id === model.id && detail.projectors.length > 0 && (
+                      <div className="catalog-projector">
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={includeProjector}
+                            onChange={(event) => setIncludeProjector(event.target.checked)}
+                            disabled={Boolean(downloading)}
+                          />
+                          <span>{t('Include vision projector')}</span>
+                        </label>
+                        <p>{t('One companion file is selected automatically for image input.')}</p>
+                        <ul>
+                          {detail.projectors.map((projector) => (
+                            <li key={projector.path}>
+                              <code>{projector.path}</code>
+                              <span>{fmtBytes(projector.sizeBytes)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     {detail?.quants.map((quant) => {
                       const busy = downloading === `${detail.id}:${quant.label}`;
                       const blocked = detail.gated !== false && !tokenConfigured;
@@ -326,7 +377,12 @@ export function ModelCatalogModal({ open, onClose, onDownloaded }: ModelCatalogM
                               </i>
                             )}
                           </span>
-                          <span className="catalog-quant-size">{fmtBytes(quant.totalBytes)}</span>
+                          <span className="catalog-quant-size">
+                            {fmtBytes(
+                              quant.totalBytes +
+                                (includeProjector ? preferredProjectorBytes(detail) : 0),
+                            )}
+                          </span>
                           <span className="catalog-quant-fit" data-fit={quant.fit}>
                             {t(FIT_LABEL[quant.fit])}
                           </span>
@@ -337,7 +393,15 @@ export function ModelCatalogModal({ open, onClose, onDownloaded }: ModelCatalogM
                             onClick={() => void download(detail.id, quant.label)}
                             title={blocked ? t('Gated repository — HF_TOKEN required') : undefined}
                           >
-                            {busy ? `${percent}%` : t('Download')}
+                            <span className="stable-label">
+                              <span>{busy ? `${percent}%` : t('Download')}</span>
+                              <span className="stable-label-size" aria-hidden="true">
+                                {t('Download')}
+                              </span>
+                              <span className="stable-label-size" aria-hidden="true">
+                                100%
+                              </span>
+                            </span>
                           </button>
                         </div>
                       );
@@ -351,15 +415,23 @@ export function ModelCatalogModal({ open, onClose, onDownloaded }: ModelCatalogM
         </div>
 
         <div className="modal-foot">
-          {downloading ? (
-            <button className="btn ghost" onClick={() => abortRef.current?.abort()}>
-              {t('Cancel download')}
-            </button>
-          ) : (
-            <button className="btn ghost" onClick={close}>
-              {t('Close')}
-            </button>
-          )}
+          <button
+            className="btn ghost"
+            onClick={() => {
+              if (downloading) abortRef.current?.abort();
+              else close();
+            }}
+          >
+            <span className="stable-label">
+              <span>{downloading ? t('Cancel download') : t('Close')}</span>
+              <span className="stable-label-size" aria-hidden="true">
+                {t('Close')}
+              </span>
+              <span className="stable-label-size" aria-hidden="true">
+                {t('Cancel download')}
+              </span>
+            </span>
+          </button>
         </div>
       </div>
     </div>

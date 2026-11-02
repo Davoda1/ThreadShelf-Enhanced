@@ -7,7 +7,7 @@ import type { Provider } from './parser.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { portableModelLabel } from './model-label.js';
 import { join } from 'node:path';
-import { readdir, rm } from 'node:fs/promises';
+import { readdir, rm, stat } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { withInterprocessLock } from './interprocess-lock.js';
 import { snapshotFingerprint } from './snapshot-fingerprint.js';
@@ -31,6 +31,8 @@ import {
 } from './indexing-coordinator.js';
 import { memoryCheckpoint, recommendedBatchSize, type MemoryStatus } from './memory-governor.js';
 import { withStorageReadLease, withExclusiveStorageRetirement } from './storage-read-leases.js';
+import { TopResults, lexicalScore, stableSearchTie } from './search-ranking.js';
+import { readLexicalSidecar } from './lexical-sidecar.js';
 
 const DB_PATH = process.env.LANCEDB_PATH || dataPath('lancedb');
 const EMBED_BATCH_SIZE = Math.max(1, Number(process.env.EMBED_BATCH_SIZE) || 25);
@@ -1626,80 +1628,161 @@ export interface SearchOptions {
   readonly from?: string;
   readonly to?: string;
   readonly origin?: 'threadshelf' | 'archive';
+  readonly provider?: string;
+  readonly signal?: AbortSignal;
 }
+
+const SEARCH_COLUMNS = [
+  'id',
+  'document',
+  'sourceFile',
+  'provider',
+  'conversationKey',
+  'title',
+  'role',
+  'turnIndex',
+  'model',
+  'createdAt',
+  'createdInThreadShelf',
+  'generationProvider',
+];
+
+const toSearchResult = (row: Record<string, unknown>, collection: string): SearchResult => ({
+  id: String(row.id),
+  document: String(row.document ?? ''),
+  metadata: {
+    collection,
+    sourceFile: String(row.sourceFile ?? ''),
+    provider: String(row.provider ?? '') || undefined,
+    conversationKey: String(row.conversationKey ?? '') || undefined,
+    title: String(row.title ?? '') || undefined,
+    role: String(row.role ?? ''),
+    turnIndex: String(row.turnIndex ?? ''),
+    model: portableModelLabel(String(row.model ?? '')) || undefined,
+    createdAt: String(row.createdAt ?? '') || undefined,
+    createdInThreadShelf: Boolean(row.createdInThreadShelf),
+    generationProvider: String(row.generationProvider ?? '') || undefined,
+  },
+  ...(row._distance === undefined ? {} : { distance: Number(row._distance) }),
+});
+
+const searchMetadataFilter = (opts: SearchOptions): string[] => {
+  const clauses = [buildCreatedAtFilter(opts.from, opts.to)].filter(Boolean);
+  if (opts.roles?.length)
+    clauses.push(`role IN (${opts.roles.map((role) => `'${escapeSqlString(role)}'`).join(', ')})`);
+  if (opts.origin) clauses.push(`createdInThreadShelf = ${opts.origin === 'threadshelf'}`);
+  if (opts.provider) clauses.push(`provider = '${escapeSqlString(opts.provider)}'`);
+  return clauses;
+};
+
+const eligibleSearchResult = (row: SearchResult, opts: SearchOptions): boolean => {
+  if (!isSearchableDocument(row.document)) return false;
+  const model = normalizeModelFilter(opts.model);
+  return (
+    (!model || normalizeModelFilter(row.metadata.model).includes(model)) &&
+    (!opts.roles?.length || opts.roles.includes(row.metadata.role)) &&
+    (!opts.provider || row.metadata.provider === opts.provider) &&
+    (!opts.origin || row.metadata.createdInThreadShelf === (opts.origin === 'threadshelf')) &&
+    (!opts.from || Boolean(row.metadata.createdAt && row.metadata.createdAt >= opts.from)) &&
+    (!opts.to || Boolean(row.metadata.createdAt && row.metadata.createdAt <= opts.to))
+  );
+};
+
+const searchSnapshot = async (collection: string): Promise<Table | null> => {
+  const live = await openTable(collection);
+  if (!live) return null;
+  await ensureChunkMetadataSchema(live, collection);
+  return snapshotTable(collection);
+};
+
+/** One native streaming scan; offset pagination repeatedly rescans long archives. */
+const scanSearchRows = async function* (
+  table: Table,
+  where: string,
+  signal?: AbortSignal,
+): AsyncGenerator<Record<string, unknown>> {
+  const count = await table.countRows();
+  if (!count) return;
+  const scan = table
+    .query()
+    .where(where || 'true')
+    .select(SEARCH_COLUMNS)
+    .limit(count);
+  for await (const batch of scan) {
+    signal?.throwIfAborted();
+    const rows = batch.toArray();
+    for (let i = 0; i < rows.length; i++) {
+      if (i % 256 === 0) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        signal?.throwIfAborted();
+      }
+      yield rows[i]!;
+    }
+  }
+};
+
+const semanticComparator = (query: string, keywordBoost: boolean) => {
+  const needle = query.trim().toLowerCase();
+  return (a: SearchResult, b: SearchResult): number => {
+    if (keywordBoost && needle) {
+      const aHas = a.document.toLowerCase().includes(needle),
+        bHas = b.document.toLowerCase().includes(needle);
+      if (aHas !== bHas) return aHas ? -1 : 1;
+    }
+    return (a.distance ?? Infinity) - (b.distance ?? Infinity) || stableSearchTie(a, b);
+  };
+};
 
 const searchCollectionInternal = async (
   collection: string,
   query: string,
   opts: SearchOptions = {},
   queryEmbedding?: number[],
+  pinnedTable?: Table,
 ): Promise<SearchResult[]> => {
-  const n = opts.n ?? 15;
-  const roles = opts.roles?.length ? opts.roles : null;
-  const modelFilter = normalizeModelFilter(opts.model);
-  const dateFilter = buildCreatedAtFilter(opts.from, opts.to);
-  const keywordBoost = opts.keywordBoost === true;
-  const needsPostFilter = roles || modelFilter || keywordBoost;
-  const limit = needsPostFilter ? Math.min(Math.max(n * 8, 80), 200) : n;
+  opts.signal?.throwIfAborted();
+  if (!pinnedTable) {
+    const table = await searchSnapshot(collection);
+    if (!table) return [];
+    try {
+      return await searchCollectionInternal(collection, query, opts, queryEmbedding, table);
+    } finally {
+      table.close();
+    }
+  }
+  const tbl = pinnedTable;
   const embedding = queryEmbedding ?? (await embedOne(query));
-
-  const tbl = await openTable(collection);
-  if (!tbl) return [];
-  await ensureChunkMetadataSchema(tbl, collection);
-
-  const filters = [
-    dateFilter,
-    await readyIndexFilter(collection),
-    opts.origin ? `createdInThreadShelf = ${opts.origin === 'threadshelf'}` : '',
-  ].filter(Boolean);
-  const results = await vectorSearchRows(tbl, embedding, limit, filters.join(' AND '));
-
-  let rows: SearchResult[] = results.map((row) => ({
-    id: row.id as string,
-    document: (row.document as string) ?? '',
-    metadata: {
-      sourceFile: row.sourceFile as string,
-      provider: (row.provider as string) || undefined,
-      conversationKey: (row.conversationKey as string) || undefined,
-      title: (row.title as string) || undefined,
-      role: row.role as string,
-      turnIndex: row.turnIndex as string,
-      model: portableModelLabel((row.model as string) || undefined) || undefined,
-      createdAt: (row.createdAt as string) || undefined,
-      createdInThreadShelf: Boolean(row.createdInThreadShelf),
-      generationProvider: (row.generationProvider as string) || undefined,
-    },
-    distance: row._distance as number | undefined,
-  }));
-
-  if (roles?.length) {
-    const roleSet = new Set(roles);
-    rows = rows.filter((r) => roleSet.has(r.metadata.role));
+  const clauses = [...searchMetadataFilter(opts), await readyIndexFilter(collection)].filter(
+    Boolean,
+  );
+  const count = await tbl.countRows();
+  if (!count) return [];
+  // Full exact cosine scan avoids ANN windows and applies every residual filter
+  // before selecting top-k. Only k rows are retained in JavaScript memory.
+  const scan = tbl
+    .vectorSearch(embedding)
+    .distanceType('cosine')
+    .bypassVectorIndex()
+    .where(clauses.join(' AND ') || 'true')
+    .select([...SEARCH_COLUMNS, '_distance'])
+    .limit(count);
+  const best = new TopResults<SearchResult>(
+    opts.n ?? 15,
+    semanticComparator(query, opts.keywordBoost === true),
+  );
+  for await (const batch of scan) {
+    opts.signal?.throwIfAborted();
+    const rows = batch.toArray();
+    for (let i = 0; i < rows.length; i++) {
+      if (i % 256 === 0) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        opts.signal?.throwIfAborted();
+      }
+      const result = toSearchResult(rows[i]!, collection);
+      if (eligibleSearchResult(result, opts)) best.add(result);
+    }
   }
-
-  if (opts.origin) {
-    const expected = opts.origin === 'threadshelf';
-    rows = rows.filter((row) => row.metadata.createdInThreadShelf === expected);
-  }
-
-  rows = rows.filter((r) => isSearchableDocument(r.document));
-
-  if (modelFilter) {
-    rows = rows.filter((r) => normalizeModelFilter(r.metadata.model)?.includes(modelFilter));
-  }
-
-  if (keywordBoost && query.trim()) {
-    const q = query.trim().toLowerCase();
-    rows.sort((a, b) => {
-      const aHas = a.document.toLowerCase().includes(q);
-      const bHas = b.document.toLowerCase().includes(q);
-      if (aHas && !bHas) return -1;
-      if (!aHas && bHas) return 1;
-      return (a.distance ?? 0) - (b.distance ?? 0);
-    });
-  }
-
-  return rows.slice(0, n);
+  return best.values();
 };
 
 // Exact-match (keyword) search: a case-insensitive substring scan pushed down
@@ -1728,69 +1811,115 @@ export const keywordResultComparator =
       countOccurrences(b.document.toLowerCase(), needle) -
       countOccurrences(a.document.toLowerCase(), needle);
     if (diff !== 0) return diff;
-    return (b.metadata.createdAt ?? '').localeCompare(a.metadata.createdAt ?? '');
+    return (
+      (b.metadata.createdAt ?? '').localeCompare(a.metadata.createdAt ?? '') ||
+      stableSearchTie(a, b)
+    );
   };
 
 const keywordSearchCollectionInternal = async (
   collection: string,
   query: string,
   opts: SearchOptions = {},
+  pinnedTable?: Table,
 ): Promise<SearchResult[]> => {
-  const n = opts.n ?? 15;
+  opts.signal?.throwIfAborted();
   const needle = query.trim().toLowerCase();
   if (!needle) return [];
+  if (!pinnedTable) {
+    const table = await searchSnapshot(collection);
+    if (!table) return [];
+    try {
+      return await keywordSearchCollectionInternal(collection, query, opts, table);
+    } finally {
+      table.close();
+    }
+  }
+  const tbl = pinnedTable;
+  const clauses = [
+    ...searchMetadataFilter(opts),
+    await readyIndexFilter(collection),
+    `lower(document) LIKE '%${escapeLikePattern(needle)}%'`,
+  ].filter(Boolean);
+  const best = new TopResults<SearchResult>(opts.n ?? 15, keywordResultComparator(query));
+  for await (const raw of scanSearchRows(tbl, clauses.join(' AND '), opts.signal)) {
+    opts.signal?.throwIfAborted();
+    const row = toSearchResult(raw, collection);
+    if (eligibleSearchResult(row, opts)) best.add(row);
+  }
+  return best.values();
+};
 
-  const tbl = await openTable(collection);
-  if (!tbl) return [];
-  await ensureChunkMetadataSchema(tbl, collection);
-
-  const clauses = [`lower(document) LIKE '%${escapeLikePattern(needle)}%'`];
+const lexicalSearchCollectionInternal = async (
+  collection: string,
+  query: string,
+  opts: SearchOptions = {},
+  pinnedTable?: Table,
+): Promise<SearchResult[]> => {
+  opts.signal?.throwIfAborted();
+  if (!pinnedTable) {
+    const table = await searchSnapshot(collection);
+    if (!table) return [];
+    try {
+      return await lexicalSearchCollectionInternal(collection, query, opts, table);
+    } finally {
+      table.close();
+    }
+  }
+  const tbl = pinnedTable;
   const ready = await readyIndexFilter(collection);
-  if (ready) clauses.push(ready);
-  if (opts.roles?.length) {
-    clauses.push(`role IN (${opts.roles.map((role) => `'${escapeSqlString(role)}'`).join(', ')})`);
+  const source = async function* () {
+    for await (const raw of scanSearchRows(tbl, ready, opts.signal)) {
+      opts.signal?.throwIfAborted();
+      const row = toSearchResult(raw, collection);
+      if (isSearchableDocument(row.document)) yield row;
+    }
+  };
+  type Scored = { row: SearchResult; score: number };
+  const compare = (a: Scored, b: Scored) => b.score - a.score || stableSearchTie(a.row, b.row);
+  let best = new TopResults<Scored>(opts.n ?? 15, compare);
+  let seen = new Set<string>();
+  const add = (row: SearchResult) => {
+    if (seen.has(row.id) || !eligibleSearchResult(row, opts)) return;
+    seen.add(row.id);
+    const score = lexicalScore(row, query);
+    if (score > 0) best.add({ row, score });
+  };
+  const publication = getStoragePublication(collection);
+  // Legacy collection names and version numbers can be reused after deletion.
+  // Include the local dataset identity so a recreated table cannot reuse old text.
+  const dataset = await stat(join(DB_PATH, `${tbl.name}.lance`), { bigint: true }).catch(
+    () => undefined,
+  );
+  const cached = dataset
+    ? await readLexicalSidecar({
+        directory: join(DB_PATH, '.threadshelf-search'),
+        collection,
+        query,
+        signal: opts.signal,
+        fingerprint: JSON.stringify([
+          publication?.generation,
+          publication?.indexTable ?? collection,
+          await tbl.version(),
+          [String(dataset.dev), String(dataset.ino), String(dataset.birthtimeNs)],
+          ready,
+        ]),
+        source,
+        onResult: add,
+        onReset: () => {
+          best = new TopResults<Scored>(opts.n ?? 15, compare);
+          seen = new Set();
+        },
+      })
+    : false;
+  if (!cached) {
+    // Any failure discards partial cache results and uses the same pinned source
+    // snapshot, with the same scoring and no artificial scan cutoff.
+    best = new TopResults<Scored>(opts.n ?? 15, compare);
+    seen = new Set();
+    for await (const row of source()) add(row);
   }
-  const dateFilter = buildCreatedAtFilter(opts.from, opts.to);
-  if (dateFilter) clauses.push(dateFilter);
-  if (opts.origin) clauses.push(`createdInThreadShelf = ${opts.origin === 'threadshelf'}`);
-
-  // Cap the scan the same way post-filtered vector search does; ranking picks
-  // the best n from that window.
-  const limit = Math.min(Math.max(n * 8, 80), 200);
-
-  let results: Record<string, unknown>[];
-  try {
-    results = await tbl.query().where(clauses.join(' AND ')).limit(limit).toArray();
-  } catch (e) {
-    if (dateFilter && String((e as Error)?.message || '').includes('createdAt')) return [];
-    throw e;
-  }
-
-  const modelFilter = normalizeModelFilter(opts.model);
-  let rows: SearchResult[] = results.map((row) => ({
-    id: row.id as string,
-    document: (row.document as string) ?? '',
-    metadata: {
-      sourceFile: row.sourceFile as string,
-      provider: (row.provider as string) || undefined,
-      conversationKey: (row.conversationKey as string) || undefined,
-      title: (row.title as string) || undefined,
-      role: row.role as string,
-      turnIndex: row.turnIndex as string,
-      model: portableModelLabel((row.model as string) || undefined) || undefined,
-      createdAt: (row.createdAt as string) || undefined,
-      createdInThreadShelf: Boolean(row.createdInThreadShelf),
-      generationProvider: (row.generationProvider as string) || undefined,
-    },
-  }));
-
-  rows = rows.filter((r) => isSearchableDocument(r.document));
-  if (modelFilter) {
-    rows = rows.filter((r) => normalizeModelFilter(r.metadata.model)?.includes(modelFilter));
-  }
-
-  rows.sort(keywordResultComparator(query));
-  return rows.slice(0, n);
+  return best.values().map(({ row }) => row);
 };
 
 export interface ChunkMetaRow {
@@ -1964,69 +2093,6 @@ export const dropCollection = async (name: string): Promise<void> => {
 };
 
 // --- internals ---
-
-const vectorSearchRows = async (
-  tbl: Table,
-  queryEmbedding: number[],
-  limit: number,
-  rowFilter = '',
-): Promise<Record<string, unknown>[]> => {
-  const base = () => {
-    const query = tbl.vectorSearch(queryEmbedding).distanceType('cosine');
-    const filtered = rowFilter ? query.where(rowFilter) : query;
-    return filtered.limit(limit);
-  };
-
-  try {
-    return await base()
-      .select([
-        'id',
-        'document',
-        'sourceFile',
-        'provider',
-        'conversationKey',
-        'title',
-        'role',
-        'turnIndex',
-        'model',
-        'createdAt',
-        'createdInThreadShelf',
-        'generationProvider',
-        '_distance',
-      ])
-      .toArray();
-  } catch (e) {
-    if (rowFilter && String((e as Error)?.message || '').includes('createdAt')) return [];
-    if (!String((e as Error)?.message || '').includes('No field named')) throw e;
-    try {
-      return await base()
-        .select([
-          'id',
-          'document',
-          'sourceFile',
-          'provider',
-          'conversationKey',
-          'title',
-          'role',
-          'turnIndex',
-          '_distance',
-        ])
-        .toArray();
-    } catch (inner) {
-      if (!String((inner as Error)?.message || '').includes('No field named')) throw inner;
-      try {
-        return await base()
-          .select(['id', 'document', 'sourceFile', 'provider', 'role', 'turnIndex', '_distance'])
-          .toArray();
-      } catch (legacy) {
-        if (!String((legacy as Error)?.message || '').includes('No field named')) throw legacy;
-        return base()
-          .select(['id', 'document', 'sourceFile', 'role', 'turnIndex', '_distance'])
-          .toArray();
-      }
-    }
-  }
-};
 
 const buildCreatedAtFilter = (from: string | undefined, to: string | undefined): string => {
   const clauses = ["createdAt != ''"];
@@ -2265,6 +2331,31 @@ export const getStoredThreads = leaseRead(getStoredThreadsInternal);
 export const listThreadSummaries = leaseRead(listThreadSummariesInternal);
 export const searchCollection = leaseRead(searchCollectionInternal);
 export const keywordSearchCollection = leaseRead(keywordSearchCollectionInternal);
+export const lexicalSearchCollection = leaseRead(lexicalSearchCollectionInternal);
+export const hybridSearchCollectionCandidates = leaseRead(
+  async (
+    collection: string,
+    query: string,
+    opts: SearchOptions,
+    embedding: number[],
+  ): Promise<{ semantic: SearchResult[]; lexical: SearchResult[] }> => {
+    const table = await searchSnapshot(collection);
+    if (!table) return { semantic: [], lexical: [] };
+    try {
+      const semantic = await searchCollectionInternal(
+        collection,
+        query,
+        { ...opts, keywordBoost: false },
+        embedding,
+        table,
+      );
+      const lexical = await lexicalSearchCollectionInternal(collection, query, opts, table);
+      return { semantic, lexical };
+    } finally {
+      table.close();
+    }
+  },
+);
 export const scanChunkMeta = leaseRead(scanChunkMetaInternal);
 export const listSourceFilesInCollection = leaseRead(listSourceFilesInCollectionInternal);
 export const getCollectionStats = leaseRead(getCollectionStatsInternal);
