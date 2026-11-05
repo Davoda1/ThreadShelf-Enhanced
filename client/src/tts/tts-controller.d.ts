@@ -21,6 +21,7 @@ export class TtsController {
   };
   host: HTMLElement | null;
   formRoot: HTMLElement | null;
+  subtab: 'playback' | 'providers' | 'test' | 'cache';
   localize(): void;
   init(): Promise<TtsSettingsValue>;
   attach(host: HTMLElement): void;

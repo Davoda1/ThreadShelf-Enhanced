@@ -2,6 +2,11 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { safeLocalStorage } from './safe-storage';
 import { normalizeLocale, type Locale } from './i18n/core';
+import {
+  DEFAULT_CONVERSATION_DISPLAY,
+  normalizeConversationDisplay,
+  type ConversationDisplayPreferences,
+} from './display-preferences';
 import type {
   FavoriteGenerationModel,
   GenerationProviderId,
@@ -47,6 +52,8 @@ interface UIState {
   setLocale: (locale: Locale) => void;
   richRendering: RoleFilters;
   setRichRendering: (role: keyof RoleFilters, enabled: boolean) => void;
+  conversationDisplay: ConversationDisplayPreferences;
+  setConversationDisplay: (patch: Partial<ConversationDisplayPreferences>) => void;
 
   theme: Theme;
   toggleTheme: () => void;
@@ -104,6 +111,14 @@ export const useUIStore = create<UIState>()(
       richRendering: { user: false, thinking: false, ai: true },
       setRichRendering: (role, enabled) =>
         set((state) => ({ richRendering: { ...state.richRendering, [role]: enabled } })),
+      conversationDisplay: { ...DEFAULT_CONVERSATION_DISPLAY },
+      setConversationDisplay: (patch) =>
+        set((state) => ({
+          conversationDisplay: normalizeConversationDisplay({
+            ...state.conversationDisplay,
+            ...patch,
+          }),
+        })),
 
       theme: 'dark',
       toggleTheme: () => set((s) => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })),
@@ -204,6 +219,7 @@ export const useUIStore = create<UIState>()(
           ),
           locale: normalizeLocale(saved.locale),
           imageLoadMode: saved.imageLoadMode === 'auto' ? 'auto' : 'click',
+          conversationDisplay: normalizeConversationDisplay(saved.conversationDisplay),
           richRendering: {
             user: typeof saved.richRendering?.user === 'boolean' ? saved.richRendering.user : false,
             thinking:
@@ -223,6 +239,7 @@ export const useUIStore = create<UIState>()(
         imageLoadMode: state.imageLoadMode,
         locale: state.locale,
         richRendering: state.richRendering,
+        conversationDisplay: state.conversationDisplay,
         theme: state.theme,
         activeColl: state.activeColl,
         roles: state.roles,

@@ -1,5 +1,6 @@
 import type { Locale } from './core';
 import { release140Translations } from './translations-release140';
+import { release141Translations } from './translations-release141';
 import { speech140Translations } from './translations-speech140';
 import { speechControls140Translations } from './translations-speech-controls140';
 
@@ -8,6 +9,7 @@ export const translations: Readonly<
   Record<string, Readonly<Record<Exclude<Locale, 'en'>, string>>>
 > = {
   ...release140Translations,
+  ...release141Translations,
   ...speech140Translations,
   ...speechControls140Translations,
   'Search…': {

@@ -1,5 +1,32 @@
 # Changelog
 
+## ThreadShelf Enhanced 1.4.1 — 2026-11-05
+
+- Add browser-persisted **Conversation display** settings for JSON response
+  visibility, JSON code formatting, code downloads, wrapping and line numbers.
+  The new explanations use recessed panels in both themes.
+- Keep JSON handling conservative: **Hide empty** hides only recognized empty
+  export metadata; meaningful values, unknown structures, malformed JSON and
+  duplicate keys remain visible. Formatting preserves large numeric tokens and
+  duplicate keys. Stored messages, search, speech, copying and exports retain
+  their original content.
+- Add source-preserving code downloads with extensions for every registered
+  language and alias. Keep Copy at the far right and Download immediately left;
+  line numbers remain a display aid and never enter copied or downloaded text.
+- Add validated standalone SVG **Render/Code** previews for eligible untagged,
+  SVG and XML code blocks, including supported Base64 SVG. Preview uses an inert
+  image and leaves the original code intact.
+- Place **Local voices** exclusively under **Providers & voices**, retaining
+  provider drafts, download reviews and active installation progress across tabs.
+- Improve the **Target collection** selector and reject stale destinations and
+  import previews after collections change. Retain Chunks folder naming and
+  existing initial-selection and clear-first behavior.
+
+Existing archives, vectors, identities, Reader APIs, dependencies, installation
+and migration behavior remain compatible. No reimport or re-embedding is required.
+See [conversation display](docs/CONVERSATION-DISPLAY.md) and
+[import jobs](docs/IMPORT-JOBS.md).
+
 ## ThreadShelf Enhanced 1.4.0 — 2026-11-02
 
 - Add independent hybrid lexical/semantic search, complete candidate filtering and

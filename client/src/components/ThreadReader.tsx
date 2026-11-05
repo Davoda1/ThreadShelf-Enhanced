@@ -25,6 +25,8 @@ import { api } from '../api';
 import { Markdown } from './Markdown';
 import { ThreadContinuation } from './ThreadContinuation';
 import { useCollectionLock } from '../import-jobs';
+import { useUIStore } from '../store';
+import { formatJsonResponse, shouldHideJsonResponse } from '../json-response.js';
 
 const THREADSHELF_CHAT_PREFIX = 'threadshelf://chat/';
 
@@ -100,6 +102,8 @@ export function ThreadReader({
   onSimilar,
 }: ThreadReaderProps) {
   useI18n();
+  const jsonVisibility = useUIStore((state) => state.conversationDisplay.jsonVisibility);
+  const jsonAsCode = useUIStore((state) => state.conversationDisplay.jsonAsCode);
   const [resolvedCollection, setResolvedCollection] = useState(collection);
   const collectionLock = useCollectionLock(resolvedCollection);
   const [originalIdentity, setOriginalIdentity] = useState<unknown>(undefined);
@@ -177,13 +181,22 @@ export function ThreadReader({
     });
 
   const jumpMatch = useCallback(() => {
+    const matchedTurn = matchIdx == null ? undefined : turns?.[matchIdx];
+    if (
+      matchedTurn &&
+      !matchedTurn.assets?.length &&
+      shouldHideJsonResponse(getTurnText(matchedTurn), getTurnRole(matchedTurn), jsonVisibility)
+    ) {
+      toast.info(t('The matched response is hidden by your conversation display settings.'));
+      return;
+    }
     if (matchedRef.current && innerRef.current) {
       innerRef.current.scrollTo({
         top: Math.max(0, matchedRef.current.offsetTop - 140),
         behavior: 'smooth',
       });
     }
-  }, []);
+  }, [turns, matchIdx, jsonVisibility]);
 
   const copyThread = useCallback(() => {
     if (!turns) return;
@@ -470,11 +483,14 @@ export function ThreadReader({
               const role = getTurnRole(turn);
               const text = getTurnText(turn);
               const isMatch = matchIdx != null && i === Number(matchIdx);
+              const jsonMatch = isMatch && jsonAsCode && formatJsonResponse(text, role) !== null;
               const isReasoning = role === 'thinking';
               const isLong = text.length > COLLAPSE_AT;
               const isLongOpen = expanded.has(i) || isMatch;
 
               if (!showThreadShelfTurns && turn.createdInThreadShelf) return null;
+              if (!turn.assets?.length && shouldHideJsonResponse(text, role, jsonVisibility))
+                return null;
               if (!visible[role] && !isReasoning) return null;
 
               if (!visible[role] && isReasoning) {
@@ -576,7 +592,7 @@ export function ThreadReader({
                       )}
                     </div>
                     <div className="turn-body" data-collapsed={isLong && !isLongOpen}>
-                      {isMatch ? (
+                      {isMatch && !jsonMatch ? (
                         // The search match keeps raw text so hits can be highlighted.
                         <Highlighted text={text} q={query} />
                       ) : (
@@ -587,6 +603,8 @@ export function ThreadReader({
                           assets={turn.assets}
                           collection={resolvedCollection}
                           collapsed={isLong && !isLongOpen}
+                          eager={isMatch}
+                          codeHighlightQuery={jsonMatch ? query : undefined}
                         />
                       )}
                     </div>

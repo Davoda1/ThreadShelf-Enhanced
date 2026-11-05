@@ -219,7 +219,11 @@ export function TtsSettings({ active = true }: { readonly active?: boolean }) {
         </span>
       </div>
       {speech.config.enabled && (
-        <section className="tts-assets settings-section" aria-labelledby="ttsLocalVoicesTitle">
+        <section
+          className="tts-assets settings-section"
+          aria-labelledby="ttsLocalVoicesTitle"
+          hidden={speech.subtab !== 'providers'}
+        >
           <header>
             <h3 id="ttsLocalVoicesTitle">{t('Local voices')}</h3>
             <span

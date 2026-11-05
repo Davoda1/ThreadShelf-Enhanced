@@ -1,0 +1,184 @@
+.conversation-display-settings {
+  .panel-body {
+    display: grid;
+    gap: 18px;
+  }
+
+  fieldset {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+    margin: 0;
+    padding: 14px;
+    border: 1px solid var(--border-0);
+    border-radius: 8px;
+  }
+
+  legend {
+    padding: 0 6px;
+    color: var(--text-0);
+    font-weight: 600;
+  }
+
+  p {
+    margin: 0;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+
+  .conversation-display-help {
+    padding: 8px 12px;
+    border: 1px solid var(--border-0);
+    border-radius: var(--r-sm);
+    background: var(--bg-0);
+    box-shadow:
+      inset 0 2px 4px var(--field-shadow),
+      0 1px 0 var(--bevel-light);
+  }
+
+  .field-label {
+    margin: 0;
+  }
+
+  .render-setting {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    max-width: 36rem;
+    min-width: 0;
+
+    > span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+  }
+
+  .conversation-display-option {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+  }
+}
+
+[data-theme='light'] .conversation-display-settings .conversation-display-help {
+  background: var(--bg-2);
+}
+
+/* The TTS memory selector's discrete rail and moving marker, with wrapping labels. */
+.conversation-visibility-control {
+  position: relative;
+  min-width: 0;
+  width: 100%;
+  max-width: 36rem;
+  padding-top: 28px;
+}
+
+.conversation-visibility-rail {
+  position: absolute;
+  left: 16.6667%;
+  right: 16.6667%;
+  top: 13px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--border-0);
+  pointer-events: none;
+}
+
+.conversation-visibility-stop,
+.conversation-visibility-marker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.conversation-visibility-stop {
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--border-0);
+  background: var(--bg-1);
+}
+
+.conversation-visibility-marker {
+  left: var(--conversation-visibility-position);
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  transition: left 160ms ease;
+}
+
+.conversation-visibility-labels {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  font-size: var(--fs-meta);
+  line-height: 1.4;
+  color: var(--text-2);
+  text-align: center;
+  overflow-wrap: anywhere;
+
+  [data-selected='true'] {
+    color: var(--text-0);
+  }
+}
+
+.conversation-visibility-control input[type='range'] {
+  position: absolute;
+  left: calc(16.6667% - 8px);
+  top: 0;
+  width: calc(66.6667% + 16px);
+  height: 28px;
+  z-index: 1;
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  &::-webkit-slider-runnable-track {
+    height: 2px;
+    background: transparent;
+  }
+
+  &::-webkit-slider-thumb {
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    margin-top: -7px;
+    border: 0;
+    background: transparent;
+  }
+
+  &::-moz-range-track,
+  &::-moz-range-progress {
+    height: 2px;
+    background: transparent;
+  }
+
+  &::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border: 0;
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .conversation-visibility-marker {
+    transition: none;
+  }
+}
+
+:root[data-animations='false'] .conversation-visibility-marker {
+  transition: none;
+}

@@ -50,3 +50,12 @@ served or guessed.
 
 See [bundled asset notices](licenses/BUNDLED-ASSET-NOTICES.md) for complete
 licenses, copyright notices and verified asset provenance.
+
+Enhanced 1.4.1 adapts standalone SVG eligibility and inert preview rules from the
+**ThreadShelf Local Reader** SVG adapter (`svg-preview.cjs`), and
+the token-preserving JSON presentation/empty-thoughts policy from its reader
+sources. The JSON adapter is `client/src/json-response.js`; SVG validation is
+`svg-preview.js`. The existing Reader MIT license and copyright notice remain
+unchanged in `licenses/ThreadShelf-Local-Reader-LICENSE.txt`. Enhanced adds browser
+preferences, duplicate-key ambiguity checks for hiding, and its React lifecycle
+integration. These additions do not replace or modify existing license holders.

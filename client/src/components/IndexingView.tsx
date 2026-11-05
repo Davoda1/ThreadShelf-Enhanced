@@ -1,5 +1,5 @@
 import { NativeSelect } from './NativeSelect';
-import { useState, useRef, useMemo, useCallback } from 'react';
+import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { createFolderJob, createUploadJob, useImportJobs } from '../import-jobs';
 import { ImportJobsPanel } from './ImportJobsPanel';
@@ -159,17 +159,74 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
   const [uploadFiles, setUploadFiles] = useState<RelativeFile[] | null>(null);
   const [pickedLabel, setPickedLabel] = useState('');
   const [clearFirst, setClearFirst] = useState(false);
-  const [targetColl, setTargetColl] = useState(collections.find((c) => c !== 'all') ?? 'chunks');
+  const [targetSelection, setTargetSelection] = useState({
+    name: collections.find((c) => c !== 'all') ?? 'chunks',
+    collections,
+    awaitingCreatedCollection: false,
+  });
   const [running, setRunning] = useState(false);
+  const [submittingUpload, setSubmittingUpload] = useState(false);
   const [progress, setProgress] = useState<IngestProgress | null>(null);
   const [statusMsg, setStatusMsg] = useState<StatusMessage | null>(null);
   const [preview, setPreview] = useState<FilePreview[] | null>(null);
+  const [pathPreviewContext, setPathPreviewContext] = useState<{
+    path: string;
+    collection: string;
+  } | null>(null);
   const [newCollOpen, setNewCollOpen] = useState(false);
   const [uploadsOpen, setUploadsOpen] = useState(false);
   const [copied, setCopied] = useState('');
   const pickerRef = useRef<HTMLInputElement>(null);
   const filesPickerRef = useRef<HTMLInputElement>(null);
   const indexingController = useRef<AbortController | null>(null);
+  const previewController = useRef<AbortController | null>(null);
+
+  const realCollections = collections.filter((c) => c !== 'all');
+  const targetColl = targetSelection.name;
+  // A removed option must change the value used for submission as well as its label.
+  // Keep a successfully created collection selected while the list refresh catches up.
+  if (targetSelection.collections !== collections) {
+    const present = realCollections.includes(targetColl);
+    setTargetSelection({
+      name:
+        present || targetSelection.awaitingCreatedCollection
+          ? targetColl
+          : (realCollections[0] ?? 'chunks'),
+      collections,
+      awaitingCreatedCollection: targetSelection.awaitingCreatedCollection && !present,
+    });
+  }
+
+  // Clean up on a destination change (including deletion) and when leaving this page.
+  useEffect(
+    () => () => {
+      previewController.current?.abort();
+      previewController.current = null;
+    },
+    [targetColl],
+  );
+
+  const invalidatePathPreview = useCallback(() => {
+    previewController.current?.abort();
+    previewController.current = null;
+    setPathPreviewContext(null);
+    if (!uploadFiles) {
+      setPreview(null);
+      setPickedLabel('');
+    }
+  }, [uploadFiles]);
+
+  const selectTarget = useCallback(
+    (name: string, awaitingCreatedCollection = false) => {
+      invalidatePathPreview();
+      setTargetSelection({
+        name,
+        collections,
+        awaitingCreatedCollection: awaitingCreatedCollection && !collections.includes(name),
+      });
+    },
+    [collections, invalidatePathPreview],
+  );
 
   const copyScript = useCallback(async (file: string) => {
     try {
@@ -194,6 +251,9 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
   const applyPickedFiles = useCallback((files: readonly RelativeFile[]) => {
     if (!files.length) return;
 
+    previewController.current?.abort();
+    previewController.current = null;
+    setPathPreviewContext(null);
     setPath('');
     setUploadFiles([...files]);
     const first = relativePathOf(files[0]!).replace(/\\/g, '/');
@@ -248,16 +308,24 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
 
   const onUsePath = useCallback(async () => {
     if (!path.trim()) return;
+    previewController.current?.abort();
+    const controller = new AbortController();
+    previewController.current = controller;
+    setPathPreviewContext({ path, collection: targetColl });
     setUploadFiles(null);
     setPreview(null);
-    setPickedLabel('Checking…');
+    setPickedLabel(t('Checking…'));
     try {
-      const d = await api.ingestPreview(path, targetColl);
+      const d = await api.ingestPreview(path, targetColl, controller.signal);
+      if (controller.signal.aborted || previewController.current !== controller) return;
       const duplicatePaths = new Set(d.duplicates.map((item) => item.sourceFile));
       setPickedLabel(
-        `${d.files.length} export files found${
-          duplicatePaths.size ? `, ${duplicatePaths.size} will be re-indexed` : ''
-        }`,
+        t(
+          duplicatePaths.size
+            ? '{count} export files found; {duplicates} will be re-indexed'
+            : '{count} export files found',
+          { count: formatNumber(d.files.length), duplicates: formatNumber(duplicatePaths.size) },
+        ),
       );
       setPreview(
         d.files.map((f) => {
@@ -270,7 +338,12 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
         }),
       );
     } catch (e) {
-      setPickedLabel(`Error: ${e instanceof Error ? e.message : 'Unknown'}`);
+      if (controller.signal.aborted || previewController.current !== controller) return;
+      setPickedLabel(
+        t('Error: {message}', { message: e instanceof Error ? e.message : t('Unknown error') }),
+      );
+    } finally {
+      if (previewController.current === controller) previewController.current = null;
     }
   }, [path, targetColl]);
 
@@ -286,6 +359,7 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
       return;
     }
     setRunning(true);
+    setSubmittingUpload(Boolean(useUpload));
     setSubmittedId('');
     setProgress({
       pct: 0,
@@ -353,7 +427,11 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
         }
       : statusMsg;
 
-  const realCollections = collections.filter((c) => c !== 'all');
+  const previewIsCurrent =
+    !pathPreviewContext ||
+    (pathPreviewContext.path === path && pathPreviewContext.collection === targetColl);
+  const displayedPreview = previewIsCurrent ? preview : null;
+  const displayedPickedLabel = previewIsCurrent ? pickedLabel : '';
 
   return (
     <div className="view">
@@ -510,13 +588,13 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
             {Icons.plus}
             {t(' Choose files')}
           </button>
-          {pickedLabel && (
+          {displayedPickedLabel && (
             <span
               id="folderChosenLabel"
               className="mono"
               style={{ fontSize: 12, color: 'var(--text-2)' }}
             >
-              {pickedLabel}
+              {displayedPickedLabel}
             </span>
           )}
         </div>
@@ -527,7 +605,10 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
           <input
             type="text"
             value={path}
-            onChange={(e) => setPath(e.target.value)}
+            onChange={(e) => {
+              invalidatePathPreview();
+              setPath(e.target.value);
+            }}
             placeholder={t('/absolute/path/to/exports')}
           />
           <button className="btn" onClick={onUsePath} disabled={!path}>
@@ -538,12 +619,14 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
       </div>
 
       <div className="ingest-options">
-        <label style={{ color: 'var(--text-3)' }}>{t('Target collection')}</label>
+        <label htmlFor="targetCollectionSelect" style={{ color: 'var(--text-3)' }}>
+          {t('Target collection')}
+        </label>
         <NativeSelect
           id="targetCollectionSelect"
           value={targetColl}
-          onChange={(e) => setTargetColl(e.target.value)}
-          className="btn sm"
+          onChange={(e) => selectTarget(e.target.value)}
+          className="btn sm target-collection-select"
           style={{ padding: '0 8px', background: 'var(--bg-2)' }}
         >
           {realCollections.map((c) => (
@@ -570,7 +653,8 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
           {t('Clear collection first')}
         </label>
         <button id="ingestBtn" className="btn primary" onClick={doIndex} disabled={running}>
-          {Icons.zap} {running ? t('Uploading…') : t('Index folder')}
+          {Icons.zap}{' '}
+          {running ? t(submittingUpload ? 'Uploading…' : 'Submitting…') : t('Start import')}
         </button>
         {running && (
           <button
@@ -583,18 +667,18 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
         )}
       </div>
 
-      {preview && preview.length > 0 && (
+      {displayedPreview && displayedPreview.length > 0 && (
         <div className="panel">
           <div className="panel-head">
             <h3>{t('Ingest preview')}</h3>
             <span className="sub">
-              {preview.filter((f) => f.ok).length}
+              {displayedPreview.filter((f) => f.ok).length}
               {t(' ok · ')}
-              {preview.filter((f) => !f.ok).length} {t('skipped')}
+              {displayedPreview.filter((f) => !f.ok).length} {t('skipped')}
             </span>
           </div>
           <div style={{ maxHeight: 260, overflow: 'auto' }}>
-            {preview.slice(0, 60).map((f, i) => (
+            {displayedPreview.slice(0, 60).map((f, i) => (
               <div key={i} className="ingest-preview-row">
                 <span style={{ color: f.ok ? 'var(--success)' : 'var(--text-4)' }}>
                   {f.ok ? Icons.check : '·'}
@@ -656,7 +740,7 @@ export function IndexingView({ collections, onRefresh }: IndexingViewProps) {
           open
           onClose={() => setNewCollOpen(false)}
           onCreated={(name) => {
-            setTargetColl(name);
+            selectTarget(name, true);
             void onRefresh();
           }}
         />

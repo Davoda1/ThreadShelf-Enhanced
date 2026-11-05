@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   mountMarkdown,
   configureMarkdownImages,
@@ -6,6 +6,8 @@ import {
 } from '../enhanced-renderer/renderer.js';
 import { setRendererLocale } from '../enhanced-renderer/locale.js';
 import { useUIStore } from '../store';
+import { jsonResponseMarkdown } from '../json-response.js';
+import { queryHighlightRegex, splitHighlightedText } from '../utils';
 import '../enhanced-renderer/enhanced-markdown.css';
 
 interface MarkdownProps {
@@ -18,6 +20,30 @@ interface MarkdownProps {
   readonly collection?: string;
   /** Search targets and live responses may render immediately. */
   readonly eager?: boolean;
+  /** Keep search-hit emphasis when a raw JSON match is displayed as code. */
+  readonly codeHighlightQuery?: string;
+}
+
+function highlightCodeMatches(root: HTMLElement, query: string) {
+  const regex = queryHighlightRegex(query);
+  if (!regex) return;
+  for (const code of root.querySelectorAll('pre code')) {
+    const walker = document.createTreeWalker(code, NodeFilter.SHOW_TEXT);
+    const nodes: Text[] = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode as Text);
+    for (const node of nodes) {
+      if (!regex.test(node.data)) continue;
+      const fragment = document.createDocumentFragment();
+      for (const part of splitHighlightedText(node.data, query)) {
+        if (regex.test(part)) {
+          const mark = document.createElement('mark');
+          mark.textContent = part;
+          fragment.append(mark);
+        } else fragment.append(document.createTextNode(part));
+      }
+      node.replaceWith(fragment);
+    }
+  }
 }
 
 /** A jump to later content must stay put when an earlier preview grows. */
@@ -62,22 +88,34 @@ export function Markdown({
   className,
   metadata,
   assets,
-  role = 'ai',
+  role: messageRole,
   collapsed = false,
   eager = false,
   collection,
+  codeHighlightQuery,
 }: MarkdownProps) {
+  const role = messageRole ?? 'ai';
   const root = useRef<HTMLDivElement>(null);
   const restoreScroll = useRef<(() => void) | undefined>(undefined);
   const locale = useUIStore((state) => state.locale);
   const rich = useUIStore((state) => state.richRendering[role]);
   const imageLoadMode = useUIStore((state) => state.imageLoadMode);
+  const display = useUIStore((state) => state.conversationDisplay);
   const [nearViewport, setNearViewport] = useState(false);
   const ready = eager || nearViewport || typeof IntersectionObserver === 'undefined';
   // Rendering a clipped 100,000-character reply still used to build its entire
   // math/diagram DOM. A bounded Markdown preview avoids that hidden work.
   const preview = text.length > 1800 ? `${text.slice(0, 1800)}…` : text;
-  const displayed = collapsed ? preview : text;
+  const source = collapsed ? preview : text;
+  // Only conversation messages opt in. Note editors and other Markdown users
+  // keep their existing interpretation; the original message is never changed.
+  const displayed = useMemo(
+    () =>
+      ready && messageRole && display.jsonAsCode
+        ? (jsonResponseMarkdown(source, role) ?? source)
+        : source,
+    [ready, messageRole, display.jsonAsCode, source, role],
+  );
 
   useEffect(() => {
     if (ready || !root.current) return;
@@ -103,11 +141,28 @@ export function Markdown({
       assets: collapsed ? undefined : assets,
       rich: rich && !collapsed,
       collection,
+      codeDownloads: display.codeDownloads && !collapsed,
+      codeWrap: display.codeWrap,
+      codeLineNumbers: display.codeLineNumbers,
     });
+    if (codeHighlightQuery) highlightCodeMatches(root.current, codeHighlightQuery);
     restoreScroll.current?.();
     restoreScroll.current = undefined;
     return unmount;
-  }, [displayed, metadata, assets, rich, locale, collapsed, ready, collection]);
+  }, [
+    displayed,
+    metadata,
+    assets,
+    rich,
+    locale,
+    collapsed,
+    ready,
+    collection,
+    display.codeDownloads,
+    display.codeWrap,
+    display.codeLineNumbers,
+    codeHighlightQuery,
+  ]);
   useLayoutEffect(() => {
     if (root.current && ready)
       configureMarkdownImages(root.current, {

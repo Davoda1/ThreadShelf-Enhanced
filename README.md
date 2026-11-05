@@ -1,7 +1,7 @@
 # ThreadShelf Enhanced
 
 [![CI](https://github.com/Davoda1/ThreadShelf-Enhanced/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Davoda1/ThreadShelf-Enhanced/actions/workflows/ci.yml)
-[![Version 1.4.0](https://img.shields.io/badge/version-1.4.0-blue)](https://github.com/Davoda1/ThreadShelf-Enhanced/releases)
+[![Version 1.4.1](https://img.shields.io/badge/version-1.4.1-blue)](https://github.com/Davoda1/ThreadShelf-Enhanced/releases)
 [![MIT license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Node 24+](https://img.shields.io/badge/Node.js-24%2B-43853d)](#installation)
 [![Source distribution](https://img.shields.io/badge/distribution-source_ZIP_%2F_TAR.GZ-6f42c1)](https://github.com/Davoda1/ThreadShelf-Enhanced/releases)
@@ -42,7 +42,24 @@ network downloads. Optional remote AI and speech providers receive the content
 sent to them; local llama.cpp, Strata and installed CPU speech remain available.
 See [security and privacy](SECURITY.md).
 
-## New in 1.4.0
+## New in 1.4.1
+
+- **Conversation display:** browser-saved JSON visibility, JSON-as-code,
+  code-download, wrapping and line-number controls in **Settings → Server**.
+  Each explanation sits in a recessed panel.
+- **Code and SVG:** source-preserving downloads with language-specific extensions,
+  Copy at the far right, display-only line numbers and validated standalone SVG
+  **Render/Code** previews.
+- **Speech settings:** Local voices appears under **Providers & voices**, with
+  provider drafts and active installation progress retained across subtabs.
+- **Import destination:** clearer Target collection selection and stale-preview
+  protection, preserving the existing Chunks and replacement-import behavior.
+
+Original conversation content, stored identities, existing vectors and the
+Local Suite APIs remain compatible. No archive reimport is required. See
+[conversation display](docs/CONVERSATION-DISPLAY.md) and [changelog](CHANGELOG.md).
+
+## Added in 1.4.0
 
 - **Hybrid search:** independent lexical and semantic retrieval, complete filters
   and deterministic ranking, with a rebuildable local lexical cache.
@@ -88,7 +105,7 @@ https://github.com/user-attachments/assets/3018cbe2-b819-45ad-8ada-f3c61d5bfb99
 
 ## Installation
 
-Download the **1.4.0** [source ZIP](https://github.com/Davoda1/ThreadShelf-Enhanced/releases/download/v1.4.0/ThreadShelf-Enhanced-1.4.0-Source.zip) or [source TAR.GZ](https://github.com/Davoda1/ThreadShelf-Enhanced/releases/download/v1.4.0/ThreadShelf-Enhanced-1.4.0-Source.tar.gz), with the consolidated [SHA256SUM.txt](https://github.com/Davoda1/ThreadShelf-Enhanced/releases/download/v1.4.0/SHA256SUM.txt). [All releases](https://github.com/Davoda1/ThreadShelf-Enhanced/releases) remain available. You can also clone the repository's `master` branch. Extract into a writable directory and run setup there. Enhanced is distributed as source; it is not published to npm.
+Download the **1.4.1** [source ZIP](https://github.com/Davoda1/ThreadShelf-Enhanced/releases/download/v1.4.1/ThreadShelf-Enhanced-1.4.1-Source.zip) or [source TAR.GZ](https://github.com/Davoda1/ThreadShelf-Enhanced/releases/download/v1.4.1/ThreadShelf-Enhanced-1.4.1-Source.tar.gz), with the consolidated [SHA256SUM.txt](https://github.com/Davoda1/ThreadShelf-Enhanced/releases/download/v1.4.1/SHA256SUM.txt). [All releases](https://github.com/Davoda1/ThreadShelf-Enhanced/releases) remain available. You can also clone the repository's `master` branch. Extract into a writable directory and run setup there. Enhanced is distributed as source; it is not published to npm.
 
 The setup scripts download official **Node 26.13.0 LTS**, verify its SHA-256 against the official checksum list, install **npm 12.2.1** into the project-local runtime, install locked dependencies and build the application. They do not change your global Node installation or shell profile. Administrator access is not required.
 

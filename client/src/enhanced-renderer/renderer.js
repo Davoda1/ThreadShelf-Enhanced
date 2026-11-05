@@ -10,6 +10,9 @@ import { mountChartInteractions } from './rich-chart-interactions.js';
 import { buildMermaidRepairCandidates } from './mermaid-repair.js';
 import { discardMathRecords, protectMathInMarkdown, restoreMathPlaceholders, renderMathPlaceholders } from './math.js';
 import { createImageSlot, safeImageUrl, mountImages, configureImages } from './images.js';
+import { codeDownloadFileName } from './code-downloads.js';
+import { applyCodeBlockPresentation } from './code-presentation.js';
+import { parseSvgPreview } from './svg-preview.js';
 marked.setOptions({
   breaks: true,
   gfm: true,
@@ -37,7 +40,7 @@ function createMarkedRenderer() {
     const text = typeof token === 'string' ? token : token?.text || '';
     const lang = typeof token === 'object' ? token?.lang || '' : '';
     const language = normalizeCodeLanguage(lang);
-    return `<pre class="language-${language}" data-language="${escapeHtml(getCodeLanguageLabel(language, lang))}"><code class="language-${language}" data-language="${language}">${escapeHtml(text)}</code></pre>\n`;
+    return `<pre class="language-${language}" data-language="${escapeHtml(getCodeLanguageLabel(language, lang))}" data-fence-language="${escapeHtml(lang)}"><code class="language-${language}" data-language="${language}">${escapeHtml(text)}</code></pre>\n`;
   };
 
   renderer.link = function link(token) {
@@ -128,7 +131,7 @@ function sanitizeRenderedHtml(html) {
   const globalAttrs = new Set(['class', 'title']);
   const perTagAttrs = {
     A: new Set(['href', 'target', 'rel']),
-    PRE: new Set(['data-language']),
+    PRE: new Set(['data-language', 'data-fence-language']),
     CODE: new Set(['data-language', 'data-highlighted', 'data-original-code']),
     SPAN: new Set(['data-chatgpt-math-id', 'data-image-url', 'data-image-source', 'data-image-label']),
     DIV: new Set(['data-chatgpt-math-id']),
@@ -169,7 +172,71 @@ function sanitizeRenderedHtml(html) {
   return template.innerHTML;
 }
 
-function addCodeBlockControls(container) {
+function createDownloadButton() {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'code-action-button code-download-button';
+  button.dataset.downloadCode = '1';
+  button.textContent = tr('Download');
+  button.setAttribute('aria-label', tr('Download code block'));
+  return button;
+}
+
+function addSvgPreview(pre, code, controls, signal) {
+  if (!pre.hasAttribute('data-fence-language')) return;
+  const imageSource = parseSvgPreview(code.dataset.originalCode ?? code.textContent ?? '', pre.dataset.fenceLanguage);
+  if (!imageSource) return;
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'code-action-button code-svg-toggle';
+  toggle.dataset.toggleSvg = '1';
+  toggle.textContent = tr('Render');
+  toggle.setAttribute('aria-pressed', 'false');
+  toggle.setAttribute('aria-label', tr('Show SVG preview'));
+  toggle.title = tr('Show SVG preview');
+  const preview = document.createElement('span');
+  preview.className = 'code-svg-preview';
+  preview.hidden = true;
+  // The SVG is always an image, never application markup or a navigable document.
+  for (const event of ['click', 'auxclick', 'contextmenu', 'dragstart']) {
+    preview.addEventListener(event, action => action.preventDefault(), { signal });
+  }
+  const image = document.createElement('img');
+  image.alt = tr('SVG preview');
+  image.draggable = false;
+  image.addEventListener('error', () => {
+    preview.hidden = true;
+    code.hidden = false;
+    toggle.disabled = true;
+    toggle.textContent = tr('Render');
+    toggle.setAttribute('aria-pressed', 'false');
+    toggle.setAttribute('aria-label', tr('SVG preview unavailable'));
+    toggle.title = tr('SVG preview unavailable');
+  }, { once: true, signal });
+  preview.append(image);
+  pre.svgPreviewSource = imageSource;
+  pre.append(preview);
+  controls.append(toggle);
+}
+
+function toggleSvgPreview(button) {
+  const pre = button.closest('pre');
+  const code = pre?.querySelector('code');
+  const preview = pre?.querySelector('.code-svg-preview');
+  const image = preview?.querySelector('img');
+  if (!code || !preview || !image || !pre.svgPreviewSource || button.disabled) return;
+  const show = preview.hidden;
+  if (show && !image.hasAttribute('src')) image.src = pre.svgPreviewSource;
+  preview.hidden = !show;
+  code.hidden = show;
+  button.textContent = tr(show ? 'Code' : 'Render');
+  button.setAttribute('aria-pressed', String(show));
+  const label = tr(show ? 'Show SVG code' : 'Show SVG preview');
+  button.setAttribute('aria-label', label);
+  button.title = label;
+}
+
+function addCodeBlockControls(container, options, signal) {
   container.querySelectorAll('pre').forEach((pre) => {
     if (pre.classList.contains('has-code-controls')) return;
     const code = Array.from(pre.children).find((child) => child.tagName?.toLowerCase() === 'code') || pre.querySelector('code');
@@ -188,17 +255,23 @@ function addCodeBlockControls(container) {
 
     const copyButton = document.createElement('button');
     copyButton.type = 'button';
-    copyButton.className = 'code-copy-button';
+    copyButton.className = 'code-action-button code-copy-button';
     copyButton.textContent = tr('Copy');
     copyButton.setAttribute('aria-label', tr('Copy code block to clipboard'));
 
-    titlebar.append(label, copyButton);
+    const controls = document.createElement('span');
+    controls.className = 'code-block-actions';
+    if (options.rich) addSvgPreview(pre, code, controls, signal);
+    if (options.codeDownloads) controls.append(createDownloadButton());
+    controls.append(copyButton);
+    titlebar.append(label, controls);
     pre.insertBefore(titlebar, pre.firstChild);
     pre.classList.add('has-code-controls');
+    applyCodeBlockPresentation(pre, options);
   });
 }
 
-function upgradeMermaidBlocks(container) {
+function upgradeMermaidBlocks(container, options) {
   const blocks = [];
 
   container.querySelectorAll('pre.language-mermaid').forEach((pre) => {
@@ -213,6 +286,9 @@ function upgradeMermaidBlocks(container) {
     figure.mermaidRenderSource = figure.mermaidSource;
     figure.mermaidDisplayMode = 'original';
     figure.mermaidOriginalError = null;
+    figure.dataset.codeIndex = pre.dataset.codeIndex;
+    figure.dataset.fenceLanguage = pre.dataset.fenceLanguage || 'mermaid';
+    figure.mermaidCodePresentation = options;
 
     const titlebar = document.createElement('figcaption');
     titlebar.className = 'code-block-titlebar mermaid-titlebar';
@@ -226,7 +302,7 @@ function upgradeMermaidBlocks(container) {
 
     const versionToggle = document.createElement('button');
     versionToggle.type = 'button';
-    versionToggle.className = 'code-copy-button mermaid-copy-button mermaid-version-toggle';
+    versionToggle.className = 'code-action-button code-copy-button mermaid-copy-button mermaid-version-toggle';
     versionToggle.dataset.toggleMermaidVersion = '1';
     versionToggle.textContent = tr('Repaired');
     versionToggle.hidden = true;
@@ -236,7 +312,7 @@ function upgradeMermaidBlocks(container) {
 
     const copyButton = document.createElement('button');
     copyButton.type = 'button';
-    copyButton.className = 'code-copy-button mermaid-copy-button';
+    copyButton.className = 'code-action-button code-copy-button mermaid-copy-button';
     copyButton.dataset.copyMermaid = '1';
     copyButton.dataset.defaultLabel = tr('Copy');
     copyButton.textContent = tr('Copy');
@@ -251,7 +327,9 @@ function upgradeMermaidBlocks(container) {
     loading.className = 'mermaid-loading';
     loading.textContent = tr('Rendering diagram…');
 
-    rightControls.append(versionToggle, copyButton);
+    rightControls.append(versionToggle);
+    if (options.codeDownloads) rightControls.append(createDownloadButton());
+    rightControls.append(copyButton);
     titlebar.append(label, rightControls);
     diagram.appendChild(loading);
     figure.append(titlebar, diagram);
@@ -362,8 +440,10 @@ function showMermaidError(block, error, source = block?.mermaidSource || '', { r
   const code = document.createElement('code');
   code.className = 'language-mermaid';
   code.textContent = source;
+  code.dataset.originalCode = source;
 
   sourceElement.appendChild(code);
+  applyCodeBlockPresentation(sourceElement, block.mermaidCodePresentation);
   diagram.replaceChildren(message, sourceElement);
   diagram.removeAttribute('aria-busy');
   block.dataset.mermaidState = repairAvailable ? 'original-error' : 'error';
@@ -592,7 +672,7 @@ function loadAssets({ math, mermaid }) {
   return Promise.all(required);
 }
 
-export function mountMarkdown(container, text, { metadata, assets = [], rich = true, collection } = {}) {
+export function mountMarkdown(container, text, { metadata, assets = [], rich = true, collection, codeDownloads = true, codeWrap = false, codeLineNumbers = false } = {}) {
   let active = true;
   const mathIds = [];
   const plainMarkdown = value => {
@@ -645,22 +725,49 @@ export function mountMarkdown(container, text, { metadata, assets = [], rich = t
     viewport.setAttribute('role', 'region'); viewport.setAttribute('aria-label', tr('Scrollable table'));
     table.replaceWith(viewport); viewport.append(table);
   }
-  const blocks = rich ? upgradeMermaidBlocks(container) : [];
-  addCodeBlockControls(container);
+  const options = { rich, codeDownloads, codeWrap, codeLineNumbers };
+  let codeIndex = 0;
+  for (const pre of container.querySelectorAll('pre')) {
+    if (pre.querySelector('code')) pre.dataset.codeIndex = String(++codeIndex);
+  }
+  const controller = new AbortController();
+  const blocks = rich ? upgradeMermaidBlocks(container, options) : [];
+  addCodeBlockControls(container, options, controller.signal);
   const renderer = new MermaidRenderer();
   const disposeCharts = rich ? mountChartInteractions(container) : () => {};
   const disposeImages = mountImages(container, { collection });
-  const controller = new AbortController();
+  const downloads = new Map();
   container.addEventListener('click', async event => {
-    const button = event.target.closest?.('.code-copy-button');
+    const button = event.target.closest?.('.code-action-button');
     if (!button || !container.contains(button)) return;
+    event.preventDefault();
     const diagram = button.closest('.mermaid-block');
     if (button.hasAttribute('data-toggle-mermaid-version')) {
       renderQueue = renderQueue.catch(() => {}).then(() => active && renderer.toggleMermaidVersion(diagram));
       return;
     }
+    if (button.hasAttribute('data-toggle-svg')) {
+      toggleSvgPreview(button);
+      return;
+    }
     const code = button.closest('pre')?.querySelector('code');
     const source = diagram ? currentMermaidSource(diagram) : code?.dataset.originalCode ?? code?.textContent ?? '';
+    if (button.hasAttribute('data-download-code')) {
+      const block = diagram || button.closest('pre');
+      const href = URL.createObjectURL(new window.Blob([source], { type: 'text/plain;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = href;
+      link.download = codeDownloadFileName(block?.dataset.fenceLanguage, Number(block?.dataset.codeIndex) || 1);
+      link.hidden = true;
+      container.append(link);
+      link.click();
+      link.remove();
+      downloads.set(href, window.setTimeout(() => {
+        URL.revokeObjectURL(href);
+        downloads.delete(href);
+      }, 1000));
+      return;
+    }
     try { await copyTextToClipboard(source); if (active) showCopyButtonStatus(button, tr('Copied')); }
     catch { if (active) showCopyButtonStatus(button, tr('Copy failed')); }
   }, { signal: controller.signal });
@@ -685,6 +792,11 @@ export function mountMarkdown(container, text, { metadata, assets = [], rich = t
   return () => {
     active = false; renderer.renderGeneration = -1;
     controller.abort(); themeObserver.disconnect(); disposeCharts(); disposeImages();
+    for (const [href, timer] of downloads) {
+      window.clearTimeout(timer);
+      URL.revokeObjectURL(href);
+    }
+    downloads.clear();
     discardMathRecords(mathIds);
     container.querySelectorAll('.code-copy-button').forEach(button => window.clearTimeout(button.copyStatusTimer));
   };

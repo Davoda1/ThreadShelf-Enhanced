@@ -72,6 +72,8 @@ test('speech is opt-in, retains streaming control, and downloading requires revi
   const saveDuring = await page.getByRole('button', { name: 'Saving…', exact: true }).boundingBox();
   expect(saveDuring.width).toBe(saveBefore.width);
   expect(saveDuring.height).toBe(saveBefore.height);
+  await expect(page.locator('.tts-assets')).toBeHidden();
+  await page.locator('#ttsTab-providers').click();
   await expect(page.locator('.tts-assets')).toBeVisible();
   expect(plans).toBe(0);
   expect(installs).toBe(0);
@@ -90,6 +92,8 @@ test('speech is opt-in, retains streaming control, and downloading requires revi
   await page.getByRole('button', { name: 'Download and install', exact: true }).click();
   await expect(page.getByText('Synthetic verification failure', { exact: true })).toBeVisible();
   await expect(page.locator('.tts-install-progress')).toHaveAttribute('data-state', 'failed');
+  await page.locator('#ttsTab-playback').click();
+  await expect(page.locator('.tts-assets')).toBeHidden();
   await page.locator('#tts-streamingEnabled').uncheck();
   await page.getByRole('button', { name: 'Save speech settings', exact: true }).click();
   await expect

@@ -8,6 +8,7 @@ import { Topbar } from '../components/Topbar';
 import { SettingsView } from '../components/SettingsView';
 import { ImageCacheSettings } from '../components/ImageCacheSettings';
 import { AppearanceSettings } from '../components/AppearanceSettings';
+import { ConversationDisplaySettings } from '../components/ConversationDisplaySettings';
 import { GenerationSettings } from '../components/GenerationSettings';
 import { ObsidianPanel } from '../components/ObsidianPanel';
 import { TtsSettings } from '../tts/TtsSettings';
@@ -87,6 +88,7 @@ export function SettingsPage() {
             {/* Keep drafts mounted across tabs. No settings are discarded by navigation. */}
             <div className="settings-group" hidden={tab !== 'server'}>
               <AppearanceSettings />
+              <ConversationDisplaySettings />
               <ImageCacheSettings />
               <ObsidianPanel />
             </div>

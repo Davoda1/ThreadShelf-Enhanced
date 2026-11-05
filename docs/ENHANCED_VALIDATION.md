@@ -1,4 +1,4 @@
-# Enhanced 1.4.0 validation
+# Enhanced validation
 
 Release preparation uses synthetic conversations and isolated temporary stores.
 It does not read live archives, use paid-provider credentials or require private
@@ -7,7 +7,17 @@ release assets are published; local results do not assert hosted CI has passed.
 See [Actions](https://github.com/Davoda1/ThreadShelf-Enhanced/actions) for the exact
 commit/tag status. The [1.3.0 record](ENHANCED_VALIDATION_1.3.0.md) is historical.
 
-## Local release checks — 2026-11-02
+## Release 1.4.1 coverage
+
+The release suite includes JSON visibility and lossless code formatting, the full
+code-download language/alias catalog, original-text copy/download behavior,
+SVG validation and inert previews, wrapped code and display-only line numbers.
+Browser regressions cover the new recessed explanations, action placement,
+persisted settings, speech-subtab state and import-destination changes. Existing
+storage, migration, security, API/MCP, public-client and source-packaging gates
+remain required. Hosted results are reported in Actions for the exact commit/tag.
+
+## Historical local release checks — 1.4.0, 2026-11-02
 
 | Check | Result |
 | --- | --- |
