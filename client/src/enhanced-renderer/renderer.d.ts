@@ -9,6 +9,9 @@ export interface RenderOptions {
   readonly metadata?: Readonly<Record<string, unknown>>;
   readonly assets?: readonly ArchivedImageAsset[];
   readonly collection?: string;
+  readonly codeDownloads?: boolean;
+  readonly codeWrap?: boolean;
+  readonly codeLineNumbers?: boolean;
 }
 /** Mount safe display content; returns cleanup for observers and asynchronous renders. */
 export function mountMarkdown(

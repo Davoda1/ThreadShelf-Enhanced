@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const project = dirname(dirname(fileURLToPath(import.meta.url)));
 const launcher = join(project, 'threadshelf-enhanced');
+const packageVersion = JSON.parse(await readFile(join(project, 'package.json'), 'utf8')).version;
 const linux = { skip: process.platform !== 'linux' };
 const environment = (overrides = {}) => {
   const env = { ...process.env };
@@ -61,7 +62,7 @@ test('launcher help and version work before installation', linux, () => {
   assert.equal(help.status, 0, help.stderr);
   assert.match(help.stdout, /--index FOLDER COLLECTION/);
   assert.match(help.stdout, /THREADSHELF_ENHANCED_DIR/);
-  assert.equal(run(launcher, ['--version'], overrides).stdout.trim(), 'threadshelf-enhanced 1.4.0');
+  assert.equal(run(launcher, ['--version'], overrides).stdout.trim(), `threadshelf-enhanced ${packageVersion}`);
 });
 
 test(

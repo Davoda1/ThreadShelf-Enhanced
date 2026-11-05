@@ -27,6 +27,7 @@ import { NumberCombobox } from './NumberCombobox';
 import { LlamaLogPanel } from './LlamaLogPanel';
 import { useCollectionLock } from '../import-jobs';
 import { useUIStore } from '../store';
+import { shouldHideJsonResponse } from '../json-response.js';
 import { usePrivateChatStore, type InterruptedGeneration } from '../private-chat-memory';
 import { ObsidianChatControls, VaultDeleteApproval } from './ObsidianPanel';
 import type { VaultApproval } from '../obsidian';
@@ -130,6 +131,7 @@ export function ThreadContinuation({
   const rememberModel = useUIStore((state) => state.setGenerationModel);
   const streamOutput = useUIStore((state) => state.generationStreaming);
   const setStreamOutput = useUIStore((state) => state.setGenerationStreaming);
+  const jsonVisibility = useUIStore((state) => state.conversationDisplay.jsonVisibility);
   const [models, setModels] = useState<GenerationModel[]>([]);
   const [runtime, setRuntime] = useState<GenerationRuntimeStatus | null>(null);
   const [model, setModel] = useState('');
@@ -693,6 +695,14 @@ export function ThreadContinuation({
       {isStandaloneChat && <TtsScope sourceId={ttsSource} private={ephemeral} />}
       {(isStandaloneChat || showThreadShelfTurns) &&
         continuation.map((message, index) => {
+          // A completed response can disappear from the view, but its original
+          // position remains in context, exports and stable speech identities.
+          // A response with a separate reasoning body is not JSON-only.
+          if (
+            !message.reasoning?.trim() &&
+            shouldHideJsonResponse(message.content, message.role, jsonVisibility)
+          )
+            return null;
           const ordinal = continuationSpeechIndex(
             continuation,
             index,

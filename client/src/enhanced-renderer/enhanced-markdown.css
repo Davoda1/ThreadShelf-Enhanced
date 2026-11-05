@@ -16,12 +16,27 @@
 .enhanced-markdown :is(pre,figure,table) { min-width: 0; max-width: 100%; }
 .enhanced-markdown figure { margin-inline: 0; }
 .enhanced-markdown pre { display: block; box-sizing: border-box; white-space: pre; overflow: auto; }
-.enhanced-markdown pre.has-code-controls { padding: 0; }
-.enhanced-markdown pre code { display: block; width: max-content; min-width: 100%; box-sizing: border-box; padding: 12px; background: transparent; white-space: pre; font-size: .93em; }
-.enhanced-markdown .code-block-titlebar { display: flex; gap: 8px; align-items: center; justify-content: space-between; box-sizing: border-box; position: sticky; left: 0; padding: 6px 10px; width: 100%; background: var(--bg-2); border-bottom: 1px solid var(--border-0); font: var(--fs-meta)/1.5 var(--font-mono); white-space: normal; }
-.enhanced-markdown .code-copy-button { flex: none; border: 1px solid var(--border-1); border-radius: var(--r-xs); background: var(--bg-1); color: var(--text-1); font: inherit; padding: 2px 7px; cursor: pointer; }
-.enhanced-markdown .code-copy-button:hover { background: var(--bg-hover); color: var(--text-0); }
-.enhanced-markdown .code-copy-button[hidden] { display: none; }
+.enhanced-markdown pre.has-code-controls, .enhanced-markdown.md-body pre.has-code-controls { padding: 0; }
+/* Specificity deliberately exceeds the shared .md-body pre code reset. Keep
+   padding on the code body so the toolbar remains flush with the frame. */
+.enhanced-markdown pre > code, .enhanced-markdown.md-body pre > code { display: block; width: max-content; min-width: 100%; box-sizing: border-box; padding: .75em 1em; background: transparent; white-space: pre; font-size: .93em; }
+.enhanced-markdown pre.code-wrap > code, .enhanced-markdown.md-body pre.code-wrap > code { width: 100%; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; word-break: normal; }
+.enhanced-markdown pre.code-line-numbers > code, .enhanced-markdown.md-body pre.code-line-numbers > code { white-space: normal; }
+.enhanced-markdown .code-line { display: block; position: relative; min-height: 1.55em; padding-inline-start: calc(var(--code-line-digits, 1) * 1ch + 1.5em); }
+.enhanced-markdown .code-line-source { display: block; min-height: 1.55em; white-space: pre; }
+.enhanced-markdown .code-wrap .code-line-source { white-space: pre-wrap; overflow-wrap: anywhere; word-break: normal; }
+.enhanced-markdown .code-line-number { position: absolute; inset-block: 0; inset-inline-start: 0; width: calc(var(--code-line-digits, 1) * 1ch + .75em + 1px); box-sizing: border-box; padding-inline-end: .75em; border-inline-end: 1px solid var(--border-1); text-align: end; color: var(--text-2); white-space: pre; overflow-wrap: normal; word-break: normal; user-select: none; -webkit-user-select: none; pointer-events: none; }
+.enhanced-markdown .code-line-number::before { content: attr(data-line-number); }
+.enhanced-markdown .code-block-titlebar { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; box-sizing: border-box; position: sticky; left: 0; padding: 6px 10px; width: 100%; background: var(--bg-2); border-bottom: 1px solid var(--border-0); font: var(--fs-meta)/1.5 var(--font-mono); white-space: normal; }
+.enhanced-markdown .code-block-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; justify-content: flex-end; max-width: 100%; margin-inline-start: auto; }
+.enhanced-markdown .code-block-note { color: var(--text-2); font: var(--fs-meta)/1.5 var(--font-mono); white-space: normal; }
+.enhanced-markdown :is(.code-action-button,.code-copy-button) { flex: none; border: 1px solid var(--border-1); border-radius: var(--r-xs); background: var(--bg-1); color: var(--text-1); font: inherit; padding: 2px 7px; cursor: pointer; }
+.enhanced-markdown :is(.code-action-button,.code-copy-button):hover { background: var(--bg-hover); color: var(--text-0); }
+.enhanced-markdown .code-action-button:disabled { opacity: .6; cursor: default; }
+.enhanced-markdown :is(.code-action-button,.code-copy-button)[hidden] { display: none; }
+.enhanced-markdown .code-svg-preview { display: flex; align-items: center; justify-content: center; box-sizing: border-box; min-width: 0; max-width: 100%; padding: 1em; white-space: normal; }
+.enhanced-markdown .code-svg-preview img { display: block; max-width: 100%; max-height: min(32rem,65vh); width: auto; height: auto; object-fit: contain; margin: 0; }
+.enhanced-markdown .code-svg-preview[hidden], .enhanced-markdown pre > code[hidden], .enhanced-markdown.md-body pre > code[hidden] { display: none; }
 .enhanced-markdown :is(button,[tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .enhanced-markdown .markdown-table-scroll { max-width: 100%; overflow: auto; margin-block: 1em; }
 .enhanced-markdown table { border-collapse: collapse; width: max-content; min-width: min(100%, 360px); }
@@ -31,7 +46,7 @@
 .enhanced-markdown li > p { margin-block: .35em; }
 .enhanced-markdown input[type=checkbox] { margin-inline: 0 .45em; }
 .enhanced-markdown .mermaid-block { border: 1px solid var(--border-1); border-radius: var(--r-md); overflow: hidden; margin-block: 1em; }
-.enhanced-markdown .mermaid-titlebar-right { display: flex; gap: 6px; flex-wrap: wrap; }
+.enhanced-markdown .mermaid-titlebar-right { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; margin-inline-start: auto; }
 .enhanced-markdown .mermaid-diagram { overflow: auto; max-width: 100%; padding: 12px; }
 .enhanced-markdown .mermaid-diagram svg { display: block; max-width: 100%; height: auto; margin-inline: auto; }
 .enhanced-markdown .mermaid-error-message { color: var(--warning); font-size: .9em; }

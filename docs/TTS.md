@@ -34,6 +34,11 @@ of an engine preserves the other engine, settings and audio recordings.
 
 ## Settings previews and message playback
 
+The **Local voices** installation and review controls appear only in
+**Providers & voices**. Switching to Playback or another speech subtab preserves
+provider drafts, reviewed download details and active installation progress;
+return to Providers & voices to continue viewing those controls.
+
 The Audio test button checks the current unsaved provider and voice; it does not
 save preferences or cache the preview. Pocket and Kokoro testing remains disabled
 until that specific engine is installed and verified. Checking, unavailable or

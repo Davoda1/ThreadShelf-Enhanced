@@ -1,4 +1,4 @@
-/* global document, getComputedStyle */
+/* global document, getComputedStyle, URL */
 import { test, expect } from '@playwright/test';
 import { networkInterfaces } from 'node:os';
 import { startApiServer } from '../e2e/helpers.js';
@@ -100,9 +100,12 @@ test('headless LAN settings enable AI and speech independently of API keys witho
     await expect(page.locator('.tts-network-panel')).toHaveCount(0);
     await page.locator('#tts-enabled').check();
     await page.getByRole('button', { name: 'Save speech settings', exact: true }).click();
+    await expect(page.locator('.tts-assets')).toBeHidden();
+    await page.locator('#ttsTab-providers').click();
     await expect(page.locator('.tts-assets')).toBeVisible();
     expect(plans).toBe(0);
     expect(installs).toBe(0);
+    await page.locator('#ttsTab-playback').click();
     await page.locator('#tts-streamingEnabled').uncheck();
     await page.getByRole('button', { name: 'Save speech settings', exact: true }).click();
     await expect
@@ -127,6 +130,7 @@ test('headless LAN settings enable AI and speech independently of API keys witho
       await page.locator('#settings-tab-tts').click();
       expect(await expectSettingsFit(page)).toEqual(before);
     }
+    await page.locator('#ttsTab-providers').click();
     await page.getByRole('button', { name: 'Download / repair local voices', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Review download' })).toBeVisible();
     expect(plans).toBe(1);
@@ -156,6 +160,8 @@ test('LAN speech settings remain usable when AI management is disabled', async (
     );
     await page.getByRole('button', { name: 'Save speech settings', exact: true }).click();
     expect((await saved).status()).toBe(200);
+    await expect(page.locator('.tts-assets')).toBeHidden();
+    await page.locator('#ttsTab-providers').click();
     await expect(page.locator('.tts-assets')).toBeVisible();
     await page.reload();
     await page.locator('#settings-tab-tts').click();

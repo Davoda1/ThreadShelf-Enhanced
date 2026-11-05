@@ -191,6 +191,15 @@ const russian = Object.freeze({
   "Equation rendering failed": "Не удалось отобразить формулу"
 });
 const extra = Object.freeze({
+  'Line numbers unavailable for this large block': ['Ehhez a nagy kódblokkhoz nem jeleníthetők meg sorszámok', 'Für diesen großen Block sind keine Zeilennummern verfügbar', 'Numéros de ligne indisponibles pour ce grand bloc', 'この大きなコードブロックには行番号を表示できません', 'Номера строк недоступны для этого большого блока'],
+  'Download': ['Letöltés', 'Herunterladen', 'Télécharger', 'ダウンロード', 'Скачать'],
+  'Download code block': ['Kódblokk letöltése', 'Codeblock herunterladen', 'Télécharger le bloc de code', 'コードブロックをダウンロード', 'Скачать блок кода'],
+  'Render': ['Megjelenítés', 'Darstellen', 'Afficher', '描画', 'Отобразить'],
+  'Code': ['Kód', 'Code', 'Code', 'コード', 'Код'],
+  'Show SVG preview': ['SVG-előnézet megjelenítése', 'SVG-Vorschau anzeigen', 'Afficher l’aperçu SVG', 'SVGプレビューを表示', 'Показать предпросмотр SVG'],
+  'Show SVG code': ['SVG-kód megjelenítése', 'SVG-Code anzeigen', 'Afficher le code SVG', 'SVGコードを表示', 'Показать код SVG'],
+  'SVG preview': ['SVG-előnézet', 'SVG-Vorschau', 'Aperçu SVG', 'SVGプレビュー', 'Предпросмотр SVG'],
+  'SVG preview unavailable': ['Az SVG-előnézet nem érhető el', 'SVG-Vorschau nicht verfügbar', 'Aperçu SVG indisponible', 'SVGプレビューを利用できません', 'Предпросмотр SVG недоступен'],
   "Saved image attachments": [
     "Mentett képmellékletek",
     "Gespeicherte Bildanhänge",

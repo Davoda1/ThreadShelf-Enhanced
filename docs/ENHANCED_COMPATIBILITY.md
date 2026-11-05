@@ -1,6 +1,6 @@
 # Compatibility contract
 
-ThreadShelf Enhanced 1.4.0 retains the existing server routes, public conversation
+ThreadShelf Enhanced 1.4.1 retains the existing server routes, public conversation
 identities and integrated Reader pagination. Import processing now uses persistent
 jobs and atomic archive/index publication. The current public client reference is
 [ThreadShelf Local Suite v1.2.0](https://github.com/Davoda1/ThreadShelf-Local-Suite/tree/v1.2.0),
@@ -211,3 +211,18 @@ Speech settings, installed voices and optional recordings live below `.threadshe
 Live Markdown vaults remain external files. Copying a stopped installation preserves
 configuration and identities; review external dependencies as described in
 [MIGRATION.md](MIGRATION.md). No desktop client database conversion is performed.
+
+## Features added in 1.4.1
+
+Conversation display preferences are saved in the browser and change presentation
+only. JSON visibility and formatting, wrapping, line numbers, code downloads and
+standalone SVG previews do not rewrite archived turns, source text, identities,
+embeddings or Reader API payloads. No reimport or re-embedding is required.
+
+The import destination is checked against the current collection list and import
+preview. A removed or changed destination requires a fresh valid preview before
+submission. Existing Chunks folder naming, collection publication and clear-first
+safeguards remain in place. Local speech installation state survives navigation
+between speech-settings subtabs; model/runtime formats and stored keys are unchanged.
+
+See [conversation display](CONVERSATION-DISPLAY.md).

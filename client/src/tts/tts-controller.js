@@ -308,6 +308,7 @@ export class TtsController {
     onStateChange = () => {},
   }) {
     Object.assign(this, { invoke, getContext, settingsIcon, onSettings, onError, onStateChange });
+    this.subtab = 'playback';
     this.config = clone(DEFAULTS);
     this.serial = 0;
     this.requestId = null;
@@ -1350,6 +1351,7 @@ export class TtsController {
   selectSubtab(tab, { focus = false } = {}) {
     const root = this.formRoot;
     if (!root) return;
+    const changed = this.subtab !== tab;
     this.subtab = tab;
     for (const panel of $$('[data-tts-panel]', root)) panel.hidden = panel.dataset.ttsPanel !== tab;
     for (const button of $$('[data-tts-tab]', root)) {
@@ -1364,6 +1366,8 @@ export class TtsController {
       void this.loadCache().catch((error) => this.formStatus(error.message, true));
     if (tab === 'test') this.syncTestSelection();
     if (focus) $(`[data-tts-tab=${tab}]`, root)?.focus();
+    // React-owned settings stay mounted and follow the controller's selected subtab.
+    if (changed) this.onStateChange();
   }
   syncTestSelection() {
     const root = this.formRoot;

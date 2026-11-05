@@ -100,6 +100,15 @@
     accent-color: var(--accent);
   }
 
+  .native-select.target-collection-select {
+    min-width: 8em;
+    text-align: center;
+
+    &::after {
+      content: none;
+    }
+  }
+
   select {
     min-width: 0;
     max-width: 100%;

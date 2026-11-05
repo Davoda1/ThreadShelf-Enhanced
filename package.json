@@ -1,6 +1,6 @@
 {
   "name": "threadshelf-enhanced",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "ThreadShelf Enhanced — local AI conversation archive, rich reader and compatible search server",
   "license": "MIT",
   "type": "module",

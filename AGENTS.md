@@ -442,7 +442,7 @@ conventions.
 
 ## Enhanced fork conventions
 
-ThreadShelf Enhanced 1.4.0 is based on upstream v1.3.0, with Node 24+ required
+ThreadShelf Enhanced 1.4.1 is based on upstream v1.3.0, with Node 24+ required
 for lossless JSON numeric tokens. Distribution is source ZIP/TAR.GZ only. The
 package is private. The source release workflow validates tagged source through
 reusable CI before publishing the source archives and consolidated checksums;
@@ -511,3 +511,19 @@ identifying paths, credentials or hosts.
   back as settings. Preserve pinned/API recordings and private no-cache behavior.
 - Settings tabs are AI Models, Server and Text-to-Speech. New controls must keep
   readable localized labels, stable action dimensions and bounded panel scrolling.
+
+## Enhanced 1.4.1 display and import boundaries
+
+- `client/src/display-preferences.ts` normalizes browser-persisted Conversation
+  display settings. JSON visibility affects only presentation; preserve original
+  messages for storage, identities, search, speech, copy and exports. Hide empty
+  must remain conservative for unknown, malformed and duplicate-key content.
+- Code downloads use the complete registered language/alias extension catalog.
+  Copy remains the rightmost toolbar action, with Download immediately left.
+  Line-number gutters never enter selection, clipboard or file payloads.
+- Standalone SVG previews must validate their source and render only as inert
+  images. Preserve the code and rich/basic-rendering preference boundaries.
+- Local voice controls appear only in Providers & voices. Keep their mounted
+  state and installation observation across speech subtabs.
+- Reconcile removed target collections and invalidate stale import previews;
+  preserve Chunks naming, initial selection and clear-first semantics.

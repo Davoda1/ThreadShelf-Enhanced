@@ -11,6 +11,14 @@ coordination layer. One index operation runs per database; additional jobs wait.
 Only one HTTP server may use that database, even on a different port. These are
 operating-system locks, not a check that merely looks for a process name.
 
+## Selecting an import destination
+
+Use **Target collection** on Add data to select the destination. The selector
+reconciles changes to the collection list; a deleted collection or changed preview
+cannot silently remain an accepted destination. Review a fresh preview after
+changing the selected destination. The existing Chunks folder naming convention,
+initial selection and clear-first choice are retained.
+
 ## Collection replacement
 
 `--clear` reserves the destination collection for the active job. Other archive
