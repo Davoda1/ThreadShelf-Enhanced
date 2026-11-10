@@ -1,5 +1,31 @@
 # Changelog
 
+## ThreadShelf Enhanced 1.4.2 — 2026-11-10
+
+- Expand bounded Grok rendering for saved card families and their observed
+  transports, with explicit same-message card-ID binding, safe saved links,
+  controlled image loading and passive presentations for archived actions.
+  Missing or conflicting references never become guessed URLs.
+- Support literal Chart.js chart and task fences while preserving ordinary code,
+  escaped syntax and math. Unsupported chart semantics remain saved data.
+- Expand ChatGPT native citation metadata, navigation lists and file-citation
+  chips. Keep exact reference IDs and line ranges, preserve source for unknown
+  widgets and add supported area and doughnut chart presentations.
+- Render VeniceAI `^number^` citation markers as theme-aware soft-square labels
+  in basic and rich mode. Preserve escaped markers, code and math; a citation
+  number without a saved source remains an inert label.
+- Expand inert HTML formatting and allowlisted text CSS in user and response
+  bubbles. Reject active elements, unsupported attributes, event handlers,
+  application classes, CSS resource URLs and arbitrary layout styles.
+- Add provider, literal-source, hostile-input and production-browser regression
+  coverage. Preserve original messages for storage, search, speech, whole-message
+  copying and conversation exports.
+
+Existing archives, vectors, identities, Reader APIs, installation and migration
+behavior remain compatible. No reimport or re-embedding is required. See
+[provider rendering](docs/RENDERING-1.4.2.md) and
+[safe HTML formatting](docs/SAFE-HTML-RENDERING.md).
+
 ## ThreadShelf Enhanced 1.4.1 — 2026-11-05
 
 - Add browser-persisted **Conversation display** settings for JSON response

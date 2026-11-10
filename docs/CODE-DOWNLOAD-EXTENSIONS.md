@@ -1,6 +1,6 @@
 # Code-block download extensions
 
-ThreadShelf Enhanced 1.4.1 chooses a filename from the original code-fence language, without examining or changing the code. The filename is `code-block-<number>.<extension>`. Copy and Download use the same clean code payload. Automatically formatted JSON uses the displayed JSON text; Mermaid uses the selected original or repaired source. Display-only line numbers, highlighted HTML and SVG previews are excluded.
+ThreadShelf Enhanced 1.4.2 chooses a filename from the original code-fence language, without examining or changing the code. The filename is `code-block-<number>.<extension>`. Copy and Download use the same clean code payload. Automatically formatted JSON uses the displayed JSON text; Mermaid uses the selected original or repaired source. Display-only line numbers, highlighted HTML and SVG previews are excluded.
 
 ## Coverage and maintenance
 

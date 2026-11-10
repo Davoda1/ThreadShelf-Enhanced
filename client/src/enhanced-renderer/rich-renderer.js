@@ -1,6 +1,7 @@
 import { renderChart } from './rich-charts.js';
-import { safeRichUrl, markdownProtectedRanges } from './rich-parser.js';
 import { createImageSlot, safeImageUrl } from './images.js';
+import { renderGrokNode } from './grok-renderer.js';
+import { safeRichUrl, markdownProtectedRanges, prepareRichMarkdown } from './rich-parser.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 // App-owned, simple line icons. Exported names never become markup or URLs.
@@ -118,7 +119,8 @@ function referenceNode(attrs, options) {
   ids.forEach(id => {
     const record = references instanceof Map ? references.get(id)
       : references && Object.hasOwn(references, id) ? references[id] : null;
-    const url = record && safeRichUrl(record.url);
+    let url = record && safeRichUrl(record.url);
+    if (options.referenceBudget && url) { options.referenceBudget.remaining -= (String(record.title || url).length + url.length + id.length) * 3; if (options.referenceBudget.remaining < 0) url = null; }
     if (url) {
       // A short host label keeps references from taking over the paragraph.
       // The complete archived title and identity remain available to assistive
@@ -138,6 +140,71 @@ function referenceNode(attrs, options) {
     missing.title = `${label}: ${missingIds.join(', ')}`; missing.setAttribute('aria-label', missing.title); span.append(missing);
   }
   return span;
+}
+function originalDetails(node, options) {
+  const details = el(options.document, 'details', 'rich-archive-source');
+  details.append(el(options.document, 'summary', '', options.t('Original content')));
+  details.append(el(options.document, 'pre', '', node.source || ''));
+  return details;
+}
+function nativeCitationNode(node, options) {
+  const {document, context, t} = options;
+  const span = el(document, 'span', 'rich-native-citation');
+  if (node.family === 'cite') span.append(referenceNode({refs:node.refs},options));
+  else {
+    for (const id of node.refs) {
+      const record = context.references instanceof Map ? context.references.get(id) : context.references && Object.hasOwn(context.references,id) ? context.references[id] : null;
+      let url = record && safeRichUrl(record.url), filename = record?.filename || record?.title;
+      if(options.referenceBudget){options.referenceBudget.remaining-=(String(filename||'').length+String(url||'').length+id.length)*3;if(options.referenceBudget.remaining<0){url=null;filename=null;}}
+      const chip = el(document, url ? 'a' : 'span', 'rich-citation rich-file-reference', filename || t('File reference'));
+      chip.prepend(iconNode('file-text',options));
+      chip.title = [filename || t('File unavailable'),id,...node.lines].join(' · '); chip.setAttribute('aria-label',chip.title);
+      if (url) { chip.href=url;chip.target='_blank';chip.rel='noopener noreferrer'; }
+      if (node.lines.length) chip.append(document.createTextNode(` (${node.lines.join(', ')})`));
+      span.append(chip);
+    }
+  }
+  // Exact IDs, line ranges and original marker remain inspectable even if the
+  // imported archive contains neither the attachment nor a source binding.
+  const original=el(document,'span','rich-citation-inspect');original.append(iconNode('alert-circle',options));original.title=node.source;original.setAttribute('aria-label',`${t('Original content')}: ${node.source}`);original.tabIndex=0;span.append(original);
+  return span;
+}
+const WIDGET_LABELS = Object.freeze({
+  i:'Archived images',image_group:'Archived images',image:'Archived image',images:'Archived images',
+  navlist:'Archived source list',entity:'Archived entity',video:'Archived video',audio:'Archived audio',
+  forecast:'Archived weather',weather:'Archived weather',finance:'Archived market data',
+  schedule:'Archived schedule',standings:'Archived standings',sports:'Archived sports data',
+  product_entity:'Archived product',product_query:'Archived products',businesses_map:'Archived locations',
+  map_widget:'Archived locations',visualization:'Archived visualization',chart:'Archived chart',
+  charts_widget_v2:'Archived chart',suggest_automation:'Archived suggestion',
+});
+function archivedWidgetNode(node, options) {
+  const {document,t}=options;
+  const figure=el(document,'aside','rich-passive rich-archived-widget');
+  const heading=el(document,'div','rich-passive-label');
+  heading.append(iconNode(['i','image','images','image_group'].includes(node.family)?'panels-top-left':'archive',options),document.createTextNode(t(Object.hasOwn(WIDGET_LABELS,node.family) ? WIDGET_LABELS[node.family] : 'Archived ChatGPT content')));figure.append(heading);
+  figure.dataset.archiveFamily=node.family;
+  const image=['i','image','images','image_group'].includes(node.family);
+  const parts=Array.isArray(node.data)?node.data:[];
+  if (node.family==='navlist' && parts.every(v=>typeof v==='string')) {
+    if(parts[0])figure.append(el(document,'p','',parts[0]));
+    const list=el(document,'ul');
+    for(const part of parts.slice(1,65)) {
+      const split=part.indexOf(';'),id=split<0?part:part.slice(0,split),title=split<0?part:part.slice(split+1);
+      const row=el(document,'li','',title);row.append(document.createTextNode(' '),referenceNode({ref:id},options));list.append(row);
+    }
+    figure.append(list);
+  } else {
+    if(image)figure.append(el(document,'p','',t('Image assets are unavailable unless they were included in the archive.')));
+    else figure.append(el(document,'p','',t('Saved content is available below. Live actions and interactive state are not replayed.')));
+    if(node.data && typeof node.data==='object' && !Array.isArray(node.data)) {
+      for(const key of ['title','label','name','description','text','body']) if(typeof node.data[key]==='string' && node.data[key].length<=32768) figure.append(el(document,key==='title'?'strong':'p','',node.data[key]));
+    }
+    const ids=parts.filter(v=>typeof v==='string' && /^turn\d+[a-z]+\d+$/.test(v)).slice(0,64);
+    if(ids.length)figure.append(referenceNode({refs:ids},options));
+  }
+  figure.append(originalDetails(node,options));
+  return figure;
 }
 function imagePlaceholderDesign(attrs, ancestors = []) {
   // Source-sized thumbnails stay compact even if a row wraps on a narrow
@@ -216,8 +283,9 @@ function unavailableImageNode(tag, attrs, options) {
   });
   return area;
 }
-// Exact missing-source geometry from Local Reader 4.0.0 R5, reused for regular
-// Markdown images as well as rich AsyncImage nodes. Never executes image queries.
+
+// Reuse the archived missing-source artwork for explicit Markdown images whose
+// source is unusable. This does not execute archived image queries.
 export function createMissingImagePlaceholder(document, { compact = false, alt = '', t = value => value } = {}) {
   return unavailableImageNode('AsyncImage', {
     query: alt, width: compact ? '172px' : '100%', aspectRatio: compact ? '5:4' : '16:9',
@@ -278,6 +346,12 @@ function renderChildren(element, children, options) {
     }
   }
   source = separated + source.slice(last);
+  // Native marker text can also appear inside archived layout containers.
+  // Literal bindings already have opaque placeholders and cannot be reparsed.
+  if (/|<(?:grok[: -]|xaiArtifact|xai:tool_usage_card)|grok_render_citation_card_json=/.test(source)) {
+    const nested=prepareRichMarkdown(source);source=nested.content;
+    for(const [marker,record] of nested.records)records.set(marker,record);
+  }
   const template = document.createElement('template'); template.innerHTML = renderMarkdown(source);
   replaceMarkers(template.content, records, options);
   // Layout containers may hold inline Markdown paragraphs as flex/grid items;
@@ -289,7 +363,11 @@ function renderChildren(element, children, options) {
 }
 export function renderRichNode(node, options) {
   const { document, t } = options;
+  if (['grok','native-citation','archived-widget'].includes(node.kind) && options.compatBudget && --options.compatBudget.remaining < 0) return el(document,node.inline?'span':'pre','rich-original-source',node.source||'');
+  if (node.kind === 'grok') return renderGrokNode(node, {...options, renderChart});
   if (node.kind === 'literal') return document.createTextNode(node.text);
+  if (node.kind === 'native-citation') return nativeCitationNode(node, options);
+  if (node.kind === 'archived-widget') return archivedWidgetNode(node, options);
   if (node.kind === 'static-svg') return staticSvgNode(node, options);
   if (node.kind === 'passive') {
     const figure = el(document, 'aside', 'rich-passive');
@@ -332,7 +410,7 @@ export function renderRichNode(node, options) {
 export function renderRichHtml(html, records, { renderMarkdown, document = globalThis.document, t = k => k, context = {} } = {}) {
   if (!records?.size) return html;
   const template = document.createElement('template'); template.innerHTML = html;
-  const options = { document, renderMarkdown, t, context };
+  const options = { document, renderMarkdown, t, context, grokBudget:{remaining:2000000}, referenceBudget:{remaining:2000000}, compatBudget:{remaining:256} };
   replaceMarkers(template.content, records, options);
   return template.innerHTML;
 }

@@ -13,6 +13,11 @@ import { createImageSlot, safeImageUrl, mountImages, configureImages } from './i
 import { codeDownloadFileName } from './code-downloads.js';
 import { applyCodeBlockPresentation } from './code-presentation.js';
 import { parseSvgPreview } from './svg-preview.js';
+import { createVeniceCitationExtension } from './venice-citations.js';
+import { createFileCitationExtension } from './file-citations.js';
+import { renderSafeHtml, SAFE_HTML_TAGS, safeHtmlAttribute } from './safe-html.js';
+marked.use(createVeniceCitationExtension({ t: tr }));
+marked.use({ extensions: [createFileCitationExtension({ style: 'tagged', title: () => tr('File reference only. This link does not open a file.') })] });
 marked.setOptions({
   breaks: true,
   gfm: true,
@@ -53,13 +58,11 @@ function createMarkedRenderer() {
     return `<span class="archived-image-source" data-image-url="${escapeHtml(url)}" data-image-source="${escapeHtml(token.href || '')}" data-image-label="${escapeHtml(token.text || '')}"></span>`;
   };
 
-  // Permit only attribute-free, inert formatting tags. Unknown HTML remains
-  // visible source; archived classes, styles and event handlers never enter the
-  // document. This also supports underline, which has no Markdown delimiter.
+  // Reconstruct only allowlisted inert formatting. Unsupported tags/attributes
+  // remain visible source; archive content cannot borrow application classes.
   renderer.html = function html(token) {
     const raw = typeof token === 'string' ? token : token?.raw || token?.text || '';
-    const inertTag = /^<\/?(?:p|br|hr|h[1-6]|blockquote|ul|ol|li|strong|b|em|i|u|ins|del|s|code|pre|table|thead|tbody|tfoot|tr|th|td|sup|sub|kbd|mark)\s*\/?\s*>$/i;
-    return raw.split(/(<[^>]*>)/g).map((part) => inertTag.test(part) ? part : escapeHtml(part)).join('');
+    return renderSafeHtml(raw);
   };
 
   return renderer;
@@ -123,6 +126,7 @@ function sanitizeRenderedHtml(html) {
   template.innerHTML = html;
 
   const allowedTags = new Set([
+    ...[...SAFE_HTML_TAGS].map(tag => tag.toUpperCase()),
     'P', 'BR', 'HR', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
     'BLOCKQUOTE', 'UL', 'OL', 'LI', 'STRONG', 'B', 'EM', 'I', 'U', 'INS', 'DEL', 'S', 'MARK',
     'CODE', 'PRE', 'A', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD',
@@ -133,7 +137,7 @@ function sanitizeRenderedHtml(html) {
     A: new Set(['href', 'target', 'rel']),
     PRE: new Set(['data-language', 'data-fence-language']),
     CODE: new Set(['data-language', 'data-highlighted', 'data-original-code']),
-    SPAN: new Set(['data-chatgpt-math-id', 'data-image-url', 'data-image-source', 'data-image-label']),
+    SPAN: new Set(['data-chatgpt-math-id', 'data-image-url', 'data-image-source', 'data-image-label', 'aria-label', 'role', 'aria-disabled', 'aria-hidden']),
     DIV: new Set(['data-chatgpt-math-id']),
     TH: new Set(['align', 'colspan', 'rowspan']),
     TD: new Set(['align', 'colspan', 'rowspan']),
@@ -149,6 +153,13 @@ function sanitizeRenderedHtml(html) {
 
     for (const attr of [...element.attributes]) {
       const name = attr.name.toLowerCase();
+      // Safe archived formatting gets a second validation after HTML parsing.
+      // App-generated classes/data attributes still use the existing allowlist.
+      const safeFormatting = safeHtmlAttribute(element.tagName, name, attr.value);
+      if (safeFormatting !== null) {
+        element.setAttribute(name, safeFormatting);
+        continue;
+      }
       const allowed = globalAttrs.has(name) || perTagAttrs[element.tagName]?.has(name);
       if (!allowed || name.startsWith('on') || name === 'style') {
         element.removeAttribute(attr.name);
@@ -672,7 +683,7 @@ function loadAssets({ math, mermaid }) {
   return Promise.all(required);
 }
 
-export function mountMarkdown(container, text, { metadata, assets = [], rich = true, collection, codeDownloads = true, codeWrap = false, codeLineNumbers = false } = {}) {
+export function mountMarkdown(container, text, { metadata, raw, assets = [], rich = true, collection, codeDownloads = true, codeWrap = false, codeLineNumbers = false } = {}) {
   let active = true;
   const mathIds = [];
   const plainMarkdown = value => {
@@ -680,7 +691,7 @@ export function mountMarkdown(container, text, { metadata, assets = [], rich = t
     mathIds.push(...math.ids);
     return restoreMathPlaceholders(sanitizeRenderedHtml(marked.parse(math.content, { renderer: markedRenderer })), math.ids);
   };
-  const context = { ...(rich ? referencesFor({ metadata }) : {}), assets };
+  const context = { ...(rich ? referencesFor({ metadata, raw }) : {}), assets };
   try {
     if (rich) {
       const prepared = prepareRichMarkdown(text);

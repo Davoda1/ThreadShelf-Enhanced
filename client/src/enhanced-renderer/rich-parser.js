@@ -4,6 +4,7 @@
  */
 import { marked } from 'marked';
 import { safeImageUrl } from './images.js';
+import { grokAt, grokFenceAt } from './grok-renderer.js';
 
 export const RICH_LIMITS = Object.freeze({
   message: 2 * 1024 * 1024, span: 256 * 1024, depth: 24, nodes: 4096,
@@ -11,6 +12,7 @@ export const RICH_LIMITS = Object.freeze({
   output: 1024 * 1024, fragments: 256, operations: 1000000, milliseconds: 300,
 });
 const TAGS = new Set(['box', 'row', 'text', 'title', 'caption', 'divider', 'icon', 'grid', 'grid-item', 'Entity', 'AsyncImage', 'AsyncImageGroup', 'Chart', 'Cite', 'Link', 'svg']);
+const GROK_TAGS = new Set(['grok:render','grok:richcontent','grok','grok-card','grok-card-list','grok-generated-images','grok-file-card-group','xaiArtifact','xai:tool_usage_card','image-card','file-mention']);
 const INLINE = new Set(['Entity', 'Cite', 'Link', 'icon']);
 const FORBIDDEN = new Set(['__proto__', 'prototype', 'constructor']);
 const ENUMS = Object.freeze({
@@ -330,10 +332,11 @@ export function markdownProtectedRanges(source) {
       const raw = token.raw || ''; if (!raw) continue;
       const at = region.indexOf(raw, cursor); if (at < 0) continue;
       const start = base + at, end = start + raw.length; cursor = at + raw.length;
-      if (['code', 'codespan', 'escape', 'link', 'image'].includes(token.type)) { add(start, end, token.type === 'code' && token.codeBlockStyle === 'indented' ? 'indented' : 'protected'); continue; }
+      if (token.type === 'link' && (/^\[\]\(grok_render_citation_card_json=/.test(raw) || GROK_TAGS.has(raw.match(/^<([\w:-]+)>$/)?.[1]))) continue;
+      if (['code', 'codespan', 'escape', 'link', 'image'].includes(token.type)) { add(start, end, token.type === 'code' ? (token.codeBlockStyle === 'indented' ? 'indented' : 'fence') : 'protected'); continue; }
       if (token.type === 'html') {
-        const root = raw.match(/^\s*<\/?([A-Za-z][A-Za-z0-9-]*)/);
-        if (!root || !TAGS.has(root[1])) {
+        const root = raw.match(/^\s*<\/?([A-Za-z][A-Za-z0-9:_-]*)/);
+        if (!root || (!TAGS.has(root[1]) && !GROK_TAGS.has(root[1]))) {
           let last = end;
           if (root && !/^\s*<\//.test(raw) && !/\/\s*>\s*$/.test(raw)) {
             const close = closingAt(root[1], end);
@@ -467,6 +470,14 @@ class ComponentParser {
     while (this.pos < this.source.length && !this.source.startsWith(closing, this.pos)) {
       this.check(depth); const end = this.protectedEnd();
       if (end > this.pos) { text += this.source.slice(this.pos, end); this.pos = end; continue; }
+      if (!escaped(this.source, this.pos) && this.source.startsWith('', this.pos)) {
+        const stop=this.source.indexOf('',this.pos+1);
+        if(stop>=0&&stop-this.pos<=RICH_LIMITS.span){text+=this.source.slice(this.pos,stop+1);this.pos=stop+1;continue;}
+      }
+      if (this.source[this.pos]==='<' || this.source.startsWith('[](grok_render_',this.pos)) {
+        const grok=grokAt(this.source,this.pos,{protectedRanges:this.ranges});
+        if(grok){text+=this.source.slice(this.pos,grok.end);this.pos=grok.end;continue;}
+      }
       if (!escaped(this.source, this.pos) && richTagAt(this.source, this.pos)) { flush(); children.push(this.element(depth + 1)); continue; }
       if (this.source.startsWith('</', this.pos) && /^<\/[A-Za-z]/.test(this.source.slice(this.pos))) fail('Mismatched nested closing tag');
       if (this.source[this.pos] === '{' && !escaped(this.source, this.pos)) {
@@ -585,11 +596,9 @@ function legacyNode(payload, raw, b) {
     if (data.points.some(p => !p || typeof p !== 'object' || Object.keys(p).some(k => !['ref', 'name', 'category'].includes(k)) || typeof p.name !== 'string' || (p.category !== undefined && typeof p.category !== 'string'))) return null;
     return { kind: 'passive', family, points: data.points, source: raw, inline: false };
   }
-  return null;
+  return { kind: 'archived-widget', family, data, source: raw, inline: false };
 }
-// Marker names and literal payload shapes follow ChatGPT Export Processor GUI
-// 1.1.0. Unlike an export conversion, this creates only transient display nodes;
-// unknown markers and protected code remain exact source.
+
 function legacyMarkerNode(name, args, raw, b) {
   const component = (tag, attrs, inline = true) => ({ kind: 'component', tag, attrs: validateAttributes(tag, attrs), children: [], source: raw, inline });
   if (name === 'genui') return legacyNode(parseLiteral(args[0] || '', b), raw, b);
@@ -614,6 +623,41 @@ function legacyMarkerNode(name, args, raw, b) {
   if (name === 'url' && args.length === 2) return component('Link', { title: args[0], url: args[1] });
   return null;
 }
+// Native ChatGPT export tokens are data, never markup or executable UI. IDs are
+// carried unchanged; unknown metadata cannot be reconstructed from their order.
+function nativeMarker(raw, b) {
+  const fields = raw.slice(1, -1).split(/[\ue202\ue205]/), family = fields.shift();
+  if (!/^[a-z][a-z0-9_]{0,63}$/.test(family) || fields.length > 65) return null;
+  if (family === 'cite' || family === 'filecite') {
+    const ids = [], lines = [];
+    for (const part of fields) {
+      if (family === 'filecite' && /^L[1-9]\d*(?:-L?[1-9]\d*)?$/.test(part)) lines.push(part);
+      // eslint-disable-next-line no-control-regex -- Native reference IDs cannot contain control characters.
+      else if (part.length && part.length <= 256 && !/[\s\u0000-\u001f]/.test(part)) ids.push(part);
+      else return null;
+    }
+    if (!ids.length || ids.length > 64) return null;
+    return {kind:'native-citation', tag:'Cite', family, refs:ids, lines, source:raw, inline:true};
+  }
+  if (['memcite', 'entity_metadata', 'product', 'product_entity', 'url', 'imagegroup', 'image', 'images', 'image_group'].includes(family)) {
+    const compatible = legacyMarkerNode(family, fields, raw, b);
+    if (compatible) return compatible;
+  }
+  if (family === 'entity' && fields.length === 1) {
+    const data = parseLiteral(fields[0], b);
+    if (plainRecord(data)) return legacyMarkerNode(family, fields, raw, b);
+    if (!Array.isArray(data) || data.length < 2 || data.length > 3 || data.some(v => typeof v !== 'string')) return null;
+    return {kind:'component',tag:'Entity',attrs:{category:data[0],value:data[1],disambig:data[2] || ''},children:[],source:raw,inline:true};
+  }
+  // Keep every remaining complete token inspectable, including future families.
+  // Known image/navigation families gain reader-owned archived presentations.
+  let data = fields;
+  if (fields.length === 1 && /^[[{]/.test(fields[0])) {
+    try { data = parseLiteral(fields[0], b); } catch { /* retain literal fields */ }
+  }
+  return {kind:'archived-widget',family,data,source:raw,inline:false};
+}
+
 function failedSpanEnd(source, start, tag) {
   // Recovery never interprets attributes. It only recognizes an exact balanced
   // lexical boundary, including quoted > and nested same-name components.
@@ -660,10 +704,15 @@ export function prepareRichMarkdown(content) {
   while (pos < source.length && records.size < RICH_LIMITS.fragments) {
     const mathEnd = protectedMathEnd(source, pos); if (mathEnd > pos) { pos = mathEnd; continue; }
     while (rangeIndex < ranges.length && ranges[rangeIndex][1] <= pos) rangeIndex++;
-    if (ranges[rangeIndex] && ranges[rangeIndex][0] <= pos) { pos = ranges[rangeIndex][1]; continue; }
+    let fenced = null;
+    if (ranges[rangeIndex] && ranges[rangeIndex][0] <= pos) {
+      const range = ranges[rangeIndex];
+      if (range[0] === pos && range[2] === 'fence') fenced = grokFenceAt(source, pos, range[1]);
+      if (!fenced) { pos = range[1]; continue; }
+    }
     if (Date.now() - b.started > RICH_LIMITS.milliseconds) break;
-    const tag = !escaped(source, pos) && richTagAt(source, pos);
-    let node = null, end = pos;
+    const tag = !fenced && !escaped(source, pos) && richTagAt(source, pos);
+    let node = fenced?.node || null, end = fenced?.end || pos;
     if (tag) {
       const parser = new ComponentParser(source, pos, b, ranges);
       try { const ast = parser.element(); end = parser.pos; node = evaluate([ast], Object.create(null), b)[0]; }
@@ -674,16 +723,33 @@ export function prepareRichMarkdown(content) {
         end = failedSpanEnd(source, pos, tag);
         pos = Math.max(pos + 1, end); continue;
       }
-    } else if (source[pos] === '\ue200') {
-      const stop = source.indexOf('\ue201', pos + 1);
+    } else if (!escaped(source, pos) && source.startsWith('genui', pos)) {
+      const stop = source.indexOf('', pos + 7);
       if (stop >= 0 && stop - pos <= RICH_LIMITS.span) {
         end = stop + 1; const raw = source.slice(pos, end);
-        const [name, ...args] = source.slice(pos + 1, stop).split(/[\ue202\ue205]/);
-        try { node = legacyMarkerNode(name.trim().toLowerCase(), args, raw, b); if (node) tick(b, 'output', raw.length); } catch { /* preserve the original marker */ }
+        try {
+          const payload = parseLiteral(source.slice(pos + 7, stop), b);
+          node = legacyNode(payload, raw, b);
+          if (!node && plainRecord(payload)) node = { kind: 'archived-widget', family: Object.keys(payload).join(', ') || 'widget', data: payload, source: raw, inline: false };
+          if (node) tick(b, 'output', raw.length);
+        } catch { node = null; /* malformed/non-literal/over-budget markers remain exact source */ }
         if (!node) { pos = end; continue; }
       }
     }
+    if (!node && !escaped(source, pos) && source.startsWith('', pos) && !source.startsWith('genui', pos)) {
+      const stop = source.indexOf('', pos + 2);
+      if (stop >= 0 && stop - pos <= RICH_LIMITS.span) {
+        end = stop + 1;
+        try { node = nativeMarker(source.slice(pos, end), b); } catch { /* preserve invalid protocol as source */ }
+        if (!node) { pos = end; continue; }
+      }
+    }
+    if (!node && (source[pos] === '<' || source.startsWith('[](grok_render_', pos))) {
+      const found = grokAt(source, pos, {protectedRanges:ranges});
+      if (found) { node = found.node; end = found.end; }
+    }
     if (node) {
+      if (node.kind === 'grok' || node.kind === 'native-citation' || node.kind === 'archived-widget') { try { tick(b, 'output', end - pos); } catch { break; } }
       let marker; try { marker = opaqueMarker(); while (source.includes(marker) || records.has(marker)) marker = opaqueMarker(); } catch { break; }
       b.fragments++; records.set(marker, node); output += source.slice(last, pos) + (node.inline ? marker : `\n\n${marker}\n\n`);
       last = end; pos = end;

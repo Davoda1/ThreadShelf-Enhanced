@@ -7,6 +7,7 @@ export interface RenderOptions {
   /** Basic mode retains Markdown but leaves math, diagrams and rich widgets as source. */
   readonly rich?: boolean;
   readonly metadata?: Readonly<Record<string, unknown>>;
+  readonly raw?: unknown;
   readonly assets?: readonly ArchivedImageAsset[];
   readonly collection?: string;
   readonly codeDownloads?: boolean;

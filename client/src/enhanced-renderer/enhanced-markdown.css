@@ -1,6 +1,19 @@
 @import './rich-layout.css';
 @import './rich-charts.css';
 @import './markdown-images.css';
+@import './grok-renderer.css';
+@import './provider-rendering.css';
+
+/* Soft square references use the application's own light/dark theme tokens. */
+.enhanced-markdown .venice-citation {
+  display: inline-flex; align-items: center; justify-content: center;
+  position: relative; top: -.1em; vertical-align: baseline;
+  min-width: 1.65em; height: 1.6em; box-sizing: border-box;
+  margin-inline: .25em .05em; padding-inline: .35em; border-radius: 5px;
+  background: var(--accent-soft); color: var(--accent);
+  font: 650 max(var(--fs-micro), .72em)/1 var(--font-sans);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
 
 /* Existing ThreadShelf tokens remain the only theme palette. */
 .enhanced-markdown {
