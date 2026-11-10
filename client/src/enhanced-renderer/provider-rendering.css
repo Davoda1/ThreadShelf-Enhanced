@@ -1,0 +1,49 @@
+/* Display adapters inherit the server palette and type scale. */
+/* Passive protocol snapshots retain source without running archived actions. */
+.rich-archived-widget{min-width:0;max-width:100%;overflow-wrap:anywhere}
+.rich-archived-widget .rich-passive-label{display:flex;align-items:center;gap:.45em}
+.rich-archive-source{min-width:0;max-width:100%;margin-top:.45em}
+.rich-archive-source summary{cursor:pointer;color:var(--text-secondary);font-size:.85em}
+.rich-archive-source pre{max-width:100%;max-height:22rem;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:.8em}
+.rich-inline-source{display:inline-block;vertical-align:baseline;margin:0 .25em}
+.rich-inline-source summary{font-size:.72em}
+.rich-inline-source[open]{display:block}
+.rich-native-citation .rich-file-reference{display:inline-flex;align-items:center;gap:.25em}
+.rich-file-reference .rich-icon{width:1em;height:1em;flex-shrink:0}
+
+.rich-citation-inspect{display:inline-block;margin-inline-start:.2em;font-size:.75em;color:var(--text-secondary);cursor:help}
+
+.rich-citation-inspect .rich-icon{display:inline-block;width:1em;height:1em;vertical-align:baseline}
+
+.enhanced-markdown .ts-file-citation{
+  display:inline-flex;align-items:baseline;gap:.45em;max-width:100%;
+  color:var(--text-accent);vertical-align:baseline;line-height:1.6;cursor:default;
+}
+.enhanced-markdown .ts-file-name{
+  min-width:0;overflow-wrap:anywhere;text-decoration:underline;
+  text-decoration-thickness:1px;text-underline-offset:3px;
+}
+/* User-supplied document-901.svg (original in assets/file-document.svg):
+   all six visible path d values retained verbatim.
+   Its uniform translate(1.4065934065934016 1.4065934065934016) scale(2.81 2.81)
+   is normalized to path coordinates, and only empty canvas is cropped. Contain
+   keeps the artwork proportional inside the existing .78em by 1em icon box. */
+.enhanced-markdown .ts-file-icon{
+  display:inline-block;align-self:center;flex:0 0 .78em;
+  width:.78em;height:1em;box-sizing:border-box;background-color:currentColor;
+  mask:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%2211.464%200%2067.073%2090%22%3E%3Cpath%20d%3D%22M%2075.569%2083.678%20v%202.031%20c%200%200.729%20-0.594%201.323%20-1.324%201.323%20h%20-58.49%20c%20-0.73%200%20-1.324%20-0.594%20-1.324%20-1.323%20V%204.291%20c%200%20-0.73%200.594%20-1.324%201.324%20-1.324%20h%2045.851%20v%209.153%20c%200%202.366%201.925%204.291%204.29%204.291%20h%209.673%20V%2083.678%20c%201.021%200.094%201.601%201.553%202.967%20-0.566%20V%2014.94%20c%200.001%20-0.084%20-0.006%20-0.166%20-0.018%20-0.248%20c%200%200%20-0.001%200%20-0.001%20-0.001%20c%200%20-0.001%200%20-0.001%200%20-0.003%20v%200%20c%200%20-0.001%20-0.001%20-0.002%20-0.001%20-0.003%20c%20-0.007%20-0.042%20-0.015%20-0.082%20-0.026%20-0.123%20v%200%20c%20-0.001%20-0.001%200.002%20-0.003%20-0.001%20-0.003%20c%200%20-0.002%200%20-0.003%20-0.001%20-0.004%20v%200%20c%20-0.066%20-0.253%20-0.199%20-0.489%20-0.392%20-0.68%20l%20-0.001%200%20c%200%200%20-0.001%20-0.001%20-0.001%20-0.001%20c%20-0.007%20-0.001%20-0.002%20-0.001%20-0.003%20-0.002%20c%200.003%20-0.005%20-0.002%20-0.002%20-0.002%20-0.002%20c%20-0.002%20-0.001%200.001%20-0.001%20-0.003%20-0.002%20c%200.001%20-0.001%20-0.002%20-0.001%20-0.002%20-0.002%20c%20-0.001%20-0.001%20-0.002%20-0.001%20-0.003%20-0.002%20L%2064.118%200.415%20c%20-0.001%20-0.001%20-0.002%20-0.002%20-0.003%20-0.003%20c%20-0.001%20-0.001%20-0.002%20-0.002%20-0.003%20-0.003%20c%20-0.201%20-0.19%20-0.444%20-0.317%20-0.703%20-0.374%20c%20-0.038%20-0.008%20-0.075%20-0.015%20-0.113%20-0.02%20c%20-0.001%200%20-0.001%200%20-0.001%200%20c%20-0.002%20-0.001%20-0.003%200%20-0.005%20-0.001%20c%20-0.002%200%20-0.004%20-0.001%20-0.004%200%20c%20-0.001%200%20-0.003%200%20-0.005%200%20c%20-0.002%200%20-0.003%20-0.001%20-0.005%200%20c%200%200%20-0.001%200%20-0.005%20-0.001%20C%2063.207%200.003%2063.131%200.003%2063.079%200%20H%2015.755%20c%20-2.366%200%20-4.291%201.925%20-4.291%204.291%20V%2085.71%20c%200%202.365%201.925%204.29%204.291%204.29%20h%2058.49%20c%202.366%200%204.291%20-1.925%204.291%20-4.29%20v%20-2.598%20C%2077.58%2083.39%2076.59%2083.584%2075.569%2083.678%20z%20M%2064.573%204.971%20l%208.8%208.473%20h%20-7.477%20c%20-0.729%200%20-1.323%20-0.594%20-1.323%20-1.324%20V%204.971%20z%22%2F%3E%3Cpath%20d%3D%22M%2021.924%2066.401%20c%20-0.82%200%20-1.484%200.664%20-1.484%201.484%20s%200.664%201.484%201.484%201.484%20h%2022.668%20c%200.819%200%201.484%20-0.664%201.484%20-1.484%20s%20-0.664%20-1.484%20-1.484%20-1.484%20H%2021.924%20z%22%2F%3E%3Cpath%20d%3D%22M%2021.924%2039.698%20h%2047.294%20c%200.819%200%201.484%20-0.664%201.484%20-1.484%20s%20-0.664%20-1.484%20-1.484%20-1.484%20H%2021.924%20c%20-0.82%200%20-1.484%200.664%20-1.484%201.484%20S%2021.105%2039.698%2021.924%2039.698%20z%22%2F%3E%3Cpath%20d%3D%22M%2070.702%2057.995%20c%200%20-0.819%20-0.664%20-1.484%20-1.484%20-1.484%20H%2021.924%20c%20-0.82%200%20-1.484%200.664%20-1.484%201.484%20s%200.664%201.484%201.484%201.484%20h%2047.294%20C%2070.038%2059.478%2070.702%2058.814%2070.702%2057.995%20z%22%2F%3E%3Cpath%20d%3D%22M%2021.924%2029.808%20h%2022.668%20c%200.819%200%201.484%20-0.664%201.484%20-1.484%20c%200%20-0.82%20-0.664%20-1.484%20-1.484%20-1.484%20H%2021.924%20c%20-0.82%200%20-1.484%200.664%20-1.484%201.484%20C%2020.441%2029.144%2021.105%2029.808%2021.924%2029.808%20z%22%2F%3E%3Cpath%20d%3D%22M%2021.924%2049.588%20h%2047.294%20c%200.819%200%201.484%20-0.664%201.484%20-1.484%20c%200%20-0.819%20-0.664%20-1.484%20-1.484%20-1.484%20H%2021.924%20c%20-0.82%200%20-1.484%200.664%20-1.484%201.484%20C%2020.441%2048.924%2021.105%2049.588%2021.924%2049.588%20z%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
+}
+.enhanced-markdown .ts-file-type{
+  align-self:center;flex:0 0 auto;max-width:12em;box-sizing:border-box;
+  color:var(--text-secondary);border:1px solid var(--border-color);
+  border-radius:4px;padding:.12em .4em;font-size:var(--fs-micro);font-weight:650;
+  line-height:1.4;letter-spacing:.02em;overflow-wrap:anywhere;
+}
+@media(forced-colors:active){
+  .enhanced-markdown .ts-file-citation{color:LinkText}
+  .enhanced-markdown .ts-file-icon{forced-color-adjust:none}
+  .enhanced-markdown .ts-file-type{color:CanvasText;border-color:CanvasText}
+}
+
+.enhanced-markdown :is(.rich-archive-source summary,.grok-status,.grok-identity,.grok-source>summary){font-size:var(--fs-meta)}
+.enhanced-markdown .rich-native-citation{white-space:normal;overflow-wrap:anywhere}

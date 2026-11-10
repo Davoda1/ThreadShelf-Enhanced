@@ -1,6 +1,6 @@
 # Compatibility contract
 
-ThreadShelf Enhanced 1.4.1 retains the existing server routes, public conversation
+ThreadShelf Enhanced 1.4.2 retains the existing server routes, public conversation
 identities and integrated Reader pagination. Import processing now uses persistent
 jobs and atomic archive/index publication. The current public client reference is
 [ThreadShelf Local Suite v1.2.0](https://github.com/Davoda1/ThreadShelf-Local-Suite/tree/v1.2.0),
@@ -226,3 +226,19 @@ safeguards remain in place. Local speech installation state survives navigation
 between speech-settings subtabs; model/runtime formats and stored keys are unchanged.
 
 See [conversation display](CONVERSATION-DISPLAY.md).
+
+## Features added in 1.4.2
+
+Provider rendering and safe HTML formatting change presentation only. Grok card
+metadata binds only to explicit saved IDs within the same message; missing or
+conflicting references remain unresolved. ChatGPT citations retain exact IDs and
+file ranges. VeniceAI numeric markers never invent source destinations. Saved
+actions are passive, and image loading retains its existing controls and routes.
+
+Original messages, stored identities, vectors, search, speech, whole-message copy,
+conversation exports and Reader API payloads remain unchanged. Existing rich/basic
+preferences still apply; VeniceAI citation typography is available in both modes.
+No reimport, re-embedding or client-store conversion is required.
+
+See [provider rendering](RENDERING-1.4.2.md) and
+[safe HTML formatting](SAFE-HTML-RENDERING.md).

@@ -442,7 +442,7 @@ conventions.
 
 ## Enhanced fork conventions
 
-ThreadShelf Enhanced 1.4.1 is based on upstream v1.3.0, with Node 24+ required
+ThreadShelf Enhanced 1.4.2 is based on upstream v1.3.0, with Node 24+ required
 for lossless JSON numeric tokens. Distribution is source ZIP/TAR.GZ only. The
 package is private. The source release workflow validates tagged source through
 reusable CI before publishing the source archives and consolidated checksums;
@@ -527,3 +527,21 @@ identifying paths, credentials or hosts.
   state and installation observation across speech subtabs.
 - Reconcile removed target collections and invalidate stale import previews;
   preserve Chunks naming, initial selection and clear-first semantics.
+
+## Enhanced 1.4.2 rendering boundaries
+
+- Provider adapters change presentation only. Preserve source for storage,
+  identities, search, speech, whole-message copying and conversation exports.
+  Retain per-role rich/basic preferences and controlled image-loading behavior.
+- Bind Grok card references only through explicit IDs in the same message's saved
+  metadata. Conflicting or missing references stay unresolved; archived actions
+  remain passive and never replay permissions or invoke application controls.
+- Parse literal chart/task data within bounded budgets. Preserve ordinary code,
+  escapes and math; unsupported chart semantics retain a readable source fallback.
+- VeniceAI caret-number citations are inert soft-square labels in basic and rich
+  mode. Numeric positions never guess source URLs. Code and escapes stay literal.
+- Safe HTML admits only inert formatting and explicitly allowlisted text CSS.
+  Reject active content, application hooks, resource URLs and arbitrary layout;
+  unsupported markup stays visible source. Keep token and final DOM checks aligned.
+
+See `docs/RENDERING-1.4.2.md` and `docs/SAFE-HTML-RENDERING.md`.

@@ -14,6 +14,7 @@ interface MarkdownProps {
   readonly text: string;
   readonly className?: string;
   readonly metadata?: Readonly<Record<string, unknown>>;
+  readonly raw?: unknown;
   readonly assets?: readonly ArchivedImageAsset[];
   readonly role?: 'user' | 'thinking' | 'ai';
   readonly collapsed?: boolean;
@@ -87,6 +88,7 @@ export function Markdown({
   text,
   className,
   metadata,
+  raw,
   assets,
   role: messageRole,
   collapsed = false,
@@ -138,6 +140,7 @@ export function Markdown({
     setRendererLocale(locale);
     const unmount = mountMarkdown(root.current, displayed, {
       metadata,
+      raw,
       assets: collapsed ? undefined : assets,
       rich: rich && !collapsed,
       collection,
@@ -152,6 +155,7 @@ export function Markdown({
   }, [
     displayed,
     metadata,
+    raw,
     assets,
     rich,
     locale,

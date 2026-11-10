@@ -513,6 +513,7 @@ export function ThreadReader({
                         text={text}
                         role="thinking"
                         metadata={turn.metadata}
+                        raw={turn.raw}
                         assets={turn.assets}
                         collection={resolvedCollection}
                         eager
@@ -600,6 +601,7 @@ export function ThreadReader({
                           text={text}
                           role={role}
                           metadata={turn.metadata}
+                          raw={turn.raw}
                           assets={turn.assets}
                           collection={resolvedCollection}
                           collapsed={isLong && !isLongOpen}

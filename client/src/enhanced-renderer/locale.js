@@ -1,3 +1,4 @@
+import { providerTranslation, providerLocaleRows } from './provider-locale.js';
 // Reader strings are kept alongside the port so every renderer control is localized.
 let language = 'en';
 const rows = {
@@ -273,6 +274,8 @@ const extra = Object.freeze({
 });
 export function setRendererLocale(locale) { language = ['en', 'hu', 'de', 'fr', 'ja', 'ru'].includes(locale) ? locale : 'en'; }
 export function tr(text) {
+  const provider = providerTranslation(text, language);
+  if (provider !== undefined) return provider;
   const extraIndex = ['hu', 'de', 'fr', 'ja', 'ru'].indexOf(language);
   if (extraIndex >= 0 && extra[text]) return extra[text][extraIndex];
   if (language === 'ja') return japanese[text] ?? text;
@@ -281,4 +284,4 @@ export function tr(text) {
   if (i >= 0 && rows[text]) return rows[text][i];
   return text;
 }
-export const readerLocaleCoverage = [...Object.keys(rows), ...Object.keys(extra)];
+export const readerLocaleCoverage = [...Object.keys(rows), ...Object.keys(extra), ...Object.keys(providerLocaleRows)];

@@ -46,3 +46,19 @@ embedded SVG and malformed documents remain code.
 
 The preview is displayed as an inert image. Copy and Download keep the original
 source, and existing rich/basic rendering preferences continue to apply.
+
+## Provider markers and HTML formatting
+
+Supported ChatGPT and Grok markers receive archived presentations in rich mode,
+with original source retained for copying and exports. Unsupported widgets and
+unresolved sources stay readable; saved card actions never execute. Existing
+image-loading and cache settings continue to control archived images.
+
+VeniceAI markers such as `^1^` appear as soft-square citation labels in basic and
+rich mode. A number alone cannot identify a source URL, so its label remains
+inert. Code, escaped markers and protected math retain their original text.
+
+User and response bubbles also accept an inert HTML formatting subset and
+allowlisted text CSS. Unsupported tags, attributes or styles remain visible
+source. See [provider rendering](RENDERING-1.4.2.md) and
+[safe HTML formatting](SAFE-HTML-RENDERING.md) for the supported scope and limits.

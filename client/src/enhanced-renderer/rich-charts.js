@@ -68,8 +68,8 @@ function exported(input, family) {
   // The native Chart component and both GenUI envelopes preserve the same
   // literal data contract. Do not reject supported charts because a converter
   // retained the component rather than a charts_widget_v2 wrapper.
-  if (!['bar', 'line', 'pie', 'scatter'].includes(input.chartType)) fail('unsupported');
-  const pie = input.chartType === 'pie', scatter = input.chartType === 'scatter';
+  if (!['bar', 'line', 'area', 'pie', 'doughnut', 'scatter'].includes(input.chartType)) fail('unsupported');
+  const pie = ['pie', 'doughnut'].includes(input.chartType), scatter = input.chartType === 'scatter';
   // In this evidenced bar contract vertically arranged categories mean
   // horizontally extending bars; other layout values remain unsupported.
   const allowed = ['chartType', 'meta', 'series', 'data', 'valueSuffix', ...(pie ? ['nameKey', 'valueKey'] : ['xKey', 'yAxisMin', 'yAxisMax'])];

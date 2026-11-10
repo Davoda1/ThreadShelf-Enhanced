@@ -1,0 +1,20 @@
+/* Reader-owned Grok archive components inherit every installed theme. */
+.grok-card { margin:.7em 0; padding:.8em 1em; border:1px solid color-mix(in srgb,currentColor 18%,transparent); border-radius:.65em; max-width:100%; overflow-wrap:anywhere; }
+.grok-card-header { display:flex; align-items:center; gap:.5em; margin-bottom:.45em; }
+.grok-icon { display:inline-block; flex:none; vertical-align:-.2em; color:inherit; }
+.grok-citation { display:inline-flex; align-items:center; gap:.3em; vertical-align:baseline; max-width:100%; flex-wrap:wrap; }
+.grok-citation .grok-icon { width:.95em; height:.95em; }
+.grok-citation a,.grok-citation .rich-citation-unresolved { font-size:.82em; padding:.12em .4em; border:1px solid color-mix(in srgb,currentColor 20%,transparent); border-radius:.4em; text-decoration:none; }
+.grok-card .grok-fields { display:grid; grid-template-columns:minmax(6em,auto) minmax(0,1fr); gap:.25em .9em; margin:.45em 0; font-size:.92em; }
+.grok-fields dt { opacity:.7; }
+.grok-fields dd { margin:0; min-width:0; white-space:pre-wrap; }
+.grok-fields ul { margin:0; padding-left:1.15em; }
+.grok-fields .grok-fields { grid-template-columns:1fr; }
+.grok-status,.grok-identity { font-size:.85em; opacity:.72; margin:.35em 0; }
+.grok-title { font-weight:600; }
+.grok-caption { margin:.35em 0; font-size:.9em; }
+.grok-source { margin-top:.55em; }
+.grok-source>summary { cursor:pointer; font-size:.85em; opacity:.78; }
+.grok-source>pre { max-height:24em; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
+.grok-card .rich-chart { margin:.5em 0; }
+@media(max-width:720px){.grok-card .grok-fields{grid-template-columns:1fr;gap:.12em}.grok-fields dd{margin-bottom:.35em}}

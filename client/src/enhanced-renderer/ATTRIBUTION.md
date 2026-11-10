@@ -59,3 +59,16 @@ sources. The JSON adapter is `client/src/json-response.js`; SVG validation is
 unchanged in `licenses/ThreadShelf-Local-Reader-LICENSE.txt`. Enhanced adds browser
 preferences, duplicate-key ambiguity checks for hiding, and its React lifecycle
 integration. These additions do not replace or modify existing license holders.
+
+Enhanced 1.4.2 adapts native ChatGPT marker/context handling, bounded Grok
+protocol presentation, and the display-only file-reference suffix catalogue
+from **ThreadShelf Local Reader**, Copyright (c) 2026 davoda1, under the
+retained license in `licenses/ThreadShelf-Local-Reader-LICENSE.txt`. The document
+icon source is retained in `assets/file-document.svg`; its visible paths are
+normalized as a theme-aware mask in `provider-rendering.css`.
+
+Enhanced preserves its existing image-slot and local image-cache boundaries,
+explicit source metadata bindings, code controls and server theme tokens. New
+provider interface strings are localized in `provider-locale.js`; archived text
+is never translated. `docs/RENDERING-1.4.2.md` describes the supported protocols
+and inert fallbacks.

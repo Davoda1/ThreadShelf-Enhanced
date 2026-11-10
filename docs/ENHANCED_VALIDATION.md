@@ -7,7 +7,21 @@ release assets are published; local results do not assert hosted CI has passed.
 See [Actions](https://github.com/Davoda1/ThreadShelf-Enhanced/actions) for the exact
 commit/tag status. The [1.3.0 record](ENHANCED_VALIDATION_1.3.0.md) is historical.
 
-## Release 1.4.1 coverage
+## Release 1.4.2 coverage
+
+The rendering suite adds saved ChatGPT/Grok marker families, exact same-message
+reference binding, unresolved and malformed cards, safe saved URLs, source
+preservation, literal chart/task fences and passive actions. VeniceAI marker
+coverage includes adjacent/repeated labels, escaped syntax, code and math. HTML
+regressions cover inert formatting, allowed text styles, malformed markup and
+rejection of active elements, application hooks and CSS resource URLs.
+
+Browser regressions exercise these presentations in the built application, with
+existing rich/basic preferences and controlled image loading. The earlier
+display, storage, migration, API/MCP, public-client and source-packaging suites
+remain required. See Actions for results on the exact release commit/tag.
+
+## Retained 1.4.1 coverage
 
 The release suite includes JSON visibility and lossless code formatting, the full
 code-download language/alias catalog, original-text copy/download behavior,
